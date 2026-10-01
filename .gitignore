@@ -1,0 +1,29 @@
+# Local session notes and scratch work
+.codex/
+.scratch/
+
+# .NET build, test, and publish output
+**/bin/
+**/obj/
+**/TestResults/
+**/artifacts/
+**/publish/
+
+# Visual Studio and per-user IDE files
+.vs/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.rsuser
+
+# Local NuGet packages and package build output
+**/packages/
+*.nupkg
+*.snupkg
+
+# Test result files
+*.trx
+*.coverage
+*.coveragexml
