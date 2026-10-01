@@ -16,6 +16,7 @@ public partial class App : System.Windows.Application
     private HoodOverlayWindow? _petWindow;
     private SettingsWindow? _settingsWindow;
     private Forms.NotifyIcon? _trayIcon;
+    private System.Drawing.Icon? _trayIconImage;
     private readonly WindowsStartupRegistration _startupRegistration = new();
 
     protected override void OnStartup(StartupEventArgs e)
@@ -141,6 +142,8 @@ public partial class App : System.Windows.Application
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
         _trayIcon?.Dispose();
         _trayIcon = null;
+        _trayIconImage?.Dispose();
+        _trayIconImage = null;
         base.OnExit(e);
     }
 
@@ -179,6 +182,9 @@ public partial class App : System.Windows.Application
 
     private Forms.NotifyIcon CreateTrayIcon()
     {
+        using var imageStream = typeof(App).Assembly.GetManifestResourceStream("DesktopPet.Hood.ico")!;
+        _trayIconImage = new System.Drawing.Icon(imageStream, Forms.SystemInformation.SmallIconSize);
+
         var menu = new Forms.ContextMenuStrip();
         var settings = new Forms.ToolStripMenuItem("Settings");
         settings.Click += (_, _) => ShowSettings();
@@ -190,7 +196,7 @@ public partial class App : System.Windows.Application
 
         var icon = new Forms.NotifyIcon
         {
-            Icon = System.Drawing.SystemIcons.Application,
+            Icon = _trayIconImage,
             Text = "Hood",
             ContextMenuStrip = menu,
             Visible = true

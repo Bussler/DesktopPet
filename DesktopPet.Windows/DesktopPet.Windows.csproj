@@ -8,10 +8,12 @@
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\Assets\Hood\hood.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\DesktopPet.Core\DesktopPet.Core.csproj" />
+    <EmbeddedResource Include="..\Assets\Hood\hood.ico" LogicalName="DesktopPet.Hood.ico" />
     <Content Include="..\Assets\Hood\hood_spritesheet.png;..\Assets\Hood\hood.animations.json" Link="Assets\Hood\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
