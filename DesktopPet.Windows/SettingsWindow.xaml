@@ -1,0 +1,91 @@
+<Window x:Class="DesktopPet.Windows.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Hood Settings"
+        Width="440"
+        MinWidth="360"
+        MaxHeight="760"
+        SizeToContent="Height"
+        ResizeMode="CanResize"
+        WindowStartupLocation="CenterScreen"
+        ShowInTaskbar="True"
+        Background="#FFF4F6F9">
+    <Window.Resources>
+        <Style x:Key="VisibleFocus" TargetType="{x:Type Control}">
+            <Setter Property="FocusVisualStyle">
+                <Setter.Value>
+                    <Style>
+                        <Setter Property="Control.Template">
+                            <Setter.Value>
+                                <ControlTemplate>
+                                    <Border Margin="-3"
+                                            BorderBrush="#FF005FB8"
+                                            BorderThickness="2"
+                                            CornerRadius="3" />
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style TargetType="CheckBox" BasedOn="{StaticResource VisibleFocus}">
+            <Setter Property="Margin" Value="0,0,0,12" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style TargetType="Button" BasedOn="{StaticResource VisibleFocus}">
+            <Setter Property="MinHeight" Value="34" />
+            <Setter Property="Padding" Value="12,6" />
+        </Style>
+        <Style TargetType="GroupBox">
+            <Setter Property="Margin" Value="0,0,0,14" />
+            <Setter Property="Padding" Value="14,12,14,4" />
+            <Setter Property="Background" Value="White" />
+            <Setter Property="Foreground" Value="#FF20252B" />
+        </Style>
+    </Window.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="20">
+            <TextBlock FontSize="24" FontWeight="SemiBold" Foreground="#FF20252B" Text="Hood settings" />
+            <TextBlock Margin="0,5,0,16"
+                       Foreground="#FF49515A"
+                       Text="Choose how Hood behaves and where he appears. Changes save before they take effect."
+                       TextWrapping="Wrap" />
+
+            <GroupBox Header="Behavior">
+                <StackPanel>
+                    <CheckBox x:Name="RoamingCheckBox" Content="Let Hood roam within his area" IsChecked="True" />
+                    <CheckBox x:Name="IdleAnimationsCheckBox" Content="Play idle animations" IsChecked="True" />
+                    <CheckBox x:Name="RandomEventsCheckBox" Content="Allow occasional reactions" IsChecked="True" Margin="0" />
+                </StackPanel>
+            </GroupBox>
+
+            <GroupBox Header="Placement">
+                <StackPanel>
+                    <TextBlock Margin="0,0,0,10"
+                               Foreground="#FF49515A"
+                               Text="Hood stays inside this area while he roams."
+                               TextWrapping="Wrap" />
+                    <Button HorizontalAlignment="Left" Content="Edit roaming area" Click="OnEditAreaClick" />
+                </StackPanel>
+            </GroupBox>
+
+            <GroupBox Header="App">
+                <StackPanel>
+                    <CheckBox x:Name="AlwaysOnTopCheckBox" Content="Keep Hood above other windows" IsChecked="True" />
+                    <CheckBox x:Name="StartWithWindowsCheckBox" Content="Start Hood when I sign in" IsChecked="False" Margin="0" />
+                </StackPanel>
+            </GroupBox>
+
+            <TextBlock Margin="0,0,0,10"
+                       Foreground="#FF49515A"
+                       Text="Need rates and nap timing remain editable in config.yaml."
+                       TextWrapping="Wrap" />
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Margin="0,0,8,0" Content="Open config folder" Click="OnOpenConfigFolderClick" />
+                <Button Margin="0,0,8,0" Content="Cancel" Click="OnCancelClick" />
+                <Button MinWidth="80" IsDefault="True" Content="Save" Click="OnSaveClick" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</Window>

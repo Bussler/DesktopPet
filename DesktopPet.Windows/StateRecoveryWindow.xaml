@@ -1,0 +1,40 @@
+<Window x:Class="DesktopPet.Windows.StateRecoveryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Hood session recovery"
+        Width="520"
+        SizeToContent="Height"
+        ResizeMode="NoResize"
+        WindowStartupLocation="CenterScreen"
+        ShowInTaskbar="True">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+        <StackPanel>
+            <TextBlock FontSize="22" FontWeight="SemiBold" Text="Hood could not restore this session" />
+            <TextBlock x:Name="ErrorText" Margin="0,10,0,0" TextWrapping="Wrap" />
+            <TextBlock x:Name="StatePathText" Margin="0,10,0,0" Foreground="#FF626B75" TextWrapping="Wrap" />
+        </StackPanel>
+        <TextBlock Grid.Row="1"
+                   Margin="0,18,0,12"
+                   Text="Keep the file to inspect it, or archive it and start Hood with fresh needs and placement. Hood will not start until you choose one."
+                   TextWrapping="Wrap" />
+        <CheckBox x:Name="AcknowledgeResetCheckBox"
+                  Grid.Row="2"
+                  Margin="0,0,0,18"
+                  IsThreeState="False"
+                  Checked="OnAcknowledgeResetChecked"
+                  Unchecked="OnAcknowledgeResetChecked">
+            <TextBlock Text="I understand that the saved session will be archived and a new session will start."
+                       TextWrapping="Wrap" />
+        </CheckBox>
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button MinWidth="132" Margin="0,0,8,0" Padding="12,7" Content="Keep file and exit" Click="OnKeepFileClick" />
+            <Button x:Name="ResetButton" MinWidth="140" Padding="12,7" Content="Reset saved session" IsEnabled="False" IsDefault="True" Click="OnResetClick" />
+        </StackPanel>
+    </Grid>
+</Window>

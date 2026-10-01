@@ -1,0 +1,51 @@
+<Window x:Class="DesktopPet.Windows.RoamingAreaEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Width="480"
+        Height="208"
+        MinWidth="192"
+        MinHeight="208"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowActivated="False"
+        ShowInTaskbar="False">
+    <Grid>
+        <Border Margin="1" BorderBrush="#FFFFB547" BorderThickness="2" IsHitTestVisible="False" />
+        <Thumb x:Name="MoveHandle"
+               Height="26"
+               Margin="3,3,66,0"
+               VerticalAlignment="Top"
+               Background="#D927303A"
+               Cursor="SizeAll"
+               DragDelta="OnMoveDragDelta"
+               DragCompleted="OnMoveDragCompleted" />
+        <TextBlock Margin="3,3,66,0"
+                   Height="26"
+                   Text="Roaming area — drag to move"
+                   Foreground="White"
+                   FontWeight="SemiBold"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Top"
+                   IsHitTestVisible="False" />
+        <Button x:Name="DoneButton"
+                Width="58"
+                Height="26"
+                Margin="0,3,4,0"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Top"
+                Content="Done"
+                Click="OnDoneClick" />
+        <Thumb x:Name="ResizeHandle"
+               Width="22"
+               Height="22"
+               Margin="0,0,2,2"
+               HorizontalAlignment="Right"
+               VerticalAlignment="Bottom"
+               Background="#FFFFB547"
+               Cursor="SizeNWSE"
+               DragDelta="OnResizeDragDelta"
+               DragCompleted="OnResizeDragCompleted" />
+    </Grid>
+</Window>

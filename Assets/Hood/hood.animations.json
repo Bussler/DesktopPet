@@ -1,0 +1,121 @@
+{
+  "schemaVersion": 1,
+  "name": "Hood",
+  "spriteSheet": "hood_spritesheet.png",
+  "sheetWidth": 1536,
+  "sheetHeight": 2704,
+  "frameWidth": 192,
+  "frameHeight": 208,
+  "animations": [
+    {
+      "action": "idle",
+      "frames": [
+        { "column": 0, "row": 0 }, { "column": 1, "row": 0 },
+        { "column": 2, "row": 0 }, { "column": 3, "row": 0 },
+        { "column": 4, "row": 0 }, { "column": 5, "row": 0 }
+      ],
+      "frameDurationMilliseconds": 1400,
+      "loops": true,
+      "motionBounds": { "x": 0, "y": 0, "width": 192, "height": 208 }
+    },
+    {
+      "action": "runRight",
+      "frames": [
+        { "column": 0, "row": 1 }, { "column": 1, "row": 1 },
+        { "column": 2, "row": 1 }, { "column": 3, "row": 1 },
+        { "column": 4, "row": 1 }, { "column": 5, "row": 1 },
+        { "column": 6, "row": 1 }, { "column": 7, "row": 1 }
+      ],
+      "frameDurationMilliseconds": 110,
+      "loops": true,
+      "motionBounds": { "x": 0, "y": 0, "width": 192, "height": 208 }
+    },
+    {
+      "action": "runLeft",
+      "frames": [
+        { "column": 0, "row": 2 }, { "column": 1, "row": 2 },
+        { "column": 2, "row": 2 }, { "column": 3, "row": 2 },
+        { "column": 4, "row": 2 }, { "column": 5, "row": 2 },
+        { "column": 6, "row": 2 }, { "column": 7, "row": 2 }
+      ],
+      "frameDurationMilliseconds": 110,
+      "loops": true,
+      "motionBounds": { "x": 0, "y": 0, "width": 192, "height": 208 }
+    },
+    {
+      "action": "wave",
+      "frames": [
+        { "column": 0, "row": 3 }, { "column": 1, "row": 3 },
+        { "column": 2, "row": 3 }, { "column": 3, "row": 3 }
+      ],
+      "frameDurationMilliseconds": 180,
+      "loops": false,
+      "motionBounds": { "x": 0, "y": 0, "width": 192, "height": 208 }
+    },
+    {
+      "action": "lookUp",
+      "frames": [
+        { "column": 0, "row": 9 }, { "column": 1, "row": 9 },
+        { "column": 0, "row": 9 }
+      ],
+      "frameDurationMilliseconds": 240,
+      "loops": false,
+      "motionBounds": { "x": 0, "y": 0, "width": 192, "height": 208 }
+    },
+    {
+      "action": "lookAround",
+      "frames": [
+        { "column": 0, "row": 9 }, { "column": 1, "row": 9 },
+        { "column": 2, "row": 9 }, { "column": 3, "row": 9 },
+        { "column": 4, "row": 9 }, { "column": 5, "row": 9 },
+        { "column": 6, "row": 9 }, { "column": 7, "row": 9 }
+      ],
+      "frameDurationMilliseconds": 220,
+      "loops": false,
+      "motionBounds": { "x": 0, "y": 0, "width": 192, "height": 208 }
+    },
+    {
+      "action": "jump",
+      "frames": [
+        { "column": 0, "row": 4 }, { "column": 1, "row": 4 },
+        { "column": 2, "row": 4 }, { "column": 3, "row": 4 },
+        { "column": 4, "row": 4 }
+      ],
+      "frameDurationMilliseconds": 120,
+      "loops": false,
+      "motionBounds": { "x": 0, "y": 0, "width": 192, "height": 208 }
+    },
+    {
+      "action": "feed",
+      "frames": [
+        { "column": 0, "row": 11 }, { "column": 1, "row": 11 },
+        { "column": 2, "row": 11 }, { "column": 3, "row": 11 },
+        { "column": 4, "row": 11 }
+      ],
+      "frameDurationMilliseconds": 180,
+      "loops": false,
+      "motionBounds": { "x": 0, "y": 0, "width": 192, "height": 208 }
+    },
+    {
+      "action": "sleep",
+      "frames": [
+        { "column": 0, "row": 12 }, { "column": 1, "row": 12 },
+        { "column": 2, "row": 12 }
+      ],
+      "frameDurationMilliseconds": 850,
+      "loops": true,
+      "motionBounds": { "x": 0, "y": 0, "width": 192, "height": 208 }
+    },
+    {
+      "action": "wake",
+      "frames": [
+        { "column": 3, "row": 12 }, { "column": 4, "row": 12 },
+        { "column": 5, "row": 12 }, { "column": 6, "row": 12 },
+        { "column": 7, "row": 12 }
+      ],
+      "frameDurationMilliseconds": 180,
+      "loops": false,
+      "motionBounds": { "x": 0, "y": 0, "width": 192, "height": 208 }
+    }
+  ]
+}
