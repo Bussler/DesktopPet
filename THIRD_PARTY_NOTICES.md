@@ -14,7 +14,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 ## Microsoft .NET runtime
 
-The self-contained Windows publish includes Microsoft .NET and Windows Desktop runtime files. `tools/Complete-ReleaseCandidate.ps1` copies the license and third-party notice files for the exact restored `win-x64` runtime packs into the candidate's `licenses` folder. These files are sourced from the .NET runtime packages and Windows Desktop SDK; they are not emitted into the app publish folder by `dotnet publish`. Regenerate them whenever the runtime packs change. The behavior-test-only MSTest dependencies are not part of the app publish.
+The self-contained Windows publish includes Microsoft .NET and Windows Desktop runtime files. Their license and third-party notice files are available in the restored .NET runtime packages and Windows Desktop SDK; `dotnet publish` does not emit them into the app folder. The behavior-test-only MSTest dependencies are not part of the app publish.
 
 The runtime is self-contained, so it does not receive updates from an installed .NET runtime. See Microsoft's [self-contained deployment guidance](https://learn.microsoft.com/en-us/dotnet/core/deploying/) and [.NET support policy](https://dotnet.microsoft.com/en-us/platform/support/policy/dotnet-core) for servicing requirements.
 

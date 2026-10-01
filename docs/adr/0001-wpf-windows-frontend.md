@@ -1,6 +1,6 @@
 # ADR 0001: WPF for the Windows frontend
 
-**Status:** accepted after the user reported all Ticket 01 manual Windows checks passed on 2026-10-01.
+**Status:** Accepted
 
 ## Context
 
@@ -18,4 +18,4 @@ Use .NET 10 and WPF in `DesktopPet.Windows`; keep session behavior and persisted
 
 ## Trade-offs and compatibility
 
-The desktop UI remains Windows-only and must be replaced for a phone app. Core behavior can be reused behind a new frontend. WPF's per-pixel transparency and no-activation behavior still require manual checks on the target Windows/DPI setup; the application behavior tests do not claim to prove those OS integrations.
+The desktop UI remains Windows-only and must be replaced for a phone app. Core behavior can be reused behind a new frontend. WPF's per-pixel transparency and no-activation behavior depend on the target Windows/DPI setup.

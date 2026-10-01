@@ -6,4 +6,4 @@ The nap duration comes from `sleep.duration_minutes` when the nap starts. Sleep 
 
 A left-click during a nap plays the wake animation and uses that click only to wake Hood. **Feed** wakes and feeds in one action. Both preserve recovery already earned and start the configured early-wake grace period, during which automatic naps are suppressed. Manual Sleep remains available during grace.
 
-An awake session's needs resume at the saved values. If a state file cannot be restored, follow the acknowledged recovery flow described in the [session recovery checklist](manual-acceptance-ticket-04.md); Hood preserves the original file when archiving it.
+An awake session's needs resume at the saved values. If a state file cannot be restored, follow the [session recovery guidance](recovery.md); Hood preserves the original file when archiving it.

@@ -8,7 +8,7 @@ The preview rows appear in this order: idle, run right, run left, wave, look up,
 
 | Action | Frames | Playback |
 | --- | --- | --- |
-| Idle | Source row 0, columns 0–6 | Loops; 1400 ms per frame. |
+| Idle | Source row 0, columns 0–5 | Loops; 1400 ms per frame. |
 | Run right / left | Source rows 1 / 2, columns 0–7 | Loops; 110 ms per frame. |
 | Wave | Source row 3, columns 0–3 | Completes; 180 ms per frame. |
 | Look up | Source row 9, columns 0, 1, 0 | Completes; 240 ms per frame. |
@@ -21,3 +21,5 @@ The preview rows appear in this order: idle, run right, run left, wave, look up,
 The first eleven rows come from the newer local Hood sheet. The sleeping/waking cells reuse dedicated closed-eye and waking artwork from the earlier local sheet. The feeding sequence is composited offline from the newer downward-gaze pose and locally drawn dish/seed props; it does not use a substitute reaction pose or static sleep indicator.
 
 Both source sheets are preserved under `Assets/Hood/source/`. The generation script uses only local files. The project owner confirmed ownership and personal-use release scope on 2026-10-01; no external redistribution is planned.
+
+To replace the artwork or change its frame layout, follow [changing sprites](changing-sprites.md).

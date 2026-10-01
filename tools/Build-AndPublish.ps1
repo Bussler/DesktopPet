@@ -31,14 +31,14 @@ try {
     Invoke-Dotnet @('restore', '.\DesktopPet.sln', '--locked-mode')
     Invoke-Dotnet @('test', '.\DesktopPet.sln', '--configuration', 'Release', '--no-restore',
         '--logger', 'trx;LogFileName=DesktopPet.Tests.trx',
-        '--results-directory', (Join-Path $candidateRoot 'evidence'))
+        '--results-directory', '.\DesktopPet.Tests\TestResults')
     Invoke-Dotnet @('build', '.\DesktopPet.sln', '--configuration', 'Release', '--no-restore')
     Invoke-Dotnet @('publish', '.\DesktopPet.Windows\DesktopPet.Windows.csproj',
         '--configuration', 'Release', '--runtime', 'win-x64', '--self-contained', 'true',
         '--no-restore', '--output', (Join-Path $candidateRoot 'app'))
 
     & (Join-Path $PSScriptRoot 'Complete-ReleaseCandidate.ps1') `
-        -CandidateDirectory $candidateRoot -DotnetExe $DotnetExe
+        -CandidateDirectory $candidateRoot
     Write-Output "Run Hood: $(Join-Path $candidateRoot 'app\DesktopPet.Windows.exe')"
 }
 finally {
