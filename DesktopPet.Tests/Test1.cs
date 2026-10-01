@@ -28,6 +28,100 @@ public sealed class HoodSessionTests
     }
 
     [TestMethod]
+    public void Assets_HigherResolutionAndAdditionalPosesKeepTheSameLogicalSize()
+    {
+        var definition = ReadDefinition();
+
+        Assert.AreEqual(384, definition.FrameWidth);
+        Assert.AreEqual(416, definition.FrameHeight);
+        Assert.AreEqual(192d, definition.DisplayWidth);
+        Assert.AreEqual(208d, definition.DisplayHeight);
+        Assert.AreEqual(new DesktopPet.Core.PetBounds(0, 0, 192, 208), definition.MinimumRoamingArea);
+        foreach (var animation in definition.Animations)
+        {
+            Assert.IsTrue(animation.Frames.Distinct().Count() >= 12, $"{animation.Action} needs additional poses.");
+        }
+    }
+
+    [TestMethod]
+    public void Assets_LegacyManifestsWithoutSpriteScaleRetainTheirOriginalSize()
+    {
+        var (json, width, height) = ReadPackagedDefinition();
+        var root = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
+        root.Remove("spriteScale");
+        root["frameWidth"] = 192;
+        root["frameHeight"] = 208;
+
+        var definition = DesktopPet.Core.PetDefinition.Parse(root.ToJsonString(), width, height);
+
+        Assert.AreEqual(1d, definition.SpriteScale);
+        Assert.AreEqual(192d, definition.DisplayWidth);
+        Assert.AreEqual(208d, definition.DisplayHeight);
+    }
+
+    [TestMethod]
+    [DataRow(0d)]
+    [DataRow(-1d)]
+    public void Assets_RejectInvalidSpriteScale(double scale)
+    {
+        var (json, width, height) = ReadPackagedDefinition();
+        var root = System.Text.Json.Nodes.JsonNode.Parse(json)!;
+        root["spriteScale"] = scale;
+
+        Assert.Throws<DesktopPet.Core.PetAssetException>(
+            () => DesktopPet.Core.PetDefinition.Parse(root.ToJsonString(), width, height));
+    }
+
+    [TestMethod]
+    public void Advance_RoamingStartsHalfAsOftenWithEightSecondBouts()
+    {
+        var defaults = DesktopPet.Core.HoodConfiguration.Defaults;
+        var configuration = defaults with
+        {
+            Behavior = defaults.Behavior with { Roaming = true, IdleAnimations = false, RandomEvents = false },
+            Needs = defaults.Needs with { HungerPointsPerHour = 0, BoredomPointsPerHour = 0, SleepPointsPerHour = 0 }
+        };
+        var session = CreateSession(new SequenceRandomSource(0), new RecordingSessionStore(), configuration);
+        var starts = 0;
+        var wasMoving = false;
+        for (var second = 0; second < 200; second++)
+        {
+            session.Advance(TimeSpan.FromSeconds(1));
+            var moving = session.Presentation.Action is DesktopPet.Core.PetAction.RunLeft or DesktopPet.Core.PetAction.RunRight;
+            if (moving && !wasMoving)
+            {
+                starts++;
+            }
+
+            Assert.AreEqual(second % 40 < 7, moving, "Each eight-second bout must be followed by 32 seconds of rest.");
+            wasMoving = moving;
+        }
+
+        Assert.AreEqual(5, starts, "The previous 20-second cycle started ten bouts in this period.");
+    }
+
+    [TestMethod]
+    public void Advance_IdleHoldsTheNeutralPoseBetweenBlinks()
+    {
+        var defaults = DesktopPet.Core.HoodConfiguration.Defaults;
+        var configuration = defaults with
+        {
+            Behavior = defaults.Behavior with { Roaming = false, IdleAnimations = true, RandomEvents = false }
+        };
+        var session = CreateSession(new SequenceRandomSource(0), new RecordingSessionStore(), configuration);
+        var idle = ReadDefinition().GetAnimation(DesktopPet.Core.PetAction.Idle);
+        var neutral = idle.Frames[session.Presentation.FrameIndex];
+
+        session.Advance(TimeSpan.FromSeconds(9));
+        Assert.AreEqual(neutral, idle.Frames[session.Presentation.FrameIndex]);
+        session.Advance(TimeSpan.FromSeconds(1));
+        Assert.AreNotEqual(neutral, idle.Frames[session.Presentation.FrameIndex]);
+        session.Advance(TimeSpan.FromMilliseconds(880));
+        Assert.AreEqual(neutral, idle.Frames[session.Presentation.FrameIndex]);
+        Assert.AreEqual(DesktopPet.Core.PetAction.Idle, session.Presentation.Action);
+    }
+
+    [TestMethod]
     public void Advance_CompletesTheJumpAndReturnsToAnIdleFrame()
     {
         var session = CreateSession(new SequenceRandomSource(1, 4), new RecordingSessionStore());
@@ -36,7 +130,7 @@ public sealed class HoodSessionTests
         session.Advance(TimeSpan.FromMilliseconds(599));
 
         Assert.AreEqual(DesktopPet.Core.PetAction.Jump, session.Presentation.Action);
-        Assert.AreEqual(4, session.Presentation.FrameIndex);
+        Assert.AreEqual(ReadDefinition().GetAnimation(DesktopPet.Core.PetAction.Jump).Frames.Count - 1, session.Presentation.FrameIndex);
 
         session.Advance(TimeSpan.FromMilliseconds(1));
 
@@ -238,7 +332,7 @@ public sealed class HoodSessionTests
 
         session.React();
         Assert.AreEqual(DesktopPet.Core.PetAction.Jump, session.Presentation.Action);
-        session.Advance(TimeSpan.FromMilliseconds(120));
+        session.Advance(TimeSpan.FromMilliseconds(ReadDefinition().GetAnimation(DesktopPet.Core.PetAction.Jump).FrameDurationMilliseconds));
         Assert.AreEqual(1, session.Presentation.FrameIndex);
     }
 
@@ -567,7 +661,7 @@ public sealed class HoodSessionTests
         var root = System.Text.Json.Nodes.JsonNode.Parse(json)!;
         var jump = root["animations"]!.AsArray().Single(animation =>
             string.Equals(animation?["action"]?.GetValue<string>(), "jump", StringComparison.OrdinalIgnoreCase))!;
-        jump["frames"]!.AsArray()[4]!.AsObject()["column"] = 8;
+        jump["frames"]!.AsArray()[4]!.AsObject()["column"] = width / root["frameWidth"]!.GetValue<int>();
 
         var exception = Assert.Throws<DesktopPet.Core.PetAssetException>(
             () => DesktopPet.Core.PetDefinition.Parse(root.ToJsonString(), width, height));

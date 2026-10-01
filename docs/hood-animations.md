@@ -1,25 +1,26 @@
 # Hood animation set
 
-The packaged sprite sheet has transparent 192×208 logical frames. Every motion footprint covers a complete frame, so later movement and placement policies can contain any visible part of the character or feeding prop.
+The transparent sprite sheet uses 384x416 pixel cells displayed at 192x208 logical units through `spriteScale: 2`. All motion bounds stay in logical units, so higher artwork resolution does not change Hood's size, placement, or minimum roaming area.
 
-The preview rows appear in this order: idle, run right, run left, wave, look up, look around, jump, feed, sleep, wake.
+The preview shows each unique pose, with rows in playback order:
 
-![Hood first-release animation preview](previews/hood-actions.png)
+![Hood animation preview](previews/hood-actions.png)
 
-| Action | Frames | Playback |
-| --- | --- | --- |
-| Idle | Source row 0, columns 0–5 | Loops; 1400 ms per frame. |
-| Run right / left | Source rows 1 / 2, columns 0–7 | Loops; 110 ms per frame. |
-| Wave | Source row 3, columns 0–3 | Completes; 180 ms per frame. |
-| Look up | Source row 9, columns 0, 1, 0 | Completes; 240 ms per frame. |
-| Look around | Source row 9, columns 0–7 | Completes; 220 ms per frame. |
-| Jump | Source row 4, columns 0–4 | Completes; 120 ms per frame. |
-| Feed | Derived row 11, columns 0–4 | Completes; 180 ms per frame. Hood follows a seed from a dish to his beak. |
-| Sleep | Derived row 12, columns 0–2 | Loops; 850 ms per frame. Uses the source's closed-eye settling poses. |
-| Wake | Derived row 12, columns 3–7 | Completes; 180 ms per frame, ending with Hood's eyes open. |
+| Action | Row | Unique poses | Frame interval | Playback |
+| --- | --- | --- | --- | --- |
+| Idle | 0 | 16 | 80 ms | 9.6-second neutral hold, then gentle blink; loops every 10.88 seconds. |
+| Run right | 1 | 16 | 55 ms | Loops every 880 ms. |
+| Run left | 2 | 16 | 55 ms | Loops every 880 ms. |
+| Wave | 3 | 12 | 60 ms | Completes in 720 ms. |
+| Look up | 4 | 12 | 60 ms | Completes in 720 ms. |
+| Look around | 5 | 16 | 110 ms | Completes in 1760 ms. |
+| Jump | 6 | 15 | 40 ms | Completes in 600 ms. |
+| Feed | 7 | 15 | 60 ms | Completes in 900 ms; Hood takes a seed from his bowl. |
+| Sleep | 8 | 12 | 225 ms | Gentle closed-eye breathing; loops every 2700 ms. |
+| Wake | 9 | 15 | 60 ms | Completes in 900 ms, ending with eyes open. |
 
-The first eleven rows come from the newer local Hood sheet. The sleeping/waking cells reuse dedicated closed-eye and waking artwork from the earlier local sheet. The feeding sequence is composited offline from the newer downward-gaze pose and locally drawn dish/seed props; it does not use a substitute reaction pose or static sleep indicator.
+Each sequence uses columns zero through its unique-pose count minus one. Idle additionally repeats column zero 120 times at the beginning to provide a quiet hold. Head tilts are confined to deliberate reactions instead of the idle loop. Roaming retains eight-second bouts and now rests for 32 seconds, halving starts from once every 20 seconds to once every 40 seconds when uninterrupted.
 
-Both source sheets are preserved under `Assets/Hood/source/`. The generation script uses only local files. The project owner confirmed ownership and personal-use release scope on 2026-10-01; no external redistribution is planned.
+The v3 artwork was created with the built-in imagegen tool using the original Hood artwork as reference. Source PNGs and exact prompts in `PROMPTS.md` are retained in `Assets/Hood/source/v3/`. The local packing script regenerates the sheet, manifest, and preview without network access. Earlier source sheets are retained. The project owner confirmed ownership and personal-use release scope on 2026-10-01.
 
 To replace the artwork or change its frame layout, follow [changing sprites](changing-sprites.md).

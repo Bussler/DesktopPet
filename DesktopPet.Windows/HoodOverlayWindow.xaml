@@ -17,5 +17,6 @@
         MouseMove="OnMouseMove"
         MouseLeftButtonUp="OnMouseLeftButtonUp"
         LostMouseCapture="OnLostMouseCapture">
-    <Image x:Name="PetImage" Width="192" Height="208" Stretch="Fill" />
+    <Image x:Name="PetImage" Width="192" Height="208" Stretch="Fill"
+           RenderOptions.BitmapScalingMode="HighQuality" />
 </Window>

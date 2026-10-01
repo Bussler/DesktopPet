@@ -12,11 +12,11 @@ public static class PetPlacementPolicy
         var width = Math.Min(workArea.Width, Math.Max(minimum.Width, settings.Width));
         var height = Math.Min(workArea.Height, Math.Max(minimum.Height, settings.Height));
         var position = new PetPosition(
-            workArea.X + (workArea.Width - definition.FrameWidth) / 2,
-            workArea.Bottom - Math.Min(workArea.Height, definition.FrameHeight + settings.BottomMargin));
+            workArea.X + (workArea.Width - definition.DisplayWidth) / 2,
+            workArea.Bottom - Math.Min(workArea.Height, definition.DisplayHeight + settings.BottomMargin));
         var area = new PetBounds(
-            position.X + (definition.FrameWidth - width) / 2,
-            position.Y + definition.FrameHeight - height,
+            position.X + (definition.DisplayWidth - width) / 2,
+            position.Y + definition.DisplayHeight - height,
             width,
             height);
         return Fit(definition, position, area, primaryDisplay);
@@ -32,8 +32,8 @@ public static class PetPlacementPolicy
         var primary = GetPrimaryDisplay(displays, definition);
         var display = FindDisplay(position, definition, displays) ?? primary;
         var area = roamingArea ?? new PetBounds(
-            position.X + (definition.FrameWidth - initialArea.Width) / 2,
-            position.Y + definition.FrameHeight - initialArea.Height,
+            position.X + (definition.DisplayWidth - initialArea.Width) / 2,
+            position.Y + definition.DisplayHeight - initialArea.Height,
             initialArea.Width,
             initialArea.Height);
         return Fit(definition, position, area, display);
@@ -77,11 +77,11 @@ public static class PetPlacementPolicy
         var height = Math.Min(workArea.Height, Math.Max(minimum.Height, requestedHeight));
         var x = Math.Clamp(
             currentArea.X,
-            Math.Max(workArea.X, position.X + definition.FrameWidth - width),
+            Math.Max(workArea.X, position.X + definition.DisplayWidth - width),
             Math.Min(position.X, workArea.Right - width));
         var y = Math.Clamp(
             currentArea.Y,
-            Math.Max(workArea.Y, position.Y + definition.FrameHeight - height),
+            Math.Max(workArea.Y, position.Y + definition.DisplayHeight - height),
             Math.Min(position.Y, workArea.Bottom - height));
         return new PetPlacement(position, new PetBounds(x, y, width, height), display);
     }
@@ -101,8 +101,8 @@ public static class PetPlacementPolicy
 
         var primary = GetPrimaryDisplay(displays, definition);
         var target = new PetPosition(
-            requestedX + (currentArea.Width - definition.FrameWidth) / 2,
-            requestedY + (currentArea.Height - definition.FrameHeight) / 2);
+            requestedX + (currentArea.Width - definition.DisplayWidth) / 2,
+            requestedY + (currentArea.Height - definition.DisplayHeight) / 2);
         var display = FindDisplay(target, definition, displays) ?? FindNearestDisplay(target, definition, displays) ?? primary;
         var workArea = display.WorkArea;
         var minimum = definition.MinimumRoamingArea;
@@ -111,8 +111,8 @@ public static class PetPlacementPolicy
         var x = Math.Clamp(requestedX, workArea.X, workArea.Right - width);
         var y = Math.Clamp(requestedY, workArea.Y, workArea.Bottom - height);
         var position = new PetPosition(
-            Math.Clamp(currentPosition.X, x, x + width - definition.FrameWidth),
-            Math.Clamp(currentPosition.Y, y, y + height - definition.FrameHeight));
+            Math.Clamp(currentPosition.X, x, x + width - definition.DisplayWidth),
+            Math.Clamp(currentPosition.Y, y, y + height - definition.DisplayHeight));
         return new PetPlacement(position, new PetBounds(x, y, width, height), display);
     }
 
@@ -124,13 +124,13 @@ public static class PetPlacementPolicy
         var width = Math.Min(workArea.Width, Math.Max(minimum.Width, area.Width));
         var height = Math.Min(workArea.Height, Math.Max(minimum.Height, area.Height));
         var containsPet = area.X <= position.X && area.Y <= position.Y &&
-                          area.Right >= position.X + definition.FrameWidth &&
-                          area.Bottom >= position.Y + definition.FrameHeight;
+                          area.Right >= position.X + definition.DisplayWidth &&
+                          area.Bottom >= position.Y + definition.DisplayHeight;
         if (!containsPet || width != area.Width || height != area.Height)
         {
             area = new PetBounds(
-                position.X + (definition.FrameWidth - width) / 2,
-                position.Y + (definition.FrameHeight - height) / 2,
+                position.X + (definition.DisplayWidth - width) / 2,
+                position.Y + (definition.DisplayHeight - height) / 2,
                 width,
                 height);
         }
@@ -161,8 +161,8 @@ public static class PetPlacementPolicy
 
     private static DisplayInfo? FindDisplay(PetPosition position, PetDefinition definition, IEnumerable<DisplayInfo> displays)
     {
-        var centerX = position.X + definition.FrameWidth / 2;
-        var centerY = position.Y + definition.FrameHeight / 2;
+        var centerX = position.X + definition.DisplayWidth / 2;
+        var centerY = position.Y + definition.DisplayHeight / 2;
         return displays
             .Where(display => IsUsable(display, definition) &&
                               centerX >= display.WorkArea.X && centerX <= display.WorkArea.Right &&
@@ -173,8 +173,8 @@ public static class PetPlacementPolicy
 
     private static DisplayInfo? FindNearestDisplay(PetPosition position, PetDefinition definition, IEnumerable<DisplayInfo> displays)
     {
-        var centerX = position.X + definition.FrameWidth / 2;
-        var centerY = position.Y + definition.FrameHeight / 2;
+        var centerX = position.X + definition.DisplayWidth / 2;
+        var centerY = position.Y + definition.DisplayHeight / 2;
         return displays
             .Where(display => IsUsable(display, definition))
             .OrderBy(display => DistanceSquared(centerX, centerY, display.WorkArea))
@@ -193,7 +193,7 @@ public static class PetPlacementPolicy
     private static bool IsUsable(DisplayInfo display, PetDefinition definition) =>
         double.IsFinite(display.WorkArea.X) && double.IsFinite(display.WorkArea.Y) &&
         double.IsFinite(display.WorkArea.Width) && double.IsFinite(display.WorkArea.Height) &&
-        display.WorkArea.Width >= definition.FrameWidth && display.WorkArea.Height >= definition.FrameHeight &&
+        display.WorkArea.Width >= definition.DisplayWidth && display.WorkArea.Height >= definition.DisplayHeight &&
         double.IsFinite(display.ScaleFactor) && display.ScaleFactor > 0;
 
     private static void ValidateDisplay(DisplayInfo display, PetDefinition definition)

@@ -11,7 +11,7 @@ $failures = [System.Collections.Generic.List[string]]::new()
 $checkedCorners = 0
 
 try {
-    foreach ($actionName in @('idle', 'runLeft', 'runRight', 'feed')) {
+    foreach ($actionName in $manifest.animations.action) {
         $animation = $manifest.animations | Where-Object { $_.action -ieq $actionName } | Select-Object -First 1
         if (-not $animation) { throw "Required animation '$actionName' is missing from the manifest." }
 

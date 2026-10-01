@@ -12,7 +12,7 @@ Settings and saved progress live in `%LOCALAPPDATA%\HoodDesktopPet`, separately 
 
 1. Quit Hood from the tray menu.
 2. Back up `app\Assets\Hood\hood_spritesheet.png` and `hood.animations.json` outside the app folder.
-3. Replace the PNG with your own transparent artwork. For a direct replacement, keep the 1536×2704 sheet, its 8×13 grid of 192×208 cells, and the existing animation positions.
+3. Replace the PNG with your own transparent artwork. For a direct replacement, keep the 6144×4160 sheet, its 16×10 grid of 384×416 pixel cells, and the existing animation positions.
 4. For a different grid or frame sequence, also update `hood.animations.json`. Keep both filenames and all ten required actions. The [sprite guide](docs/changing-sprites.md) explains the layout, JSON fields, and recovery steps.
 5. Relaunch Hood to load the new artwork. The tray icon is embedded separately and stays the same.
 

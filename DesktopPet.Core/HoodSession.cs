@@ -135,7 +135,7 @@ public sealed class HoodSession
     private const double RoamingSpeedUnitsPerSecond = 18;
     private const int RandomSampleResolution = 1_000_000;
     private static readonly TimeSpan RoamingBoutDuration = TimeSpan.FromSeconds(8);
-    private static readonly TimeSpan RoamingRestDuration = TimeSpan.FromSeconds(12);
+    private static readonly TimeSpan RoamingRestDuration = TimeSpan.FromSeconds(32);
     private readonly PetDefinition _definition;
     private readonly IPetRandomSource _random;
     private readonly ISessionStore _store;
@@ -738,7 +738,7 @@ public sealed class HoodSession
         _configuration.Behavior.Roaming &&
         !_dragging &&
         !_editingArea &&
-        RoamingArea.Width > _definition.FrameWidth;
+        RoamingArea.Width > _definition.DisplayWidth;
 
     private bool IsMoving => CanRoam && _action is PetAction.RunLeft or PetAction.RunRight;
 
@@ -766,7 +766,7 @@ public sealed class HoodSession
         }
 
         var leftEdge = RoamingArea.X;
-        var rightEdge = RoamingArea.Right - _definition.FrameWidth;
+        var rightEdge = RoamingArea.Right - _definition.DisplayWidth;
         var direction = Position.X <= leftEdge
             ? PetAction.RunRight
             : Position.X >= rightEdge
@@ -785,7 +785,7 @@ public sealed class HoodSession
         }
 
         var leftEdge = RoamingArea.X;
-        var rightEdge = RoamingArea.Right - _definition.FrameWidth;
+        var rightEdge = RoamingArea.Right - _definition.DisplayWidth;
         if (_action == PetAction.RunLeft && Position.X <= leftEdge)
         {
             StartDirectAction(PetAction.RunRight);
@@ -800,7 +800,7 @@ public sealed class HoodSession
     {
         var distance = _action == PetAction.RunLeft
             ? Position.X - RoamingArea.X
-            : RoamingArea.Right - _definition.FrameWidth - Position.X;
+            : RoamingArea.Right - _definition.DisplayWidth - Position.X;
         var ticks = Math.Max(0, distance) / RoamingSpeedUnitsPerSecond * TimeSpan.TicksPerSecond;
         if (!double.IsFinite(ticks) || ticks >= TimeSpan.MaxValue.Ticks)
         {
@@ -819,7 +819,7 @@ public sealed class HoodSession
 
         var direction = _action == PetAction.RunLeft ? -1 : 1;
         var leftEdge = RoamingArea.X;
-        var rightEdge = RoamingArea.Right - _definition.FrameWidth;
+        var rightEdge = RoamingArea.Right - _definition.DisplayWidth;
         var nextX = Math.Clamp(
             Position.X + direction * RoamingSpeedUnitsPerSecond * elapsed.TotalSeconds,
             leftEdge,

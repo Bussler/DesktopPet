@@ -45,8 +45,8 @@ public partial class HoodOverlayWindow : Window
         _showSettings = showSettings;
         _quitApplication = quitApplication;
         InitializeComponent();
-        Width = assets.Definition.FrameWidth;
-        Height = assets.Definition.FrameHeight;
+        Width = PetImage.Width = assets.Definition.DisplayWidth;
+        Height = PetImage.Height = assets.Definition.DisplayHeight;
         Topmost = session.Configuration.Behavior.AlwaysOnTop;
         Left = session.Position.X;
         Top = session.Position.Y;

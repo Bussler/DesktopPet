@@ -33,6 +33,9 @@ public sealed class PetDefinition
     public int SheetHeight { get; init; }
     public int FrameWidth { get; init; }
     public int FrameHeight { get; init; }
+    public double SpriteScale { get; init; } = 1;
+    public double DisplayWidth => FrameWidth / SpriteScale;
+    public double DisplayHeight => FrameHeight / SpriteScale;
     public List<PetAnimation> Animations { get; init; } = [];
 
     public static PetDefinition Parse(string json, int actualSheetWidth, int actualSheetHeight)
@@ -60,8 +63,8 @@ public sealed class PetDefinition
     public PetBounds MinimumRoamingArea => new(
         0,
         0,
-        Math.Max(FrameWidth, Animations.Max(animation => animation.MotionBounds.Width)),
-        Math.Max(FrameHeight, Animations.Max(animation => animation.MotionBounds.Height)));
+        Math.Max(DisplayWidth, Animations.Max(animation => animation.MotionBounds.Width)),
+        Math.Max(DisplayHeight, Animations.Max(animation => animation.MotionBounds.Height)));
 
     internal void Validate(int actualSheetWidth, int actualSheetHeight)
     {
@@ -96,6 +99,12 @@ public sealed class PetDefinition
             throw new PetAssetException("The Hood animation frame size is larger than its sprite sheet.");
         }
 
+        if (!double.IsFinite(SpriteScale) || SpriteScale <= 0 ||
+            !double.IsFinite(DisplayWidth) || !double.IsFinite(DisplayHeight))
+        {
+            throw new PetAssetException("The Hood sprite scale must be a finite positive number of pixels per logical unit.");
+        }
+
         var actions = new HashSet<PetAction>();
         foreach (var animation in Animations)
         {
@@ -121,7 +130,7 @@ public sealed class PetDefinition
 
             var bounds = animation.MotionBounds;
             if (bounds.X < 0 || bounds.Y < 0 || bounds.Width <= 0 || bounds.Height <= 0 ||
-                bounds.X + bounds.Width > FrameWidth || bounds.Y + bounds.Height > FrameHeight)
+                bounds.X + bounds.Width > DisplayWidth || bounds.Y + bounds.Height > DisplayHeight)
             {
                 throw new PetAssetException($"The Hood '{animation.Action}' motion bounds must fit inside one animation frame.");
             }

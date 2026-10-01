@@ -1,156 +1,138 @@
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName PresentationCore
 Add-Type -AssemblyName WindowsBase
-
+if (-not ('HoodSpriteBounds' -as [type])) {
+    Add-Type @"
+using System;
+using System.Collections.Generic;
+using System.Linq;
+public static class HoodSpriteBounds {
+    public static int[][] FindFrames(byte[] pixels, int width, int height, int columns, int count) {
+        var visited = new bool[width * height];
+        var queue = new int[visited.Length];
+        var components = new List<(int[] Bounds, int Size)>();
+        for (int start = 0; start < visited.Length; start++) {
+            if (visited[start] || pixels[start * 4 + 3] < 16) continue;
+            int head = 0, tail = 0, minX = width, minY = height, maxX = 0, maxY = 0;
+            void Add(int index) {
+                if (!visited[index] && pixels[index * 4 + 3] >= 16) {
+                    visited[index] = true; queue[tail++] = index;
+                }
+            }
+            Add(start);
+            while (head < tail) {
+                int index = queue[head++], x = index % width, y = index / width;
+                minX = Math.Min(minX, x); minY = Math.Min(minY, y);
+                maxX = Math.Max(maxX, x); maxY = Math.Max(maxY, y);
+                if (x > 0) Add(index - 1); if (x + 1 < width) Add(index + 1);
+                if (y > 0) Add(index - width); if (y + 1 < height) Add(index + width);
+            }
+            if (tail >= 16) components.Add((new[] { minX, minY, maxX + 1, maxY + 1 }, tail));
+        }
+        var sprites = components.OrderByDescending(c => c.Size).Take(count).ToArray();
+        if (sprites.Length != count || sprites.Any(c => c.Size < 1000))
+            throw new InvalidOperationException("The Hood source sheet does not contain the expected complete sprites.");
+        // Attach nearby detached feet or cap details to their own character.
+        foreach (var fragment in components.OrderByDescending(c => c.Size).Skip(count)) {
+            var f = fragment.Bounds;
+            int Distance(int[] b) => Math.Max(0, Math.Max(b[0] - f[2], f[0] - b[2])) +
+                Math.Max(0, Math.Max(b[1] - f[3], f[1] - b[3]));
+            var nearest = sprites.OrderBy(c => Distance(c.Bounds)).First().Bounds;
+            if (Distance(nearest) > 12) continue;
+            nearest[0] = Math.Min(nearest[0], f[0]); nearest[1] = Math.Min(nearest[1], f[1]);
+            nearest[2] = Math.Max(nearest[2], f[2]); nearest[3] = Math.Max(nearest[3], f[3]);
+        }
+        return sprites.OrderBy(c => c.Bounds[1] + c.Bounds[3]).Chunk(columns)
+            .SelectMany(row => row.OrderBy(c => c.Bounds[0] + c.Bounds[2]))
+            .Select(c => new[] { Math.Max(0, c.Bounds[0] - 2), Math.Max(0, c.Bounds[1] - 2),
+                Math.Min(width, c.Bounds[2] + 2) - Math.Max(0, c.Bounds[0] - 2),
+                Math.Min(height, c.Bounds[3] + 2) - Math.Max(0, c.Bounds[1] - 2) }).ToArray();
+    }
+}
+"@
+}
 $assetDirectory = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$sourceDirectory = Join-Path $assetDirectory 'source'
-$latestPath = Join-Path $sourceDirectory 'hood_spritesheet-v2.webp'
-$legacyPath = Join-Path $sourceDirectory 'hood_spritesheet-v1.png'
-$outputPath = Join-Path $assetDirectory 'hood_spritesheet.png'
-$previewDirectory = Join-Path $assetDirectory '..\..\docs\previews'
-$previewPath = Join-Path $previewDirectory 'hood-actions.png'
-$cellWidth = 192
-$cellHeight = 208
-
-$latestDecoder = [System.Windows.Media.Imaging.BitmapDecoder]::Create(
-    [Uri]::new($latestPath),
-    [System.Windows.Media.Imaging.BitmapCreateOptions]::PreservePixelFormat,
-    [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad)
-$legacyDecoder = [System.Windows.Media.Imaging.BitmapDecoder]::Create(
-    [Uri]::new($legacyPath),
-    [System.Windows.Media.Imaging.BitmapCreateOptions]::PreservePixelFormat,
-    [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad)
-$latest = [System.Windows.Media.Imaging.FormatConvertedBitmap]::new(
-    $latestDecoder.Frames[0],
-    [System.Windows.Media.PixelFormats]::Pbgra32,
-    $null,
-    0)
-$latest.Freeze()
-$legacy = $legacyDecoder.Frames[0]
-
-if ($latest.PixelWidth -ne 1536 -or $latest.PixelHeight -ne 2288 -or
-    $legacy.PixelWidth -ne 1536 -or $legacy.PixelHeight -ne 1872) {
-    throw 'The local Hood source sheets do not match the expected 8-column 192x208 frame grid.'
+$sourceDirectory = Join-Path $assetDirectory 'source\v3'
+$cellWidth = 384
+$cellHeight = 416
+# Action, source columns, unique poses, milliseconds per pose, looping.
+$actions = @(
+    @('idle', 4, 16, 80, $true),
+    @('runRight', 4, 16, 55, $true),
+    @('runLeft', 4, 16, 55, $true),
+    @('wave', 4, 12, 60, $false),
+    @('lookUp', 4, 12, 60, $false),
+    @('lookAround', 4, 16, 110, $false),
+    @('jump', 5, 15, 40, $false),
+    @('feed', 5, 15, 60, $false),
+    @('sleep', 4, 12, 225, $true),
+    @('wake', 5, 15, 60, $false))
+function Save-Png($bitmap, [string]$path) {
+    $encoder = [System.Windows.Media.Imaging.PngBitmapEncoder]::new()
+    $encoder.Frames.Add([System.Windows.Media.Imaging.BitmapFrame]::Create($bitmap))
+    $stream = [System.IO.File]::Create($path)
+    try { $encoder.Save($stream) } finally { $stream.Dispose() }
 }
-
-$sheetHeight = $latest.PixelHeight + (2 * $cellHeight)
-$visual = New-Object System.Windows.Media.DrawingVisual
+$visual = [System.Windows.Media.DrawingVisual]::new()
+[System.Windows.Media.RenderOptions]::SetBitmapScalingMode($visual, [System.Windows.Media.BitmapScalingMode]::HighQuality)
 $drawing = $visual.RenderOpen()
-$drawing.DrawImage($latest, [System.Windows.Rect]::new(0, 0, $latest.PixelWidth, $latest.PixelHeight))
-
-for ($column = 0; $column -lt 5; $column++) {
-    $feedFrame = New-Object System.Windows.Media.Imaging.CroppedBitmap(
-        $latest,
-        [System.Windows.Int32Rect]::new(0, 10 * $cellHeight, $cellWidth, $cellHeight))
-    $destination = [System.Windows.Rect]::new($column * $cellWidth, 11 * $cellHeight, $cellWidth, $cellHeight)
-    $drawing.DrawImage($feedFrame, $destination)
-    $drawing.PushTransform([System.Windows.Media.TranslateTransform]::new($column * $cellWidth, 11 * $cellHeight))
-
-    $outline = [System.Windows.Media.Pen]::new(
-        [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(66, 39, 20)),
-        2.2)
-    $bowlBrush = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(207, 123, 37))
-    $bowlPath = [System.Windows.Media.Geometry]::Parse('M 88,139 C 92,158 101,168 120,168 C 139,168 148,158 152,139 Z')
-    $drawing.DrawGeometry($bowlBrush, $outline, $bowlPath)
-    $rimBrush = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(243, 184, 79))
-    $drawing.DrawEllipse($rimBrush, $outline, [System.Windows.Point]::new(120, 141), 32, 7)
-
-    if ($column -lt 4) {
-        $seedPositions = @(
-            @(129, 141),
-            @(121, 138),
-            @(112, 134),
-            @(101, 130))
-        $seedPosition = $seedPositions[$column]
-        $drawing.PushTransform([System.Windows.Media.RotateTransform]::new(-28, $seedPosition[0], $seedPosition[1]))
-        $seedBrush = [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(224, 157, 54))
-        $seedPen = [System.Windows.Media.Pen]::new(
-            [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(74, 43, 23)),
-            1.5)
-        $drawing.DrawEllipse($seedBrush, $seedPen, [System.Windows.Point]::new($seedPosition[0], $seedPosition[1]), 6, 4)
-        $drawing.DrawLine($seedPen, [System.Windows.Point]::new($seedPosition[0] - 2, $seedPosition[1] - 3), [System.Windows.Point]::new($seedPosition[0] + 2, $seedPosition[1] + 3))
-        $drawing.Pop()
+$animations = @()
+for ($row = 0; $row -lt $actions.Count; $row++) {
+    $action, $columns, $count, $duration, $loops = $actions[$row]
+    $decoder = [System.Windows.Media.Imaging.BitmapDecoder]::Create(
+        [Uri]::new((Join-Path $sourceDirectory "$action.png")),
+        [System.Windows.Media.Imaging.BitmapCreateOptions]::PreservePixelFormat,
+        [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad)
+    $source = [System.Windows.Media.Imaging.FormatConvertedBitmap]::new(
+        $decoder.Frames[0], [System.Windows.Media.PixelFormats]::Bgra32, $null, 0)
+    $stride = $source.PixelWidth * 4
+    $pixels = [byte[]]::new($stride * $source.PixelHeight)
+    $source.CopyPixels($pixels, $stride, 0)
+    $bounds = [HoodSpriteBounds]::FindFrames($pixels, $source.PixelWidth, $source.PixelHeight, $columns, $count)
+    # One scale per action avoids enlarging individual crouches or stretches.
+    $maxWidth = ($bounds | ForEach-Object { $_[2] } | Measure-Object -Maximum).Maximum
+    $maxHeight = ($bounds | ForEach-Object { $_[3] } | Measure-Object -Maximum).Maximum
+    $scale = [Math]::Min(344 / $maxWidth, 360 / $maxHeight)
+    $frames = @()
+    for ($index = 0; $index -lt $count; $index++) {
+        $x, $y, $width, $height = $bounds[$index]
+        $frame = [System.Windows.Media.Imaging.CroppedBitmap]::new(
+            $source, [System.Windows.Int32Rect]::new($x, $y, $width, $height))
+        # Isolate the pixels so the resampler cannot sample neighboring source poses.
+        $frame = [System.Windows.Media.Imaging.WriteableBitmap]::new($frame)
+        $destinationX = $index * $cellWidth + ($cellWidth - $width * $scale) / 2
+        $destinationY = $row * $cellHeight + 388 - $height * $scale
+        if ($action -eq 'jump') {
+            # Preserve the generated takeoff/apex offsets instead of pinning airborne feet.
+            $sourceRow = [int][Math]::Floor($index / $columns)
+            $rowBottom = ($bounds[($sourceRow * $columns)..(($sourceRow + 1) * $columns - 1)] |
+                ForEach-Object { $_[1] + $_[3] } | Measure-Object -Maximum).Maximum
+            $lift = [Math]::Max(0, $rowBottom - ($y + $height))
+            $destinationY -= [Math]::Min(32, $lift * $scale)
+            $destinationY = [Math]::Max($row * $cellHeight + 16, $destinationY)
+        }
+        $drawing.DrawImage($frame, [System.Windows.Rect]::new($destinationX, $destinationY, $width * $scale, $height * $scale))
+        $frames += @{ column = $index; row = $row }
     }
-
-    $drawing.Pop()
+    if ($action -eq 'idle') {
+        # A 9.6-second neutral hold between gentle blinks, with no head tilts.
+        $frames = @(@{ column = 0; row = $row }) * 120 + $frames
+    }
+    $animations += [ordered]@{
+        action = $action; frames = $frames; frameDurationMilliseconds = $duration; loops = $loops
+        motionBounds = @{ x = 0; y = 0; width = 192; height = 208 }
+    }
 }
-
-$sleepColumns = @(2, 3, 4)
-for ($index = 0; $index -lt $sleepColumns.Count; $index++) {
-    $sleepFrame = New-Object System.Windows.Media.Imaging.CroppedBitmap(
-        $legacy,
-        [System.Windows.Int32Rect]::new($sleepColumns[$index] * $cellWidth, 6 * $cellHeight, $cellWidth, $cellHeight))
-    $drawing.DrawImage($sleepFrame, [System.Windows.Rect]::new($index * $cellWidth, 12 * $cellHeight, $cellWidth, $cellHeight))
-}
-
-$wakeColumns = @(4, 3, 2, 5, 0)
-for ($index = 0; $index -lt $wakeColumns.Count; $index++) {
-    $wakeFrame = New-Object System.Windows.Media.Imaging.CroppedBitmap(
-        $legacy,
-        [System.Windows.Int32Rect]::new($wakeColumns[$index] * $cellWidth, 6 * $cellHeight, $cellWidth, $cellHeight))
-    $drawing.DrawImage($wakeFrame, [System.Windows.Rect]::new(($index + 3) * $cellWidth, 12 * $cellHeight, $cellWidth, $cellHeight))
-}
-
 $drawing.Close()
-$sheet = New-Object System.Windows.Media.Imaging.RenderTargetBitmap(
-    1536,
-    $sheetHeight,
-    96,
-    96,
-    [System.Windows.Media.PixelFormats]::Pbgra32)
+$sheet = [System.Windows.Media.Imaging.RenderTargetBitmap]::new(
+    16 * $cellWidth, $actions.Count * $cellHeight, 96, 96, [System.Windows.Media.PixelFormats]::Pbgra32)
 $sheet.Render($visual)
-$sheetEncoder = New-Object System.Windows.Media.Imaging.PngBitmapEncoder
-$sheetEncoder.Frames.Add([System.Windows.Media.Imaging.BitmapFrame]::Create($sheet))
-$sheetStream = [System.IO.File]::Create($outputPath)
-$sheetEncoder.Save($sheetStream)
-$sheetStream.Dispose()
-
-$previewRows = @(
-    @{ SourceRow = 0; Columns = @(0, 1, 2, 3, 4, 5, 6) },
-    @{ SourceRow = 1; Columns = @(0, 1, 2, 3, 4, 5, 6, 7) },
-    @{ SourceRow = 2; Columns = @(0, 1, 2, 3, 4, 5, 6, 7) },
-    @{ SourceRow = 3; Columns = @(0, 1, 2, 3) },
-    @{ SourceRow = 9; Columns = @(0, 1) },
-    @{ SourceRow = 9; Columns = @(0, 1, 2, 3, 4, 5, 6, 7) },
-    @{ SourceRow = 4; Columns = @(0, 1, 2, 3, 4) },
-    @{ SourceRow = 11; Columns = @(0, 1, 2, 3, 4) },
-    @{ SourceRow = 12; Columns = @(0, 1, 2) },
-    @{ SourceRow = 12; Columns = @(3, 4, 5, 6, 7) })
-
-$previewVisual = New-Object System.Windows.Media.DrawingVisual
-$previewDrawing = $previewVisual.RenderOpen()
-$previewWidth = 1536
-$previewHeight = $previewRows.Count * $cellHeight
-$previewDrawing.DrawRectangle(
-    [System.Windows.Media.SolidColorBrush]::new([System.Windows.Media.Color]::FromRgb(47, 50, 56)),
-    $null,
-    [System.Windows.Rect]::new(0, 0, $previewWidth, $previewHeight))
-for ($row = 0; $row -lt $previewRows.Count; $row++) {
-    $mapping = $previewRows[$row]
-    for ($column = 0; $column -lt $mapping.Columns.Count; $column++) {
-        $frame = New-Object System.Windows.Media.Imaging.CroppedBitmap(
-            $sheet,
-            [System.Windows.Int32Rect]::new(
-                $mapping.Columns[$column] * $cellWidth,
-                $mapping.SourceRow * $cellHeight,
-                $cellWidth,
-                $cellHeight))
-        $previewDrawing.DrawImage($frame, [System.Windows.Rect]::new($column * $cellWidth, $row * $cellHeight, $cellWidth, $cellHeight))
-    }
-}
-$previewDrawing.Close()
-$preview = New-Object System.Windows.Media.Imaging.RenderTargetBitmap(
-    $previewWidth,
-    $previewHeight,
-    96,
-    96,
-    [System.Windows.Media.PixelFormats]::Pbgra32)
-$preview.Render($previewVisual)
-$previewEncoder = New-Object System.Windows.Media.Imaging.PngBitmapEncoder
-$previewEncoder.Frames.Add([System.Windows.Media.Imaging.BitmapFrame]::Create($preview))
-New-Item -ItemType Directory -Force -Path $previewDirectory | Out-Null
-$previewStream = [System.IO.File]::Create($previewPath)
-$previewEncoder.Save($previewStream)
-$previewStream.Dispose()
-
-Write-Output "Created $outputPath ($($sheet.PixelWidth)x$($sheet.PixelHeight)) and $previewPath."
+Save-Png $sheet (Join-Path $assetDirectory 'hood_spritesheet.png')
+[ordered]@{
+    schemaVersion = 1; name = 'Hood'; spriteSheet = 'hood_spritesheet.png'
+    sheetWidth = $sheet.PixelWidth; sheetHeight = $sheet.PixelHeight
+    frameWidth = $cellWidth; frameHeight = $cellHeight; spriteScale = 2; animations = $animations
+} | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $assetDirectory 'hood.animations.json') -Encoding utf8
+$preview = [System.Windows.Media.Imaging.TransformedBitmap]::new($sheet, [System.Windows.Media.ScaleTransform]::new(0.5, 0.5))
+Save-Png $preview (Join-Path $assetDirectory '..\..\docs\previews\hood-actions.png')
+Write-Output "Created $($sheet.PixelWidth)x$($sheet.PixelHeight) sheet: 384x416 pixels per frame, displayed at 192x208."
