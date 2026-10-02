@@ -149,6 +149,7 @@ public sealed class HoodSession
     private bool _quitRequested;
     private bool _editingArea;
     private bool _dragging;
+    private bool _roamingVertically;
 
     private HoodSession(
         PetDefinition definition,
@@ -756,7 +757,16 @@ public sealed class HoodSession
         _configuration.Behavior.Roaming &&
         !_dragging &&
         !_editingArea &&
-        RoamingArea.Width > _definition.DisplayWidth;
+        (RoamingArea.Width > _definition.DisplayWidth || CanRoamVertically);
+
+    // Avoid vertical pacing when there is less than one second of travel space.
+    private bool CanRoamVertically => RoamingArea.Height - _definition.DisplayHeight >= RoamingSpeedUnitsPerSecond;
+
+    private double RoamingCoordinate => _roamingVertically ? Position.Y : Position.X;
+    private double RoamingStart => _roamingVertically ? RoamingArea.Y : RoamingArea.X;
+    private double RoamingEnd => _roamingVertically
+        ? RoamingArea.Bottom - _definition.DisplayHeight
+        : RoamingArea.Right - _definition.DisplayWidth;
 
     private bool IsMoving => CanRoam && _action is PetAction.RunLeft or PetAction.RunRight;
 
@@ -783,13 +793,13 @@ public sealed class HoodSession
             return false;
         }
 
-        var leftEdge = RoamingArea.X;
-        var rightEdge = RoamingArea.Right - _definition.DisplayWidth;
-        var direction = Position.X <= leftEdge
+        _roamingVertically = CanRoamVertically &&
+            (RoamingArea.Width <= _definition.DisplayWidth || NextRandomIndex(3) == 2);
+        var direction = RoamingCoordinate <= RoamingStart
             ? PetAction.RunRight
-            : Position.X >= rightEdge
+            : RoamingCoordinate >= RoamingEnd
                 ? PetAction.RunLeft
-                : _random.NextIndex(2) == 0 ? PetAction.RunLeft : PetAction.RunRight;
+                : NextRandomIndex(2) == 0 ? PetAction.RunLeft : PetAction.RunRight;
         StartDirectAction(direction);
         _remainingRoamingBout = RoamingBoutDuration;
         return true;
@@ -802,13 +812,20 @@ public sealed class HoodSession
             return;
         }
 
-        var leftEdge = RoamingArea.X;
-        var rightEdge = RoamingArea.Right - _definition.DisplayWidth;
-        if (_action == PetAction.RunLeft && Position.X <= leftEdge)
+        if (_roamingVertically && !CanRoamVertically)
+        {
+            _roamingVertically = false;
+        }
+        else if (!_roamingVertically && RoamingArea.Width <= _definition.DisplayWidth)
+        {
+            _roamingVertically = true;
+        }
+
+        if (_action == PetAction.RunLeft && RoamingCoordinate <= RoamingStart)
         {
             StartDirectAction(PetAction.RunRight);
         }
-        else if (_action == PetAction.RunRight && Position.X >= rightEdge)
+        else if (_action == PetAction.RunRight && RoamingCoordinate >= RoamingEnd)
         {
             StartDirectAction(PetAction.RunLeft);
         }
@@ -817,8 +834,8 @@ public sealed class HoodSession
     private TimeSpan TimeToRoamingEdge()
     {
         var distance = _action == PetAction.RunLeft
-            ? Position.X - RoamingArea.X
-            : RoamingArea.Right - _definition.DisplayWidth - Position.X;
+            ? RoamingCoordinate - RoamingStart
+            : RoamingEnd - RoamingCoordinate;
         var ticks = Math.Max(0, distance) / RoamingSpeedUnitsPerSecond * TimeSpan.TicksPerSecond;
         if (!double.IsFinite(ticks) || ticks >= TimeSpan.MaxValue.Ticks)
         {
@@ -836,30 +853,28 @@ public sealed class HoodSession
         }
 
         var direction = _action == PetAction.RunLeft ? -1 : 1;
-        var leftEdge = RoamingArea.X;
-        var rightEdge = RoamingArea.Right - _definition.DisplayWidth;
-        var nextX = Math.Clamp(
-            Position.X + direction * RoamingSpeedUnitsPerSecond * elapsed.TotalSeconds,
-            leftEdge,
-            rightEdge);
-        var distance = Math.Abs(nextX - Position.X);
+        var next = Math.Clamp(
+            RoamingCoordinate + direction * RoamingSpeedUnitsPerSecond * elapsed.TotalSeconds,
+            RoamingStart,
+            RoamingEnd);
+        var distance = Math.Abs(next - RoamingCoordinate);
         if (distance <= 0)
         {
             return;
         }
 
-        Position = new PetPosition(nextX, Position.Y);
+        Position = _roamingVertically ? Position with { Y = next } : Position with { X = next };
         Needs = Needs with
         {
             Boredom = Math.Max(0, Needs.Boredom -
                 _configuration.Needs.MovementReliefPerSecond * distance / RoamingSpeedUnitsPerSecond)
         };
 
-        if (nextX <= leftEdge && direction < 0)
+        if (next <= RoamingStart && direction < 0)
         {
             StartDirectAction(PetAction.RunRight);
         }
-        else if (nextX >= rightEdge && direction > 0)
+        else if (next >= RoamingEnd && direction > 0)
         {
             StartDirectAction(PetAction.RunLeft);
         }
