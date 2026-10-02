@@ -6,7 +6,7 @@ The file uses YAML schema version 1. Unknown or duplicate keys are errors. All n
 
 The configured initial area is adjusted when necessary to contain Hood's full frame, and oversized saved areas shrink to fit the usable display while preserving that minimum footprint. See [placement behavior](placement.md) for details.
 
-With roaming enabled, Hood moves in 8-second bouts followed by 12-second idle rests so the resting animation remains visible. The cadence uses active behavior time and pauses while roaming is blocked by sleep, dragging, editing, or a foreground action.
+With roaming enabled, Hood moves in 8-second bouts followed by 32-second idle rests so the resting animation remains visible. The cadence uses active behavior time and pauses while roaming is blocked by sleep, dragging, editing, or a foreground action.
 
 ```yaml
 schema_version: 1
@@ -28,8 +28,8 @@ sleep:
   duration_minutes: 5
   early_wake_grace_minutes: 15
 random_interval:
-  minimum_minutes: 8
-  maximum_minutes: 15
+  minimum_minutes: 1
+  maximum_minutes: 5
 initial_area:
   width: 480
   height: 180
@@ -46,8 +46,8 @@ initial_area:
 | `needs.stationary_click_relief` | Boredom points per completed stationary click | Finite and at least `0`. |
 | `sleep.automatic_nap_threshold` | Need points | Greater than `0` and at most `100`. |
 | `sleep.duration_minutes`, `sleep.early_wake_grace_minutes` | Active minutes | Finite and greater than `0`. |
-| `random_interval.minimum_minutes`, `maximum_minutes` | Active minutes | Finite, each greater than `0`, and minimum no greater than maximum. |
+| `random_interval.minimum_minutes`, `maximum_minutes` | Active awake minutes | Finite, each greater than `0`, and minimum no greater than maximum. Defaults: `1` and `5`. |
 | `initial_area.width`, `height` | Logical units | Finite and greater than `0`. |
 | `initial_area.bottom_margin` | Logical units | Finite and at least `0`. |
 
-Need values start at zero in a new session. The settings window exposes roaming, idle animations, random reactions, always-on-top, and the opt-in per-user Windows startup setting; each change saves back to this same file before taking effect. If a save fails, Hood keeps the prior effective settings and reports the affected setting. If Windows startup registration cannot be rolled back, Hood names the possible mismatch. Windows startup uses the current user's `Run` registry key and is reconciled on launch. Random reactions are scheduled during active awake time and pause during sleep, drag/edit interactions, and foreground actions. Closed time does not consume their saved interval. Advanced rates and timing remain editable here in YAML. See [recovery guidance](recovery.md) for invalid configuration and saved-session recovery.
+Need values start at zero in a new session. The settings window exposes roaming, idle animations, random reactions, their minimum and maximum wait in minutes, always-on-top, and the opt-in per-user Windows startup setting; each change saves back to this same file before taking effect. Reaction timing accepts positive fractional minutes, with minimum no greater than maximum; equal values give a fixed wait. Saving a changed range starts a fresh countdown within that range. If a save fails, Hood keeps the prior effective settings and reports the affected setting. If Windows startup registration cannot be rolled back, Hood names the possible mismatch. Windows startup uses the current user's `Run` registry key and is reconciled on launch. Random reactions choose a wave, look around (left/right), look up, or hop every 1–5 active awake minutes by default, at the same rate while idle or roaming. This also applies with idle animations disabled; the independent random-events toggle controls these reactions. The countdown pauses during sleep, drag/edit interactions, and other reactions. Closed time does not consume the saved interval; on relaunch, any saved wait exceeding the configured maximum is shortened to that maximum. Existing configuration files retain their explicit values; set the minimum and maximum in Settings or YAML to adopt the new defaults. Need rates and nap timing remain editable here in YAML. See [recovery guidance](recovery.md) for invalid configuration and saved-session recovery.

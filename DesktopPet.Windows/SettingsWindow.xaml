@@ -37,6 +37,9 @@
             <Setter Property="MinHeight" Value="34" />
             <Setter Property="Padding" Value="12,6" />
         </Style>
+        <Style TargetType="TextBox" BasedOn="{StaticResource VisibleFocus}">
+            <Setter Property="Padding" Value="6,4" />
+        </Style>
         <Style TargetType="GroupBox">
             <Setter Property="Margin" Value="0,0,0,14" />
             <Setter Property="Padding" Value="14,12,14,4" />
@@ -58,6 +61,23 @@
                     <CheckBox x:Name="IdleAnimationsCheckBox" Content="Play idle animations" IsChecked="True" />
                     <CheckBox x:Name="RandomEventsCheckBox" Content="Allow occasional reactions" IsChecked="True" Margin="0" />
                 </StackPanel>
+            </GroupBox>
+
+            <GroupBox Header="Random reaction timing">
+                <Grid Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="100" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Label Target="{Binding ElementName=MinimumReactionMinutesTextBox}" Content="_Minimum (minutes)" />
+                    <TextBox x:Name="MinimumReactionMinutesTextBox" Grid.Column="1" Margin="0,0,0,8" />
+                    <Label Grid.Row="1" Target="{Binding ElementName=MaximumReactionMinutesTextBox}" Content="Ma_ximum (minutes)" />
+                    <TextBox x:Name="MaximumReactionMinutesTextBox" Grid.Row="1" Grid.Column="1" />
+                </Grid>
             </GroupBox>
 
             <GroupBox Header="Placement">

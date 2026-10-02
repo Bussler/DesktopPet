@@ -46,8 +46,8 @@ public sealed record SleepSettings
 
 public sealed record RandomIntervalSettings
 {
-    public double MinimumMinutes { get; init; } = 8;
-    public double MaximumMinutes { get; init; } = 15;
+    public double MinimumMinutes { get; init; } = 1;
+    public double MaximumMinutes { get; init; } = 5;
 }
 
 public sealed record InitialAreaSettings

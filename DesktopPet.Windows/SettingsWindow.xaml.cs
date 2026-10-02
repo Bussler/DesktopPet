@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using DesktopPet.Core;
@@ -21,13 +22,26 @@ public partial class SettingsWindow : Window
         RandomEventsCheckBox.IsChecked = controller.Current.Behavior.RandomEvents;
         StartWithWindowsCheckBox.IsChecked = controller.Current.Behavior.StartWithWindows;
         AlwaysOnTopCheckBox.IsChecked = controller.Current.Behavior.AlwaysOnTop;
+        MinimumReactionMinutesTextBox.Text = controller.Current.RandomInterval.MinimumMinutes.ToString(CultureInfo.CurrentCulture);
+        MaximumReactionMinutesTextBox.Text = controller.Current.RandomInterval.MaximumMinutes.ToString(CultureInfo.CurrentCulture);
     }
 
     private void OnSaveClick(object sender, RoutedEventArgs e)
     {
         var previous = _controller.Current;
+        if (!double.TryParse(MinimumReactionMinutesTextBox.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out var minimum) ||
+            !double.TryParse(MaximumReactionMinutesTextBox.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out var maximum) ||
+            !double.IsFinite(minimum) || !double.IsFinite(maximum) || minimum <= 0 || maximum < minimum)
+        {
+            System.Windows.MessageBox.Show(this,
+                "Enter positive numbers of minutes, with the minimum no greater than the maximum.",
+                "Invalid reaction timing", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
         var candidate = previous with
         {
+            RandomInterval = new RandomIntervalSettings { MinimumMinutes = minimum, MaximumMinutes = maximum },
             Behavior = previous.Behavior with
             {
                 Roaming = RoamingCheckBox.IsChecked == true,
@@ -50,6 +64,8 @@ public partial class SettingsWindow : Window
             RandomEventsCheckBox.IsChecked = previous.Behavior.RandomEvents;
             StartWithWindowsCheckBox.IsChecked = previous.Behavior.StartWithWindows;
             AlwaysOnTopCheckBox.IsChecked = previous.Behavior.AlwaysOnTop;
+            MinimumReactionMinutesTextBox.Text = previous.RandomInterval.MinimumMinutes.ToString(CultureInfo.CurrentCulture);
+            MaximumReactionMinutesTextBox.Text = previous.RandomInterval.MaximumMinutes.ToString(CultureInfo.CurrentCulture);
             var errorMessage = exception.Message;
             try
             {

@@ -383,17 +383,71 @@ public sealed class HoodSessionTests
         var configuration = defaults with
         {
             Behavior = defaults.Behavior with { Roaming = false, IdleAnimations = false },
-            Needs = defaults.Needs with { SleepPointsPerHour = 0 },
-            RandomInterval = defaults.RandomInterval with { MinimumMinutes = 8, MaximumMinutes = 15 }
+            Needs = defaults.Needs with { SleepPointsPerHour = 0 }
         };
         var minimum = CreateSession(new SequenceRandomSource(0, 0), new RecordingSessionStore(), configuration, enableRandomEvents: true);
-        var maximum = CreateSession(new SequenceRandomSource(0, 1_000_000), new RecordingSessionStore(), configuration, enableRandomEvents: true);
+        var maximum = CreateSession(new SequenceRandomSource(0, 1_000_000, 0), new RecordingSessionStore(), configuration, enableRandomEvents: true);
 
         minimum.Advance(TimeSpan.FromTicks(1));
         maximum.Advance(TimeSpan.FromTicks(1));
 
-        Assert.AreEqual(TimeSpan.FromMinutes(8) - TimeSpan.FromTicks(1), minimum.RemainingRandomInterval);
-        Assert.AreEqual(TimeSpan.FromMinutes(15) - TimeSpan.FromTicks(1), maximum.RemainingRandomInterval);
+        Assert.AreEqual(TimeSpan.FromMinutes(1) - TimeSpan.FromTicks(1), minimum.RemainingRandomInterval);
+        Assert.AreEqual(TimeSpan.FromMinutes(5) - TimeSpan.FromTicks(1), maximum.RemainingRandomInterval);
+        minimum.Advance(minimum.RemainingRandomInterval);
+        Assert.AreEqual(DesktopPet.Core.PetAction.Wave, minimum.Presentation.Action);
+        maximum.Advance(maximum.RemainingRandomInterval);
+        Assert.AreEqual(DesktopPet.Core.PetAction.Wave, maximum.Presentation.Action);
+    }
+
+    [TestMethod]
+    public void Advance_UsesConfiguredMinutesDuringBothIdleAndRoaming()
+    {
+        var defaults = DesktopPet.Core.HoodConfiguration.Defaults;
+        var configuration = defaults with
+        {
+            Needs = defaults.Needs with { SleepPointsPerHour = 0 },
+            RandomInterval = defaults.RandomInterval with { MinimumMinutes = 1, MaximumMinutes = 1 }
+        };
+        var session = CreateSession(new SequenceRandomSource(0), new RecordingSessionStore(), configuration, enableRandomEvents: true);
+
+        session.Advance(TimeSpan.FromSeconds(4));
+        Assert.AreEqual(DesktopPet.Core.PetAction.RunLeft, session.Presentation.Action);
+        Assert.AreEqual(TimeSpan.FromSeconds(56), session.RemainingRandomInterval);
+
+        session.Advance(TimeSpan.FromSeconds(4));
+        Assert.AreEqual(DesktopPet.Core.PetAction.Idle, session.Presentation.Action);
+        Assert.AreEqual(TimeSpan.FromSeconds(52), session.RemainingRandomInterval);
+        session.Advance(TimeSpan.FromSeconds(5));
+        Assert.AreEqual(DesktopPet.Core.PetAction.Idle, session.Presentation.Action);
+        Assert.AreEqual(TimeSpan.FromSeconds(47), session.RemainingRandomInterval);
+    }
+
+    [TestMethod]
+    [DataRow(0, DesktopPet.Core.PetAction.Wave)]
+    [DataRow(1, DesktopPet.Core.PetAction.LookAround)]
+    [DataRow(3, DesktopPet.Core.PetAction.LookUp)]
+    public void Advance_SelectsIdleGesturesAndReturnsToRest(int choice, DesktopPet.Core.PetAction expected)
+    {
+        var defaults = DesktopPet.Core.HoodConfiguration.Defaults;
+        var configuration = defaults with
+        {
+            Behavior = defaults.Behavior with { Roaming = false },
+            RandomInterval = defaults.RandomInterval with { MinimumMinutes = 1, MaximumMinutes = 1 }
+        };
+        var session = CreateSession(new SequenceRandomSource(0, choice), new RecordingSessionStore(), configuration, enableRandomEvents: true);
+        var position = session.Position;
+
+        session.Advance(TimeSpan.FromMilliseconds(59_999));
+        Assert.AreEqual(DesktopPet.Core.PetAction.Idle, session.Presentation.Action);
+        session.Advance(TimeSpan.FromMilliseconds(1));
+        Assert.AreEqual(expected, session.Presentation.Action);
+        Assert.AreEqual(position, session.Position);
+
+        var animation = ReadDefinition().GetAnimation(expected);
+        session.Advance(TimeSpan.FromMilliseconds(animation.FrameDurationMilliseconds * animation.Frames.Count));
+        Assert.AreEqual(DesktopPet.Core.PetAction.Idle, session.Presentation.Action);
+        Assert.AreEqual(TimeSpan.FromMinutes(1), session.RemainingRandomInterval);
+        Assert.AreEqual(position, session.Position);
     }
 
     [TestMethod]

@@ -19,7 +19,8 @@ public sealed class HoodConfigurationTests
         var yaml = File.ReadAllText(store.Path);
         StringAssert.Contains(yaml, "schema_version: 1");
         StringAssert.Contains(yaml, "hunger_points_per_hour: 12.5");
-        StringAssert.Contains(yaml, "minimum_minutes: 8");
+        StringAssert.Contains(yaml, "minimum_minutes: 1");
+        StringAssert.Contains(yaml, "maximum_minutes: 5");
         Assert.AreEqual(0, Directory.GetFiles(directory.Path, "*.tmp").Length);
 
         File.WriteAllText(store.Path, ReplaceSetting(yaml, "hunger_points_per_hour", "37.25"));
@@ -247,7 +248,7 @@ public sealed class HoodConfigurationTests
             ("zero nap duration", ReplaceSetting(baseline, "duration_minutes", "0")),
             ("zero grace duration", ReplaceSetting(baseline, "early_wake_grace_minutes", "0")),
             ("zero random duration", ReplaceSetting(baseline, "minimum_minutes", "0")),
-            ("inverted random range", ReplaceSetting(baseline, "maximum_minutes", "7")),
+            ("inverted random range", ReplaceSetting(baseline, "maximum_minutes", "0.5")),
             ("zero area width", ReplaceSetting(baseline, "width", "0")),
             ("zero area height", ReplaceSetting(baseline, "height", "0")),
             ("negative margin", ReplaceSetting(baseline, "bottom_margin", "-1"))
@@ -265,6 +266,34 @@ public sealed class HoodConfigurationTests
     }
 
     [TestMethod]
+    public void SaveAndApply_ReactionTimingPersistsBothBoundsAndReschedulesTheCurrentWait()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new YamlConfigurationStore(Path.Combine(directory.Path, "config.yaml"));
+        var initial = store.LoadOrCreate() with
+        {
+            Behavior = HoodConfiguration.Defaults.Behavior with { Roaming = false }
+        };
+        store.Save(initial);
+        var session = CreateSession(initial);
+        var controller = new HoodConfigurationController(session, store);
+        session.Advance(TimeSpan.FromSeconds(4));
+
+        var candidate = initial with
+        {
+            RandomInterval = new RandomIntervalSettings { MinimumMinutes = 2d / 60, MaximumMinutes = 3d / 60 }
+        };
+        controller.SaveAndApply("random_interval", candidate);
+
+        Assert.AreEqual(candidate, store.LoadOrCreate());
+        Assert.AreEqual(candidate, session.Configuration);
+        session.Advance(TimeSpan.FromMilliseconds(1999));
+        Assert.AreEqual(PetAction.Idle, session.Presentation.Action);
+        session.Advance(TimeSpan.FromMilliseconds(1));
+        Assert.AreEqual(PetAction.Wave, session.Presentation.Action);
+    }
+
+    [TestMethod]
     public void SaveAndApply_WhenStorageFails_KeepsTheEffectiveSettingsAndNamesTheField()
     {
         var initial = HoodConfiguration.Defaults;
@@ -272,7 +301,8 @@ public sealed class HoodConfigurationTests
         var controller = new HoodConfigurationController(session, new FailingConfigurationStore());
         var candidate = initial with
         {
-            Behavior = initial.Behavior with { AlwaysOnTop = false }
+            Behavior = initial.Behavior with { AlwaysOnTop = false },
+            RandomInterval = new RandomIntervalSettings { MinimumMinutes = 2, MaximumMinutes = 3 }
         };
 
         var exception = Assert.Throws<HoodConfigurationException>(

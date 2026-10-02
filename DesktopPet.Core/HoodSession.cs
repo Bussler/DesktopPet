@@ -188,7 +188,8 @@ public sealed class HoodSession
             Mode = restoredSession.Mode;
             RemainingNap = restoredSession.RemainingNap;
             NapRecoveryPointsPerSecond = restoredSession.NapRecoveryPointsPerSecond;
-            RemainingRandomInterval = restoredSession.RemainingRandomInterval;
+            RemainingRandomInterval = Min(restoredSession.RemainingRandomInterval,
+                DurationFromMinutes(_configuration.RandomInterval.MaximumMinutes));
             RemainingEarlyWakeGrace = restoredSession.RemainingEarlyWakeGrace;
             if (_action is PetAction.RunLeft or PetAction.RunRight)
             {
@@ -384,6 +385,11 @@ public sealed class HoodSession
     internal void ApplyConfiguration(HoodConfiguration configuration)
     {
         HoodConfigurationValidator.Validate(configuration);
+        if (configuration.RandomInterval != _configuration.RandomInterval)
+        {
+            RemainingRandomInterval = TimeSpan.Zero;
+        }
+
         _configuration = configuration;
         if (!configuration.Behavior.Roaming && _action is (PetAction.RunLeft or PetAction.RunRight))
         {
@@ -899,7 +905,7 @@ public sealed class HoodSession
 
     private void StartScheduledReaction()
     {
-        PetAction[] candidates = [PetAction.Wave, PetAction.LookAround, PetAction.Jump];
+        PetAction[] candidates = [PetAction.Wave, PetAction.LookAround, PetAction.Jump, PetAction.LookUp];
         var fitting = candidates
             .Where(action =>
             {

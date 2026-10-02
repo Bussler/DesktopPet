@@ -214,10 +214,29 @@ public sealed class HoodSessionPersistenceTests
         Assert.IsNotNull(saved);
         Assert.AreEqual(TimeSpan.FromMilliseconds(600), saved.RemainingRandomInterval);
         var resumed = CreateSession(saved, configuration, store);
-        resumed.Advance(TimeSpan.FromMilliseconds(600));
+        resumed.Advance(TimeSpan.FromMilliseconds(599));
+        Assert.AreEqual(PetAction.Idle, resumed.Presentation.Action);
+        resumed.Advance(TimeSpan.FromMilliseconds(1));
 
         Assert.AreEqual(PetAction.Wave, resumed.Presentation.Action);
         Assert.AreEqual(TimeSpan.FromSeconds(1), resumed.RemainingRandomInterval);
+    }
+
+    [TestMethod]
+    public void RandomReactionCountdown_RestoreCapsAnOlderLongCountdownToTheConfiguredMaximum()
+    {
+        var saved = CreateAwakeSnapshot() with
+        {
+            Action = PetAction.Idle,
+            FrameIndex = 0,
+            RemainingRandomInterval = TimeSpan.FromMinutes(15)
+        };
+
+        var session = CreateSession(saved, HoodConfiguration.Defaults);
+
+        Assert.AreEqual(TimeSpan.FromMinutes(5), session.RemainingRandomInterval);
+        session.Advance(TimeSpan.FromMinutes(5));
+        Assert.AreEqual(PetAction.Wave, session.Presentation.Action);
     }
 
     private static HoodSessionSnapshot CreateAwakeSnapshot() => new()
