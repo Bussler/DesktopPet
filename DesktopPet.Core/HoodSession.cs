@@ -220,7 +220,25 @@ public sealed class HoodSession
         (_action != PetAction.Idle || _configuration.Behavior.IdleAnimations);
     public bool QuitRequested => _quitRequested;
 
-    public HoodPresentation Presentation => new(_action, _frameIndex, Position, _quitRequested);
+    public HoodPresentation Presentation => new(_action, _frameIndex, PresentationPosition(), _quitRequested);
+
+    private PetPosition PresentationPosition()
+    {
+        if (_action != PetAction.Jump)
+        {
+            return Position;
+        }
+
+        var animation = _definition.GetAnimation(PetAction.Jump);
+        var progress = (_frameIndex + _frameElapsed.TotalMilliseconds / animation.FrameDurationMilliseconds)
+            / animation.Frames.Count;
+        // The first four poses crouch; the last three absorb the landing.
+        var flight = Math.Clamp((progress - 4d / 15) / (8d / 15), 0, 1);
+        var display = PetPlacementPolicy.Restore(
+            _definition, Position, RoamingArea, _displays, _configuration.InitialArea).Display;
+        var height = Math.Min(90, Math.Max(0, Position.Y - display.WorkArea.Y));
+        return Position with { Y = Position.Y - height * 4 * flight * (1 - flight) };
+    }
 
     public static HoodSession Start(
         PetDefinition definition,

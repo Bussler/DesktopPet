@@ -228,6 +228,104 @@ public sealed class HoodPlacementTests
         Assert.AreEqual(session.RoamingArea, restored.RoamingArea);
     }
 
+    [TestMethod]
+    public void React_JumpsAboveTheRoamingAreaAndLandsAtTheSameSpotAfterOnePointTwoSeconds()
+    {
+        var defaults = HoodConfiguration.Defaults;
+        var configuration = defaults with { Behavior = defaults.Behavior with { Roaming = false, RandomEvents = false } };
+        var store = new RecordingSessionStore();
+        var session = CreateSession([Primary(1920, 1040)], configuration, store: store);
+        var start = session.Position;
+        var area = session.RoamingArea;
+
+        session.React();
+        session.Advance(TimeSpan.FromMilliseconds(320));
+        Assert.AreEqual(start, session.Presentation.Position, "Preparation stays on the ground.");
+        session.Advance(TimeSpan.FromMilliseconds(320));
+        Assert.AreEqual(start.X, session.Presentation.Position.X);
+        Assert.AreEqual(start.Y - 90, session.Presentation.Position.Y, 1e-9);
+        Assert.IsTrue(session.Presentation.Position.Y < area.Y);
+        Assert.AreEqual(start, session.Position);
+        Assert.AreEqual(area, session.RoamingArea);
+
+        session.SaveCurrentState();
+        Assert.AreEqual(start, store.Snapshot!.Position, "Saving mid-jump must retain the landing position.");
+        var restored = CreateSession([Primary(1920, 1040)], configuration, restored: store.Snapshot);
+        Assert.AreEqual(session.Presentation.Position, restored.Presentation.Position);
+
+        session.Advance(TimeSpan.FromMilliseconds(559));
+        Assert.AreEqual(PetAction.Jump, session.Presentation.Action);
+        Assert.AreEqual(start, session.Presentation.Position, "Landing settles on the original baseline.");
+        session.Advance(TimeSpan.FromMilliseconds(1));
+        Assert.AreEqual(PetAction.Idle, session.Presentation.Action);
+        Assert.AreEqual(start, session.Presentation.Position);
+    }
+
+    [TestMethod]
+    [DataRow(0d, 0d, 1d)]
+    [DataRow(0d, 25d, 1d)]
+    [DataRow(-600d, 25d, 1.5d)]
+    [DataRow(-600d, 150d, 2d)]
+    public void React_LimitsTheEntireJumpToTheCurrentMonitorsWorkArea(double top, double clearance, double scale)
+    {
+        var display = new DisplayInfo("Left", new PetBounds(-1280, top, 1280, 720), false, scale);
+        var defaults = HoodConfiguration.Defaults;
+        var configuration = defaults with { Behavior = defaults.Behavior with { Roaming = false, RandomEvents = false } };
+        var session = CreateSession([Primary(1920, 1040), display], configuration);
+        session.MoveTo(new PetPosition(-900, top + clearance));
+        var start = session.Position;
+        var highest = start.Y;
+        var displayHeight = Definition().DisplayHeight;
+        session.React();
+
+        for (var milliseconds = 0; milliseconds < 1200; milliseconds += 10)
+        {
+            session.Advance(TimeSpan.FromMilliseconds(10));
+            var position = session.Presentation.Position;
+            Assert.AreEqual(start.X, position.X);
+            Assert.IsTrue(position.Y >= display.WorkArea.Y);
+            Assert.IsTrue(position.Y + displayHeight <= display.WorkArea.Bottom);
+            highest = Math.Min(highest, position.Y);
+        }
+
+        Assert.AreEqual(start.Y - Math.Min(90, clearance), highest, 1e-9);
+        Assert.AreEqual(start, session.Presentation.Position);
+    }
+
+    [TestMethod]
+    public void React_PausesHorizontalRoamingDuringFlightAndResumesAfterLanding()
+    {
+        var session = CreateSession([Primary(1920, 1040)]);
+        session.Advance(TimeSpan.FromMilliseconds(100));
+        var start = session.Position;
+        session.React();
+        session.Advance(TimeSpan.FromMilliseconds(640));
+        Assert.AreEqual(start, session.Position);
+        Assert.AreEqual(start.X, session.Presentation.Position.X);
+        session.Advance(TimeSpan.FromMilliseconds(560));
+        Assert.AreEqual(start, session.Presentation.Position);
+        session.Advance(TimeSpan.FromMilliseconds(100));
+        Assert.AreEqual(1.8, Math.Abs(session.Position.X - start.X), 1e-9);
+        Assert.AreEqual(start.Y, session.Position.Y);
+    }
+
+    [TestMethod]
+    public void React_RepeatAndFeedInterruptionsDoNotAccumulateVerticalDisplacement()
+    {
+        var session = CreateSession([Primary(1920, 1040)]);
+        var start = session.Position;
+        session.React();
+        session.Advance(TimeSpan.FromMilliseconds(640));
+        session.React();
+        Assert.AreEqual(start, session.Presentation.Position);
+        session.Advance(TimeSpan.FromMilliseconds(640));
+        Assert.AreEqual(start.Y - 90, session.Presentation.Position.Y, 1e-9);
+        session.Feed();
+        Assert.AreEqual(PetAction.Feed, session.Presentation.Action);
+        Assert.AreEqual(start, session.Presentation.Position);
+        Assert.AreEqual(start, session.Position);
+    }
+
     private static DisplayInfo Primary(double width, double height) =>
         new("Primary", new PetBounds(0, 0, width, height), IsPrimary: true);
 

@@ -310,6 +310,8 @@ public partial class HoodOverlayWindow : Window
     private void RenderPresentation()
     {
         var presentation = _session.Presentation;
+        Left = presentation.Position.X;
+        Top = presentation.Position.Y;
         if (_renderedAction == presentation.Action && _renderedFrame == presentation.FrameIndex)
         {
             return;
@@ -339,8 +341,8 @@ public partial class HoodOverlayWindow : Window
 
     internal void ApplyPlacement()
     {
-        Left = _session.Position.X;
-        Top = _session.Position.Y;
+        Left = _session.Presentation.Position.X;
+        Top = _session.Presentation.Position.Y;
         _areaEditor?.ApplyPlacement();
     }
 

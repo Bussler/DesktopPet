@@ -982,7 +982,7 @@
           "column": 14
         }
       ],
-      "frameDurationMilliseconds": 40,
+      "frameDurationMilliseconds": 80,
       "loops": false,
       "motionBounds": {
         "height": 208,

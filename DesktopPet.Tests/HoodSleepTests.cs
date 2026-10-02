@@ -63,7 +63,7 @@ public sealed class HoodSleepTests
         Assert.AreEqual(HoodSessionMode.Awake, session.Mode);
         Assert.AreEqual(PetAction.Jump, session.Presentation.Action);
 
-        session.Advance(TimeSpan.FromMilliseconds(100));
+        session.Advance(TimeSpan.FromMilliseconds(700));
 
         Assert.AreEqual(HoodSessionMode.Sleeping, session.Mode);
         Assert.AreEqual(PetAction.Sleep, session.Presentation.Action);

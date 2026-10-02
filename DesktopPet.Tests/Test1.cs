@@ -127,7 +127,7 @@ public sealed class HoodSessionTests
         var session = CreateSession(new SequenceRandomSource(1, 4), new RecordingSessionStore());
 
         session.React();
-        session.Advance(TimeSpan.FromMilliseconds(599));
+        session.Advance(TimeSpan.FromMilliseconds(1199));
 
         Assert.AreEqual(DesktopPet.Core.PetAction.Jump, session.Presentation.Action);
         Assert.AreEqual(ReadDefinition().GetAnimation(DesktopPet.Core.PetAction.Jump).Frames.Count - 1, session.Presentation.FrameIndex);
@@ -417,7 +417,7 @@ public sealed class HoodSessionTests
         Assert.AreEqual(TimeSpan.FromSeconds(1), session.RemainingRandomInterval);
 
         session.React();
-        session.Advance(TimeSpan.FromMilliseconds(600));
+        session.Advance(TimeSpan.FromMilliseconds(1200));
         Assert.AreEqual(DesktopPet.Core.PetAction.Idle, session.Presentation.Action);
         Assert.AreEqual(TimeSpan.FromSeconds(1), session.RemainingRandomInterval);
 
@@ -447,6 +447,16 @@ public sealed class HoodSessionTests
         Assert.AreEqual(DesktopPet.Core.PetAction.Jump, session.Presentation.Action);
         Assert.IsTrue(ReadDefinition().GetAnimation(session.Presentation.Action).MotionBounds.Width <= session.RoamingArea.Width);
         Assert.IsTrue(ReadDefinition().GetAnimation(session.Presentation.Action).MotionBounds.Height <= session.RoamingArea.Height);
+
+        var start = session.Position;
+        session.Advance(TimeSpan.FromMilliseconds(640));
+        Assert.AreEqual(start.X, session.Presentation.Position.X);
+        Assert.AreEqual(start.Y - 90, session.Presentation.Position.Y, 1e-9);
+        Assert.AreEqual(start, session.Position);
+        Assert.AreEqual(TimeSpan.FromSeconds(1), session.RemainingRandomInterval);
+        session.Advance(TimeSpan.FromMilliseconds(560));
+        Assert.AreEqual(start, session.Presentation.Position);
+        Assert.AreEqual(DesktopPet.Core.PetAction.Idle, session.Presentation.Action);
     }
 
     [TestMethod]
@@ -570,7 +580,7 @@ public sealed class HoodSessionTests
         Assert.AreEqual(DesktopPet.Core.PetAction.Jump, session.Presentation.Action);
         Assert.AreEqual(0, session.Presentation.FrameIndex);
 
-        session.Advance(TimeSpan.FromMilliseconds(600));
+        session.Advance(TimeSpan.FromMilliseconds(1200));
         Assert.AreEqual(DesktopPet.Core.PetAction.Idle, session.Presentation.Action);
     }
 

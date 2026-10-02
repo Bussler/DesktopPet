@@ -25,7 +25,7 @@ For example, doubling artwork resolution again while preserving Hood's size mean
 
 In a source checkout, edit `Assets\Hood\hood_spritesheet.png` and `Assets\Hood\hood.animations.json`, then run `tools\Build-AndPublish.ps1`. Editing only a published build does not update the source assets.
 
-`Assets\Hood\tools\Generate-HoodSpritesheet.ps1` packs the retained v3 source PNGs into the current grid. Run it in PowerShell 7 on Windows only when maintaining these sources; it overwrites the runtime PNG, manifest, and preview. Custom runtime sheets can be edited directly without running it.
+`Assets\Hood\tools\Generate-HoodSpritesheet.ps1` packs the retained v3 source PNGs and the v4 run parts into the current grid. Run it in PowerShell 7 on Windows only when maintaining these sources; it overwrites the runtime PNG, manifest, and preview. The run parts contain a footless right-facing body followed by one isolated leg/foot; the script assembles the stride and mirrors it for leftward motion. Custom runtime sheets can be edited directly without running it. Jump artwork supplies the poses only; the application supplies vertical lift outside the cell, constrained to the monitor's usable space.
 
 The tray and executable icon is separate. Replace `Assets\Hood\source\hood-tray-icon.png`, run `tools\Generate-HoodTrayIcon.ps1`, and rebuild to change it.
 

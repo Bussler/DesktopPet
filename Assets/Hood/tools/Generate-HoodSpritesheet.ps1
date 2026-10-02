@@ -63,7 +63,7 @@ $actions = @(
     @('wave', 4, 12, 60, $false),
     @('lookUp', 4, 12, 60, $false),
     @('lookAround', 4, 16, 110, $false),
-    @('jump', 5, 15, 40, $false),
+    @('jump', 5, 15, 80, $false),
     @('feed', 5, 15, 60, $false),
     @('sleep', 4, 12, 225, $true),
     @('wake', 5, 15, 60, $false))
@@ -73,14 +73,46 @@ function Save-Png($bitmap, [string]$path) {
     $stream = [System.IO.File]::Create($path)
     try { $encoder.Save($stream) } finally { $stream.Dispose() }
 }
+function Draw-RunFrame($drawing, $source, $bounds, [int]$index, [int]$row, [bool]$left) {
+    $body = [System.Windows.Media.Imaging.CroppedBitmap]::new(
+        $source, [System.Windows.Int32Rect]::new($bounds[0][0], $bounds[0][1], $bounds[0][2], $bounds[0][3]))
+    $leg = [System.Windows.Media.Imaging.CroppedBitmap]::new(
+        $source, [System.Windows.Int32Rect]::new($bounds[1][0], $bounds[1][1], $bounds[1][2], $bounds[1][3]))
+    $body = [System.Windows.Media.Imaging.WriteableBitmap]::new($body)
+    $leg = [System.Windows.Media.Imaging.WriteableBitmap]::new($leg)
+    $phase = 2 * [Math]::PI * $index / 16
+    $bounce = 4 * (1 - [Math]::Cos(2 * $phase))
+    $bodyHeight = 320
+    $bodyWidth = $body.PixelWidth * $bodyHeight / $body.PixelHeight
+    $legHeight = 44
+    $legWidth = $leg.PixelWidth * $legHeight / $leg.PixelHeight
+    $drawing.PushTransform([System.Windows.Media.TranslateTransform]::new($index * $cellWidth, $row * $cellHeight))
+    if ($left) { $drawing.PushTransform([System.Windows.Media.ScaleTransform]::new(-1, 1, $cellWidth / 2, 0)) }
+    # Opposite stride phases: each foot plants, passes under the belly, then lifts behind it.
+    foreach ($legPhase in @(($phase + [Math]::PI), $phase)) {
+        $hipX = 228
+        $hipY = 344 - $bounce
+        $lift = 12 * [Math]::Max(0, -[Math]::Sin($legPhase))
+        $drawing.PushTransform([System.Windows.Media.RotateTransform]::new(-35 * [Math]::Cos($legPhase), $hipX, $hipY))
+        $drawing.DrawImage($leg, [System.Windows.Rect]::new($hipX - $legWidth * 0.28, $hipY - $lift, $legWidth, $legHeight))
+        $drawing.Pop()
+    }
+    # The belly covers both attachment joints so the feet remain connected during passing.
+    $drawing.DrawImage($body, [System.Windows.Rect]::new(
+        ($cellWidth - $bodyWidth) / 2, 348 - $bounce - $bodyHeight, $bodyWidth, $bodyHeight))
+    if ($left) { $drawing.Pop() }
+    $drawing.Pop()
+}
 $visual = [System.Windows.Media.DrawingVisual]::new()
 [System.Windows.Media.RenderOptions]::SetBitmapScalingMode($visual, [System.Windows.Media.BitmapScalingMode]::HighQuality)
 $drawing = $visual.RenderOpen()
 $animations = @()
 for ($row = 0; $row -lt $actions.Count; $row++) {
     $action, $columns, $count, $duration, $loops = $actions[$row]
+    $isRun = $action -in @('runRight', 'runLeft')
+    $sourcePath = if ($isRun) { Join-Path $assetDirectory 'source\v4\run-parts.png' } else { Join-Path $sourceDirectory "$action.png" }
     $decoder = [System.Windows.Media.Imaging.BitmapDecoder]::Create(
-        [Uri]::new((Join-Path $sourceDirectory "$action.png")),
+        [Uri]::new($sourcePath),
         [System.Windows.Media.Imaging.BitmapCreateOptions]::PreservePixelFormat,
         [System.Windows.Media.Imaging.BitmapCacheOption]::OnLoad)
     $source = [System.Windows.Media.Imaging.FormatConvertedBitmap]::new(
@@ -88,13 +120,22 @@ for ($row = 0; $row -lt $actions.Count; $row++) {
     $stride = $source.PixelWidth * 4
     $pixels = [byte[]]::new($stride * $source.PixelHeight)
     $source.CopyPixels($pixels, $stride, 0)
-    $bounds = [HoodSpriteBounds]::FindFrames($pixels, $source.PixelWidth, $source.PixelHeight, $columns, $count)
+    $bounds = if ($isRun) {
+        [HoodSpriteBounds]::FindFrames($pixels, $source.PixelWidth, $source.PixelHeight, 1, 2)
+    } else {
+        [HoodSpriteBounds]::FindFrames($pixels, $source.PixelWidth, $source.PixelHeight, $columns, $count)
+    }
     # One scale per action avoids enlarging individual crouches or stretches.
     $maxWidth = ($bounds | ForEach-Object { $_[2] } | Measure-Object -Maximum).Maximum
     $maxHeight = ($bounds | ForEach-Object { $_[3] } | Measure-Object -Maximum).Maximum
     $scale = [Math]::Min(344 / $maxWidth, 360 / $maxHeight)
     $frames = @()
     for ($index = 0; $index -lt $count; $index++) {
+        if ($isRun) {
+            Draw-RunFrame $drawing $source $bounds $index $row ($action -eq 'runLeft')
+            $frames += [ordered]@{ row = $row; column = $index }
+            continue
+        }
         $x, $y, $width, $height = $bounds[$index]
         $frame = [System.Windows.Media.Imaging.CroppedBitmap]::new(
             $source, [System.Windows.Int32Rect]::new($x, $y, $width, $height))
@@ -102,25 +143,17 @@ for ($row = 0; $row -lt $actions.Count; $row++) {
         $frame = [System.Windows.Media.Imaging.WriteableBitmap]::new($frame)
         $destinationX = $index * $cellWidth + ($cellWidth - $width * $scale) / 2
         $destinationY = $row * $cellHeight + 388 - $height * $scale
-        if ($action -eq 'jump') {
-            # Preserve the generated takeoff/apex offsets instead of pinning airborne feet.
-            $sourceRow = [int][Math]::Floor($index / $columns)
-            $rowBottom = ($bounds[($sourceRow * $columns)..(($sourceRow + 1) * $columns - 1)] |
-                ForEach-Object { $_[1] + $_[3] } | Measure-Object -Maximum).Maximum
-            $lift = [Math]::Max(0, $rowBottom - ($y + $height))
-            $destinationY -= [Math]::Min(32, $lift * $scale)
-            $destinationY = [Math]::Max($row * $cellHeight + 16, $destinationY)
-        }
+        # Jump lift is applied by the session, outside the sprite cell, with monitor clearance.
         $drawing.DrawImage($frame, [System.Windows.Rect]::new($destinationX, $destinationY, $width * $scale, $height * $scale))
-        $frames += @{ column = $index; row = $row }
+        $frames += [ordered]@{ row = $row; column = $index }
     }
     if ($action -eq 'idle') {
         # A 9.6-second neutral hold between gentle blinks, with no head tilts.
-        $frames = @(@{ column = 0; row = $row }) * 120 + $frames
+        $frames = @([ordered]@{ row = $row; column = 0 }) * 120 + $frames
     }
     $animations += [ordered]@{
         action = $action; frames = $frames; frameDurationMilliseconds = $duration; loops = $loops
-        motionBounds = @{ x = 0; y = 0; width = 192; height = 208 }
+        motionBounds = [ordered]@{ height = 208; width = 192; y = 0; x = 0 }
     }
 }
 $drawing.Close()
