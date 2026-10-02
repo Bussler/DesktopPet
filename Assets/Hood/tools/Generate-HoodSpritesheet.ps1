@@ -74,6 +74,10 @@ function Save-Png($bitmap, [string]$path) {
     try { $encoder.Save($stream) } finally { $stream.Dispose() }
 }
 function Draw-RunFrame($drawing, $source, $bounds, [int]$index, [int]$row, [bool]$left) {
+    $atlasDrawing = $drawing
+    $frameVisual = [System.Windows.Media.DrawingVisual]::new()
+    [System.Windows.Media.RenderOptions]::SetBitmapScalingMode($frameVisual, [System.Windows.Media.BitmapScalingMode]::HighQuality)
+    $drawing = $frameVisual.RenderOpen()
     $body = [System.Windows.Media.Imaging.CroppedBitmap]::new(
         $source, [System.Windows.Int32Rect]::new($bounds[0][0], $bounds[0][1], $bounds[0][2], $bounds[0][3]))
     $leg = [System.Windows.Media.Imaging.CroppedBitmap]::new(
@@ -84,24 +88,29 @@ function Draw-RunFrame($drawing, $source, $bounds, [int]$index, [int]$row, [bool
     $bounce = 4 * (1 - [Math]::Cos(2 * $phase))
     $bodyHeight = 320
     $bodyWidth = $body.PixelWidth * $bodyHeight / $body.PixelHeight
-    $legHeight = 44
+    $legHeight = 55 # 25% larger: matches the foot width in the standing artwork.
     $legWidth = $leg.PixelWidth * $legHeight / $leg.PixelHeight
-    $drawing.PushTransform([System.Windows.Media.TranslateTransform]::new($index * $cellWidth, $row * $cellHeight))
-    if ($left) { $drawing.PushTransform([System.Windows.Media.ScaleTransform]::new(-1, 1, $cellWidth / 2, 0)) }
-    # Opposite stride phases: each foot plants, passes under the belly, then lifts behind it.
+    # Opposite stride phases; paint the far leg, body, then near leg to preserve depth.
+    $legNumber = 0
     foreach ($legPhase in @(($phase + [Math]::PI), $phase)) {
         $hipX = 228
         $hipY = 344 - $bounce
-        $lift = 12 * [Math]::Max(0, -[Math]::Sin($legPhase))
+        $lift = 6 * [Math]::Max(0, -[Math]::Sin($legPhase))
         $drawing.PushTransform([System.Windows.Media.RotateTransform]::new(-35 * [Math]::Cos($legPhase), $hipX, $hipY))
         $drawing.DrawImage($leg, [System.Windows.Rect]::new($hipX - $legWidth * 0.28, $hipY - $lift, $legWidth, $legHeight))
         $drawing.Pop()
+        if ($legNumber++ -eq 0) {
+            $drawing.DrawImage($body, [System.Windows.Rect]::new(
+                ($cellWidth - $bodyWidth) / 2, 348 - $bounce - $bodyHeight, $bodyWidth, $bodyHeight))
+        }
     }
-    # The belly covers both attachment joints so the feet remain connected during passing.
-    $drawing.DrawImage($body, [System.Windows.Rect]::new(
-        ($cellWidth - $bodyWidth) / 2, 348 - $bounce - $bodyHeight, $bodyWidth, $bodyHeight))
-    if ($left) { $drawing.Pop() }
-    $drawing.Pop()
+    $drawing.Close()
+    $frame = [System.Windows.Media.Imaging.RenderTargetBitmap]::new(
+        $cellWidth, $cellHeight, 96, 96, [System.Windows.Media.PixelFormats]::Pbgra32)
+    $frame.Render($frameVisual)
+    # Mirror the completed raster, avoiding negative scale combined with rotating image layers.
+    if ($left) { $frame = [System.Windows.Media.Imaging.TransformedBitmap]::new($frame, [System.Windows.Media.ScaleTransform]::new(-1, 1)) }
+    $atlasDrawing.DrawImage($frame, [System.Windows.Rect]::new($index * $cellWidth, $row * $cellHeight, $cellWidth, $cellHeight))
 }
 $visual = [System.Windows.Media.DrawingVisual]::new()
 [System.Windows.Media.RenderOptions]::SetBitmapScalingMode($visual, [System.Windows.Media.BitmapScalingMode]::HighQuality)
