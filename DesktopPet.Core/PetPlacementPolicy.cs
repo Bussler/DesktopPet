@@ -86,6 +86,37 @@ public static class PetPlacementPolicy
         return new PetPlacement(position, new PetBounds(x, y, width, height), display);
     }
 
+    public static PetPlacement ResizeFromEdge(
+        PetDefinition definition, PetPosition position, PetBounds currentArea,
+        double horizontalChange, double verticalChange, bool fromLeft, bool fromTop,
+        IReadOnlyCollection<DisplayInfo> displays)
+    {
+        if (!double.IsFinite(horizontalChange) || !double.IsFinite(verticalChange))
+        {
+            throw new ArgumentOutOfRangeException(nameof(horizontalChange), "Roaming-area resize changes must be finite.");
+        }
+
+        var primary = GetPrimaryDisplay(displays, definition);
+        var display = FindDisplay(position, definition, displays) ?? primary;
+        var workArea = display.WorkArea;
+        var minimum = definition.MinimumRoamingArea;
+        var left = fromLeft
+            ? Math.Clamp(currentArea.X + horizontalChange, workArea.X, currentArea.Right - minimum.Width)
+            : currentArea.X;
+        var right = fromLeft ? currentArea.Right
+            : Math.Clamp(currentArea.Right + horizontalChange, currentArea.X + minimum.Width, workArea.Right);
+        var top = fromTop
+            ? Math.Clamp(currentArea.Y + verticalChange, workArea.Y, currentArea.Bottom - minimum.Height)
+            : currentArea.Y;
+        var bottom = fromTop ? currentArea.Bottom
+            : Math.Clamp(currentArea.Bottom + verticalChange, currentArea.Y + minimum.Height, workArea.Bottom);
+        var area = new PetBounds(left, top, right - left, bottom - top);
+        var containedPosition = new PetPosition(
+            Math.Clamp(position.X, left, right - definition.DisplayWidth),
+            Math.Clamp(position.Y, top, bottom - definition.DisplayHeight));
+        return new PetPlacement(containedPosition, area, display);
+    }
+
     public static PetPlacement MoveArea(
         PetDefinition definition,
         PetPosition currentPosition,

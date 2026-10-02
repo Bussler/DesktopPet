@@ -8,7 +8,7 @@ public sealed class HoodRoamingTests
 {
     [TestMethod]
     [DataRow(0, 0, -18d, 0d)]
-    [DataRow(1, 1, 18d, 0d)]
+    [DataRow(0, 1, 18d, 0d)]
     [DataRow(2, 0, 0d, -18d)]
     [DataRow(2, 1, 0d, 18d)]
     public void Advance_ChoosesBothAxesAndDirectionsAndRewardsActualMovement(
@@ -157,6 +157,118 @@ public sealed class HoodRoamingTests
         Assert.AreEqual(new PetPosition(100, 100), session.Position);
         Assert.AreEqual(20, session.Needs.Boredom);
         Assert.AreEqual(PetAction.Idle, session.Presentation.Action);
+    }
+
+    [TestMethod]
+    [DataRow(0, 0, -1d, -1d)]
+    [DataRow(0, 1, -1d, 1d)]
+    [DataRow(1, 0, 1d, -1d)]
+    [DataRow(1, 1, 1d, 1d)]
+    public void Advance_RunsInAllFourDiagonalDirectionsAtTheNormalSpeed(
+        int xSample, int ySample, double dx, double dy)
+    {
+        var session = CreateSession(new PetBounds(100, 100, 480, 400), new PetPosition(244, 196),
+            new SequenceRandomSource(1, xSample, ySample));
+
+        session.Advance(TimeSpan.FromSeconds(1));
+
+        Assert.AreEqual(244 + dx * 18 / Math.Sqrt(2), session.Position.X, 1e-9);
+        Assert.AreEqual(196 + dy * 18 / Math.Sqrt(2), session.Position.Y, 1e-9);
+        Assert.AreEqual(19.5, session.Needs.Boredom, 1e-9);
+        Assert.AreEqual(dx < 0 ? PetAction.RunLeft : PetAction.RunRight, session.Presentation.Action);
+        AssertContained(session);
+    }
+
+    [TestMethod]
+    [DataRow(101d, 196d, 0, 1, 1d, 1d)]
+    [DataRow(387d, 196d, 1, 0, -1d, -1d)]
+    [DataRow(244d, 101d, 1, 0, 1d, 1d)]
+    [DataRow(244d, 291d, 0, 1, -1d, -1d)]
+    [DataRow(101d, 101d, 0, 0, 1d, 1d)]
+    public void Advance_DiagonalTravelReflectsOnlyTheAxisThatHitsAnEdge(
+        double x, double y, int xSample, int ySample, double expectedDx, double expectedDy)
+    {
+        var session = CreateSession(new PetBounds(100, 100, 480, 400), new PetPosition(x, y),
+            new SequenceRandomSource(1, xSample, ySample));
+        session.Advance(TimeSpan.FromSeconds(1));
+        AssertContained(session);
+        var afterBounce = session.Position;
+
+        session.Advance(TimeSpan.FromSeconds(1));
+
+        Assert.AreEqual(afterBounce.X + expectedDx * 18 / Math.Sqrt(2), session.Position.X, 1e-9);
+        Assert.AreEqual(afterBounce.Y + expectedDy * 18 / Math.Sqrt(2), session.Position.Y, 1e-9);
+        Assert.AreEqual(19, session.Needs.Boredom, 1e-6);
+        Assert.AreEqual(expectedDx < 0 ? PetAction.RunLeft : PetAction.RunRight, session.Presentation.Action);
+        AssertContained(session);
+    }
+
+    [TestMethod]
+    public void Advance_DiagonalEdgeBouncesAreIndependentOfElapsedTimeChunks()
+    {
+        var area = new PetBounds(100, 100, 228, 244);
+        var position = new PetPosition(101, 101);
+        var single = CreateSession(area, position, new SequenceRandomSource(1, 0, 0));
+        var sliced = CreateSession(area, position, new SequenceRandomSource(1, 0, 0));
+        single.Advance(TimeSpan.FromSeconds(8));
+        for (var step = 0; step < 80; step++)
+        {
+            sliced.Advance(TimeSpan.FromMilliseconds(100));
+            AssertContained(sliced);
+        }
+
+        Assert.AreEqual(single.Position.X, sliced.Position.X, 1e-5);
+        Assert.AreEqual(single.Position.Y, sliced.Position.Y, 1e-5);
+        Assert.AreEqual(single.Needs.Boredom, sliced.Needs.Boredom, 1e-6);
+        Assert.AreEqual(PetAction.Idle, single.Presentation.Action);
+        Assert.AreEqual(PetAction.Idle, sliced.Presentation.Action);
+    }
+
+    [TestMethod]
+    public void Advance_DiagonalRoamingPausesForEditingDraggingAndDirectActions()
+    {
+        var session = CreateSession(new PetBounds(100, 100, 480, 400), new PetPosition(244, 196),
+            new SequenceRandomSource(1, 1, 1));
+        session.Advance(TimeSpan.FromSeconds(1));
+        var start = session.Position;
+        session.BeginDragging();
+        session.Advance(TimeSpan.FromSeconds(1));
+        Assert.AreEqual(start, session.Position);
+        session.EndDragging();
+        session.BeginAreaEditing();
+        session.Advance(TimeSpan.FromSeconds(1));
+        Assert.AreEqual(start, session.Position);
+        session.EndAreaEditing();
+        session.React();
+        session.Advance(TimeSpan.FromMilliseconds(1200));
+        Assert.AreEqual(start, session.Position);
+
+        session.Advance(TimeSpan.FromSeconds(1));
+
+        Assert.AreEqual(start.X + 18 / Math.Sqrt(2), session.Position.X, 1e-9);
+        Assert.AreEqual(start.Y + 18 / Math.Sqrt(2), session.Position.Y, 1e-9);
+        Assert.AreEqual(19, session.Needs.Boredom, 1e-9);
+    }
+    [TestMethod]
+    [DataRow(480d, 208d, 18d, 0d)]
+    [DataRow(192d, 400d, 0d, 18d)]
+    [DataRow(192d, 208d, 0d, 0d)]
+    public void Resize_DiagonalTravelUsesOnlyTheRemainingSpaceAtNormalSpeed(
+        double width, double height, double dx, double dy)
+    {
+        var session = CreateSession(new PetBounds(100, 100, 480, 400), new PetPosition(244, 196),
+            new SequenceRandomSource(1, 1, 1));
+        session.Advance(TimeSpan.FromSeconds(1));
+        session.ResizeRoamingArea(width, height);
+        var start = session.Position;
+        var boredom = session.Needs.Boredom;
+
+        session.Advance(TimeSpan.FromSeconds(1));
+
+        Assert.AreEqual(start.X + dx, session.Position.X, 1e-9);
+        Assert.AreEqual(start.Y + dy, session.Position.Y, 1e-9);
+        Assert.AreEqual(boredom - (dx != 0 || dy != 0 ? 0.5 : 0), session.Needs.Boredom, 1e-9);
+        AssertContained(session);
     }
 
     private static void AssertContained(HoodSession session)

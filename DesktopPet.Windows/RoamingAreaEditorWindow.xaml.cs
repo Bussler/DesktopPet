@@ -37,8 +37,13 @@ public partial class RoamingAreaEditorWindow : Window
 
     private void OnResizeDragDelta(object sender, DragDeltaEventArgs e)
     {
-        var area = _session.RoamingArea;
-        _session.ResizeRoamingArea(area.Width + e.HorizontalChange, area.Height + e.VerticalChange, persist: false);
+        var handle = (Thumb)sender;
+        _session.ResizeRoamingAreaBy(
+            handle.HorizontalAlignment == System.Windows.HorizontalAlignment.Stretch ? 0 : e.HorizontalChange,
+            handle.VerticalAlignment == System.Windows.VerticalAlignment.Stretch ? 0 : e.VerticalChange,
+            fromLeft: handle.HorizontalAlignment == System.Windows.HorizontalAlignment.Left,
+            fromTop: handle.VerticalAlignment == System.Windows.VerticalAlignment.Top,
+            persist: false);
         ApplyPlacement();
     }
 

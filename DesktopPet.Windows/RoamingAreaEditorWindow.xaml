@@ -11,41 +11,68 @@
         Background="Transparent"
         ShowActivated="False"
         ShowInTaskbar="False">
+    <Window.Resources>
+        <Style x:Key="ResizeHandleStyle" TargetType="Thumb">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="ToolTip" Value="Drag to resize the roaming area" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border Background="{TemplateBinding Background}" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <EventSetter Event="DragDelta" Handler="OnResizeDragDelta" />
+            <EventSetter Event="DragCompleted" Handler="OnResizeDragCompleted" />
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#99FFB547" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
     <Grid>
         <Border Margin="1" BorderBrush="#FFFFB547" BorderThickness="2" IsHitTestVisible="False" />
         <Thumb x:Name="MoveHandle"
                Height="26"
-               Margin="3,3,66,0"
+               Margin="12,12,82,0"
                VerticalAlignment="Top"
                Background="#D927303A"
                Cursor="SizeAll"
                DragDelta="OnMoveDragDelta"
                DragCompleted="OnMoveDragCompleted" />
-        <TextBlock Margin="3,3,66,0"
+        <TextBlock Margin="12,12,82,0"
                    Height="26"
                    Text="Roaming area — drag to move"
+                   TextTrimming="CharacterEllipsis"
                    Foreground="White"
                    FontWeight="SemiBold"
-                   HorizontalAlignment="Center"
                    VerticalAlignment="Top"
+                   TextAlignment="Center"
                    IsHitTestVisible="False" />
         <Button x:Name="DoneButton"
                 Width="58"
                 Height="26"
-                Margin="0,3,4,0"
+                Margin="0,12,12,0"
                 HorizontalAlignment="Right"
                 VerticalAlignment="Top"
                 Content="Done"
                 Click="OnDoneClick" />
-        <Thumb x:Name="ResizeHandle"
-               Width="22"
-               Height="22"
-               Margin="0,0,2,2"
-               HorizontalAlignment="Right"
-               VerticalAlignment="Bottom"
-               Background="#FFFFB547"
-               Cursor="SizeNWSE"
-               DragDelta="OnResizeDragDelta"
-               DragCompleted="OnResizeDragCompleted" />
+        <Thumb Style="{StaticResource ResizeHandleStyle}" Width="10" Margin="0,16,0,16"
+               HorizontalAlignment="Left" VerticalAlignment="Stretch" Cursor="SizeWE" />
+        <Thumb Style="{StaticResource ResizeHandleStyle}" Width="10" Margin="0,16,0,16"
+               HorizontalAlignment="Right" VerticalAlignment="Stretch" Cursor="SizeWE" />
+        <Thumb Style="{StaticResource ResizeHandleStyle}" Height="10" Margin="16,0,16,0"
+               HorizontalAlignment="Stretch" VerticalAlignment="Top" Cursor="SizeNS" />
+        <Thumb Style="{StaticResource ResizeHandleStyle}" Height="10" Margin="16,0,16,0"
+               HorizontalAlignment="Stretch" VerticalAlignment="Bottom" Cursor="SizeNS" />
+        <Thumb Style="{StaticResource ResizeHandleStyle}" Width="16" Height="16" Background="#FFFFB547"
+               HorizontalAlignment="Left" VerticalAlignment="Top" Cursor="SizeNWSE" />
+        <Thumb Style="{StaticResource ResizeHandleStyle}" Width="16" Height="16" Background="#FFFFB547"
+               HorizontalAlignment="Right" VerticalAlignment="Top" Cursor="SizeNESW" />
+        <Thumb Style="{StaticResource ResizeHandleStyle}" Width="16" Height="16" Background="#FFFFB547"
+               HorizontalAlignment="Left" VerticalAlignment="Bottom" Cursor="SizeNESW" />
+        <Thumb Style="{StaticResource ResizeHandleStyle}" Width="16" Height="16" Background="#FFFFB547"
+               HorizontalAlignment="Right" VerticalAlignment="Bottom" Cursor="SizeNWSE" />
     </Grid>
 </Window>

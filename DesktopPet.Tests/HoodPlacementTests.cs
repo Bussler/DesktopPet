@@ -326,6 +326,91 @@ public sealed class HoodPlacementTests
         Assert.AreEqual(start, session.Position);
     }
 
+    [TestMethod]
+    [DataRow(-40d, 0d, true, false, 60d, 100d, 520d, 400d)]
+    [DataRow(40d, 0d, false, false, 100d, 100d, 520d, 400d)]
+    [DataRow(0d, -40d, false, true, 100d, 60d, 480d, 440d)]
+    [DataRow(0d, 40d, false, false, 100d, 100d, 480d, 440d)]
+    [DataRow(-40d, -40d, true, true, 60d, 60d, 520d, 440d)]
+    [DataRow(40d, -40d, false, true, 100d, 60d, 520d, 440d)]
+    [DataRow(-40d, 40d, true, false, 60d, 100d, 520d, 440d)]
+    [DataRow(40d, 40d, false, false, 100d, 100d, 520d, 440d)]
+    public void ResizeRoamingAreaBy_MovesEachEdgeOrCornerAndKeepsTheOppositeEdgesFixed(
+        double dx, double dy, bool fromLeft, bool fromTop, double x, double y, double width, double height)
+    {
+        var saved = new HoodSessionSnapshot
+        {
+            Position = new PetPosition(244, 196),
+            RoamingArea = new PetBounds(100, 100, 480, 400)
+        };
+        var store = new RecordingSessionStore();
+        var session = CreateSession([Primary(1920, 1040)], restored: saved, store: store);
+
+        session.ResizeRoamingAreaBy(dx, dy, fromLeft, fromTop, persist: false);
+
+        Assert.AreEqual(new PetBounds(x, y, width, height), session.RoamingArea);
+        Assert.AreEqual(saved.Position, session.Position);
+        Assert.IsNull(store.Snapshot, "Dragging saves only when the edit is completed.");
+        session.SaveCurrentState();
+        var restored = CreateSession([Primary(1920, 1040)], restored: store.Snapshot);
+        Assert.AreEqual(session.RoamingArea, restored.RoamingArea);
+        Assert.AreEqual(session.Position, restored.Position);
+    }
+
+    [TestMethod]
+    [DataRow(true, true, 388d, 292d)]
+    [DataRow(false, false, 100d, 100d)]
+    [DataRow(true, false, 388d, 100d)]
+    [DataRow(false, true, 100d, 292d)]
+    public void ResizeRoamingAreaBy_StopsAtTheMinimumSizeAndKeepsHoodInside(
+        bool fromLeft, bool fromTop, double expectedX, double expectedY)
+    {
+        var session = CreateSession([Primary(1920, 1040)], restored: new HoodSessionSnapshot
+        {
+            Position = new PetPosition(244, 196),
+            RoamingArea = new PetBounds(100, 100, 480, 400)
+        });
+
+        session.ResizeRoamingAreaBy(fromLeft ? 1000 : -1000, fromTop ? 1000 : -1000, fromLeft, fromTop);
+
+        Assert.AreEqual(new PetBounds(expectedX, expectedY, 192, 208), session.RoamingArea);
+        Assert.AreEqual(new PetPosition(expectedX, expectedY), session.Position);
+    }
+
+    [TestMethod]
+    [DataRow(true, true, -1280d, -300d, 860d, 600d)]
+    [DataRow(false, false, -900d, -100d, 900d, 600d)]
+    public void ResizeRoamingAreaBy_ClampsEdgesToTheCurrentScaledMonitor(
+        bool fromLeft, bool fromTop, double x, double y, double width, double height)
+    {
+        var secondary = new DisplayInfo("Scaled left", new PetBounds(-1280, -300, 1280, 800), false, 1.5);
+        var session = CreateSession([Primary(1920, 1040), secondary], restored: new HoodSessionSnapshot
+        {
+            Position = new PetPosition(-756, 0),
+            RoamingArea = new PetBounds(-900, -100, 480, 400)
+        });
+
+        session.ResizeRoamingAreaBy(fromLeft ? -10000 : 10000, fromTop ? -10000 : 10000, fromLeft, fromTop);
+
+        Assert.AreEqual(new PetBounds(x, y, width, height), session.RoamingArea);
+        Assert.AreEqual(new PetPosition(-756, 0), session.Position);
+    }
+
+    [TestMethod]
+    [DataRow(double.NaN, 0d)]
+    [DataRow(0d, double.PositiveInfinity)]
+    public void ResizeRoamingAreaBy_RejectsNonFiniteChangesWithoutChangingPlacement(double dx, double dy)
+    {
+        var session = CreateSession([Primary(1920, 1040)]);
+        var position = session.Position;
+        var area = session.RoamingArea;
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => session.ResizeRoamingAreaBy(dx, dy));
+
+        Assert.AreEqual(position, session.Position);
+        Assert.AreEqual(area, session.RoamingArea);
+    }
+
     private static DisplayInfo Primary(double width, double height) =>
         new("Primary", new PetBounds(0, 0, width, height), IsPrimary: true);
 
