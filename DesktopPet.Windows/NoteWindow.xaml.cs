@@ -135,6 +135,9 @@ public partial class NoteWindow : Window
         {
             Editor.FontSize = settings.TextSize;
             Editor.Document.FontSize = settings.TextSize;
+            foreach (var list in Editor.Document.Blocks.OfType<System.Windows.Documents.List>())
+                foreach (var paragraph in list.ListItems.SelectMany(item => item.Blocks.OfType<Paragraph>()))
+                    ApplyInlineMarkerSpacing(paragraph);
         }
         SaveStatus.Foreground = CreateBrush(darkTheme ? "#FFFFB4AB" : "#FF8B1F1F");
         if (!_appearanceInitialized || previousSettings.AlwaysOnTop != settings.AlwaysOnTop)
@@ -261,6 +264,9 @@ public partial class NoteWindow : Window
 
             SetSaveStatus(_updateDocument(_noteId, document));
             _lastAcceptedDocument = document.Copy();
+            _updatingEditor = true;
+            try { RefreshNumberedMarkers(); }
+            finally { _updatingEditor = false; }
         }
         catch (Exception exception) when (exception is InvalidDataException or ArgumentException or InvalidOperationException)
         {
@@ -355,7 +361,7 @@ public partial class NoteWindow : Window
             ApplyStyle(NoteTextStyle.Underline, UnderlineButton.IsChecked != true);
             e.Handled = true;
         }
-        else if (!control && !shift && e.Key == Key.Enter && Editor.Selection.IsEmpty && ContinueChecklistAtCaret())
+        else if (!control && !shift && e.Key == Key.Enter && Editor.Selection.IsEmpty && ContinueListAtCaret())
         {
             e.Handled = true;
         }
@@ -427,12 +433,12 @@ public partial class NoteWindow : Window
         }
     }
 
-    private bool ContinueChecklistAtCaret()
+    private bool ContinueListAtCaret()
     {
         var document = ReadEditorDocument();
         var (start, _) = GetSelectionOffsets(document);
         var paragraphIndex = document.GetParagraphIndexAt(start);
-        if (document.Paragraphs[paragraphIndex].Kind != NoteBlockKind.Checklist)
+        if (document.Paragraphs[paragraphIndex].Kind is not (NoteBlockKind.Checklist or NoteBlockKind.Numbered))
         {
             return false;
         }
@@ -594,21 +600,20 @@ public partial class NoteWindow : Window
                 var listKind = noteParagraph.Kind;
                 var list = new System.Windows.Documents.List
                 {
-                    MarkerStyle = listKind switch
-                    {
-                        NoteBlockKind.Numbered => TextMarkerStyle.Decimal,
-                        NoteBlockKind.Checklist => TextMarkerStyle.None,
-                        _ => TextMarkerStyle.Disc
-                    },
+                    Tag = listKind,
+                    MarkerStyle = listKind == NoteBlockKind.Bulleted ? TextMarkerStyle.Disc : TextMarkerStyle.None,
                     MarkerOffset = 18
                 };
+                var number = 1;
                 while (index < document.Paragraphs.Count && document.Paragraphs[index].Kind == listKind)
                 {
-                    list.ListItems.Add(new ListItem(CreateEditorParagraph(document.Paragraphs[index])));
+                    list.ListItems.Add(new ListItem(CreateEditorParagraph(document.Paragraphs[index], number++)));
                     index++;
                 }
 
                 flowDocument.Blocks.Add(list);
+                foreach (var paragraph in list.ListItems.SelectMany(item => item.Blocks.OfType<Paragraph>()))
+                    ApplyInlineMarkerSpacing(paragraph);
                 continue;
             }
 
@@ -640,7 +645,7 @@ public partial class NoteWindow : Window
             }
             else if (block is System.Windows.Documents.List list)
             {
-                var kind = list.MarkerStyle switch
+                var kind = list.Tag is NoteBlockKind listKind ? listKind : list.MarkerStyle switch
                 {
                     TextMarkerStyle.Decimal => NoteBlockKind.Numbered,
                     TextMarkerStyle.None => NoteBlockKind.Checklist,
@@ -685,9 +690,16 @@ public partial class NoteWindow : Window
         return new NotesDocument { Paragraphs = paragraphs };
     }
 
-    private Paragraph CreateEditorParagraph(NoteParagraph noteParagraph)
+    private Paragraph CreateEditorParagraph(NoteParagraph noteParagraph, int number = 1)
     {
         var paragraph = new Paragraph { Margin = new Thickness(0, 0, 0, 8) };
+        if (noteParagraph.Kind == NoteBlockKind.Numbered)
+        {
+            paragraph.Inlines.Add(new InlineUIContainer(new TextBlock
+            {
+                Text = $"{number}.", IsHitTestVisible = false
+            }) { BaselineAlignment = BaselineAlignment.Baseline });
+        }
         if (noteParagraph.Kind == NoteBlockKind.Checklist)
         {
             var text = string.Concat(noteParagraph.Runs.Select(run => run.Text));
@@ -714,6 +726,62 @@ public partial class NoteWindow : Window
         }
 
         return paragraph;
+    }
+
+    private void RefreshNumberedMarkers()
+    {
+        foreach (var list in Editor.Document.Blocks.OfType<System.Windows.Documents.List>()
+                     .Where(list => list.Tag is NoteBlockKind.Numbered))
+        {
+            var index = 1;
+            foreach (var paragraph in list.ListItems.SelectMany(item => item.Blocks.OfType<Paragraph>()))
+            {
+                var markers = paragraph.Inlines.OfType<InlineUIContainer>().ToArray();
+                var label = markers.FirstOrDefault()?.Child as TextBlock;
+                if (label is null)
+                {
+                    label = new TextBlock { IsHitTestVisible = false };
+                    var container = new InlineUIContainer(label) { BaselineAlignment = BaselineAlignment.Baseline };
+                    if (paragraph.Inlines.FirstInline is { } first)
+                        paragraph.Inlines.InsertBefore(first, container);
+                    else
+                        paragraph.Inlines.Add(container);
+                }
+                foreach (var extra in markers.Skip(1))
+                    paragraph.Inlines.Remove(extra);
+                label.Text = $"{index++}.";
+                ApplyInlineMarkerSpacing(paragraph);
+            }
+        }
+    }
+
+    private void ApplyInlineMarkerSpacing(Paragraph paragraph)
+    {
+        if (paragraph.Inlines.FirstInline is not InlineUIContainer { Child: FrameworkElement marker })
+            return;
+
+        // Match the native disc marker's left edge while keeping wrapped text aligned.
+        var bullet = Measure("\u009f", new Typeface("Wingdings"));
+        var markerWidth = 18 + bullet.Width - bullet.BuildGeometry(new System.Windows.Point()).Bounds.Left;
+        paragraph.TextIndent = -markerWidth;
+        if (marker is System.Windows.Controls.CheckBox)
+            marker.Margin = new Thickness(0, 0, markerWidth - marker.Width, 0);
+        else if (marker is TextBlock number)
+        {
+            var list = (System.Windows.Documents.List)((ListItem)paragraph.Parent).Parent;
+            var typeface = new Typeface(Editor.FontFamily, Editor.FontStyle, Editor.FontWeight, Editor.FontStretch);
+            var label = Measure(number.Text, typeface);
+            var widest = Measure($"{list.ListItems.Count}.", typeface);
+            number.Width = Math.Max(markerWidth, widest.Width + 6);
+            var bearing = label.BuildGeometry(new System.Windows.Point()).Bounds.Left;
+            number.Margin = new Thickness(-bearing, 0, bearing, 0);
+            paragraph.Margin = new Thickness(number.Width - markerWidth, 0, 0, 8);
+            paragraph.TextIndent = -number.Width;
+        }
+
+        FormattedText Measure(string text, Typeface typeface) => new(text,
+            System.Globalization.CultureInfo.CurrentCulture, System.Windows.FlowDirection.LeftToRight,
+            typeface, Editor.FontSize, Editor.Foreground, VisualTreeHelper.GetDpi(Editor).PixelsPerDip);
     }
 
     private static void ReadInlines(InlineCollection inlines, NoteTextStyle inheritedStyle, List<NoteTextRun> runs)

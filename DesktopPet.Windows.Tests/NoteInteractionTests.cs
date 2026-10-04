@@ -57,6 +57,114 @@ public sealed class NoteInteractionTests
     }
 
     [TestMethod]
+    [DataRow(12, 1)]
+    [DataRow(16, 12)]
+    [DataRow(24, 12)]
+    [DataRow(32, 12)]
+    public void ListMarkersStartAtTheBulletPosition(int textSize, int numberedItems)
+    {
+        var document = new NotesDocument
+        {
+            Paragraphs = new[] { NoteBlockKind.Bulleted }.Concat(Enumerable.Repeat(NoteBlockKind.Numbered, numberedItems))
+                .Append(NoteBlockKind.Checklist).Select(kind => new NoteParagraph { Kind = kind, Runs = [new NoteTextRun("Task")] }).ToList()
+        };
+        var window = CreateChecklistWindow(_ => { }, document: document);
+        try
+        {
+            window.Height = 1000;
+            window.ApplyAppearance(new NotesConfiguration { Theme = "dark", TextSize = textSize }, NoteColor.Green);
+            ShowHidden(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            var content = (FrameworkElement)window.Content;
+            var bitmap = new RenderTargetBitmap((int)content.ActualWidth, (int)content.ActualHeight,
+                96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(content);
+            var stride = bitmap.PixelWidth * 4;
+            var pixels = new byte[stride * bitmap.PixelHeight];
+            bitmap.CopyPixels(pixels, stride, 0);
+            var starts = editor.Document.Blocks.Cast<System.Windows.Documents.List>()
+                .SelectMany(list => list.ListItems.SelectMany(item => item.Blocks.OfType<Paragraph>())).Select(paragraph =>
+            {
+                var bounds = paragraph.Inlines.OfType<Run>().Single().ContentStart.GetCharacterRect(LogicalDirection.Forward);
+                var top = editor.TranslatePoint(bounds.TopLeft, content).Y;
+                for (var x = 14; x < bitmap.PixelWidth - 14; x++)
+                    for (var y = (int)top; y < Math.Min(bitmap.PixelHeight, (int)Math.Ceiling(top + bounds.Height)); y++)
+                        if (pixels[y * stride + x * 4 + 3] > 32)
+                            return x;
+                Assert.Fail("The list row did not render.");
+                return -1;
+            }).ToArray();
+            foreach (var start in starts.Skip(1))
+                Assert.AreEqual(starts[0], start, 2, $"Bullet/number/checklist left edges: {string.Join(", ", starts)}.");
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    [DataRow(true)]
+    [DataRow(false)]
+    public void NumberedMarkersRefreshAfterRowEditsAndStayOutOfSavedText(bool insert)
+    {
+        NotesDocument? saved = null;
+        var document = NotesDocument.FromText("First\r\nTask").SetListKind(0, 11, NoteBlockKind.Numbered);
+        var window = CreateChecklistWindow(result => saved = result, document: document);
+        try
+        {
+            var editor = (RichTextBox)window.FindName("Editor");
+            var list = (System.Windows.Documents.List)editor.Document.Blocks.FirstBlock;
+            if (insert)
+                list.ListItems.InsertBefore(list.ListItems.FirstListItem, new ListItem(new Paragraph(new Run("Inserted"))));
+            else
+                list.ListItems.Remove(list.ListItems.FirstListItem);
+
+            list = (System.Windows.Documents.List)editor.Document.Blocks.FirstBlock;
+            var paragraphs = list.ListItems.Select(item => (Paragraph)item.Blocks.FirstBlock).ToArray();
+            CollectionAssert.AreEqual(Enumerable.Range(1, paragraphs.Length).Select(index => $"{index}.").ToArray(),
+                paragraphs.Select(row => ((TextBlock)((InlineUIContainer)row.Inlines.FirstInline).Child).Text).ToArray());
+            var run = paragraphs.Last().Inlines.OfType<Run>().Single();
+            editor.Selection.Select(run.ContentStart.GetPositionAtOffset(1)!, run.ContentStart.GetPositionAtOffset(3)!);
+            Click((ToggleButton)window.FindName("BoldButton"));
+            Assert.IsNotNull(saved);
+            Assert.AreEqual(insert ? "Inserted\r\nFirst\r\nTask" : "Task", saved.GetPlainText());
+            Assert.IsTrue(saved.Paragraphs.All(row => row.Kind == NoteBlockKind.Numbered));
+            Assert.AreEqual("as", saved.Paragraphs.Last().Runs.Single(item => item.Style == NoteTextStyle.Bold).Text);
+            Assert.AreEqual("as", editor.Selection.Text);
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    public void EnterContinuesAndEndsNumberedLists()
+    {
+        NotesDocument? saved = null;
+        var window = CreateChecklistWindow(result => saved = result,
+            document: NotesDocument.FromText("Task").SetListKind(0, 4, NoteBlockKind.Numbered));
+        try
+        {
+            ShowHidden(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            Assert.IsTrue(editor.Focus());
+            var paragraph = (Paragraph)((System.Windows.Documents.List)editor.Document.Blocks.FirstBlock)
+                .ListItems.FirstListItem.Blocks.FirstBlock;
+            editor.CaretPosition = paragraph.Inlines.OfType<Run>().Single().ContentEnd;
+            PressEnter();
+            Assert.IsNotNull(saved);
+            Assert.AreEqual(2, saved.Paragraphs.Count);
+            Assert.IsTrue(saved.Paragraphs.All(row => row.Kind == NoteBlockKind.Numbered));
+            var next = (Paragraph)((System.Windows.Documents.List)editor.Document.Blocks.FirstBlock)
+                .ListItems.LastListItem.Blocks.FirstBlock;
+            Assert.AreEqual("2.", ((TextBlock)((InlineUIContainer)next.Inlines.FirstInline).Child).Text);
+            PressEnter();
+            Assert.AreEqual(NoteBlockKind.Paragraph, saved.Paragraphs.Last().Kind);
+            Assert.AreEqual("Task\r\n", saved.GetPlainText());
+
+            void PressEnter() => editor.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice,
+                PresentationSource.FromVisual(editor), 0, Key.Enter) { RoutedEvent = Keyboard.PreviewKeyDownEvent });
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
     public void ChecklistUsesHandCursorBeforeAndAfterClicking()
     {
         var window = CreateChecklistWindow(_ => { });
