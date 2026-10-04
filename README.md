@@ -6,7 +6,7 @@ Hood is a Windows desktop companion with roaming, feeding, sleep, local settings
 
 In a published build, run `app\DesktopPet.Windows.exe`. The build contains `app`, `docs`, and this README; no separate .NET runtime install is required. Left-click Hood to show or hide your open notes. Right-click Hood for care actions, Settings, and the Notes menu. See the [Notes guide](docs/notes.md) for editing, management, storage, and recovery.
 
-Settings and saved progress live in `%LOCALAPPDATA%\HoodDesktopPet`, separately from the app folder. See [configuration](docs/configuration.md), [UI styles](docs/ui-styles.md), [placement](docs/placement.md), and [recovery](docs/recovery.md). The [Notes manual acceptance checklist](docs/notes-manual-acceptance.md) and [UI styles final acceptance checklist](docs/ui-styles-manual-acceptance.md) can be run against a test data folder without touching your normal notes.
+Settings and saved progress live in `%LOCALAPPDATA%\HoodDesktopPet`, separately from the app folder. See [configuration](docs/configuration.md), [UI styles](docs/ui-styles.md), [placement](docs/placement.md), [sleep](docs/sleep-and-recovery.md), and [recovery](docs/recovery.md).
 
 ## Change the pet sprites
 
@@ -26,4 +26,4 @@ From a source checkout with the .NET 10 SDK installed, run:
 .\tools\Build-AndPublish.ps1
 ```
 
-The script prints the new app's path. See the [build guide](docs/build.md) for output and SDK options.
+The script prints the new app's path. Use `-CandidateDirectory .\artifacts\my-build` to choose a new output folder, or `-DotnetExe C:\path\to\dotnet.exe` to select an SDK installation.

@@ -11,3 +11,5 @@ The sharper v3 artwork was created with the built-in imagegen tool using the ori
 The project owner confirmed ownership and personal-use release scope on 2026-10-01; no external redistribution is planned. No separate license file accompanied the earlier source sheets.
 
 For replacement artwork, follow [changing sprites](../../docs/changing-sprites.md), then rebuild. The packing script overwrites the runtime assets and preview from the retained v3 sources.
+
+The run animation uses body and leg artwork from `source/v4/run-parts.png`, with its prompt retained alongside it. The packing script layers the far leg, body, and near leg, enlarges feet by 25%, and keeps recovery lift low. It renders each complete right-facing frame before mirroring for leftward motion; build checks cover foot visibility and parity. Jump poses come from v3; the session supplies vertical lift.
