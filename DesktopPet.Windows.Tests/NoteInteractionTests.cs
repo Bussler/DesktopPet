@@ -204,13 +204,101 @@ public sealed class NoteInteractionTests
         try
         {
             var checkbox = ChecklistCheckbox(window);
+            var paragraph = (Paragraph)((InlineUIContainer)checkbox.Parent).Parent;
             Assert.IsTrue(checkbox.IsEnabled, "Checklist checkbox cannot receive clicks.");
             Click(checkbox);
             Assert.IsNotNull(saved);
             Assert.IsTrue(saved.Paragraphs[0].IsChecked);
             Assert.AreEqual("Task", saved.GetPlainText());
+            Assert.IsTrue(paragraph.TextDecorations.Any(item => item.Location == TextDecorationLocation.Strikethrough));
+            Assert.IsTrue(saved.Paragraphs[0].Runs.All(run => run.Style == NoteTextStyle.None));
             Click(checkbox);
             Assert.IsFalse(saved.Paragraphs[0].IsChecked);
+            Assert.AreEqual(0, paragraph.TextDecorations.Count);
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    public void CheckedChecklistRendersALineThroughItsText()
+    {
+        var window = CreateChecklistWindow(_ => { },
+            document: NotesDocument.FromText("Task to do").SetListKind(0, 10, NoteBlockKind.Checklist));
+        try
+        {
+            ShowHidden(window);
+            var checkbox = ChecklistCheckbox(window);
+            var paragraph = (Paragraph)((InlineUIContainer)checkbox.Parent).Parent;
+            var run = paragraph.Inlines.OfType<Run>().Single();
+            var editor = (RichTextBox)window.FindName("Editor");
+            var content = (FrameworkElement)window.Content;
+            var start = run.ContentStart.GetCharacterRect(LogicalDirection.Forward);
+            var end = run.ContentEnd.GetCharacterRect(LogicalDirection.Backward);
+            var origin = editor.TranslatePoint(start.TopLeft, content);
+            var crop = new Int32Rect((int)Math.Ceiling(origin.X) + 1, (int)Math.Ceiling(origin.Y),
+                (int)(end.X - start.X) - 2, (int)start.Height);
+            var before = RenderText();
+            Click(checkbox);
+            var after = RenderText();
+            Assert.IsTrue(Enumerable.Range(0, crop.Height).Any(y => Enumerable.Range(0, crop.Width)
+                .Count(x => after[(y * crop.Width + x) * 4 + 3] - before[(y * crop.Width + x) * 4 + 3] > 32)
+                    > crop.Width / 3), "Checking must paint a horizontal line through the text.");
+            Click(checkbox);
+            CollectionAssert.AreEqual(before, RenderText(), "Unchecking must restore the original rendered text.");
+
+            byte[] RenderText()
+            {
+                Pump(window);
+                var bitmap = new RenderTargetBitmap((int)content.ActualWidth, (int)content.ActualHeight,
+                    96, 96, PixelFormats.Pbgra32);
+                bitmap.Render(content);
+                var pixels = new byte[crop.Width * crop.Height * 4];
+                bitmap.CopyPixels(crop, pixels, crop.Width * 4, 0);
+                return pixels;
+            }
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    public void CheckedChecklistRestoresCompletionAndPreservesManualFormattingDuringEdits()
+    {
+        NotesDocument? saved = null;
+        var document = new NotesDocument
+        {
+            Paragraphs = [new NoteParagraph
+            {
+                Kind = NoteBlockKind.Checklist, IsChecked = true,
+                Runs = [new NoteTextRun("Task", NoteTextStyle.Underline),
+                    new NoteTextRun(" done", NoteTextStyle.Strikethrough)]
+            }]
+        };
+        var window = CreateChecklistWindow(result => saved = result, document: document);
+        try
+        {
+            var editor = (RichTextBox)window.FindName("Editor");
+            var checkbox = ChecklistCheckbox(window);
+            var paragraph = (Paragraph)((InlineUIContainer)checkbox.Parent).Parent;
+            Assert.IsTrue(paragraph.TextDecorations.Any(item => item.Location == TextDecorationLocation.Strikethrough));
+            paragraph.Inlines.Add(new Run(" again"));
+            Assert.IsNotNull(saved);
+            Assert.IsTrue(saved.Paragraphs[0].IsChecked);
+            Assert.AreEqual("Task done again", saved.GetPlainText());
+            Assert.AreEqual(NoteTextStyle.Underline, saved.Paragraphs[0].Runs[0].Style);
+            Assert.AreEqual(NoteTextStyle.Strikethrough, saved.Paragraphs[0].Runs[1].Style);
+            Assert.AreEqual(NoteTextStyle.None, saved.Paragraphs[0].Runs[2].Style);
+
+            editor.SelectAll();
+            Click((ToggleButton)window.FindName("BoldButton"));
+            checkbox = ChecklistCheckbox(window);
+            paragraph = (Paragraph)((InlineUIContainer)checkbox.Parent).Parent;
+            Assert.IsTrue(paragraph.TextDecorations.Any(item => item.Location == TextDecorationLocation.Strikethrough));
+            Click(checkbox);
+            Assert.AreEqual(0, paragraph.TextDecorations.Count);
+            Assert.IsFalse(saved.Paragraphs[0].IsChecked);
+            CollectionAssert.AreEqual(new[] { NoteTextStyle.Bold | NoteTextStyle.Underline,
+                NoteTextStyle.Bold | NoteTextStyle.Strikethrough, NoteTextStyle.Bold },
+                saved.Paragraphs[0].Runs.Select(run => run.Style).ToArray());
         }
         finally { window.CloseWithoutMembershipChange(); }
     }

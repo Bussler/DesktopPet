@@ -423,6 +423,9 @@ public partial class NoteWindow : Window
         {
             var paragraphIndex = GetEditorParagraphs(Editor.Document).ToList().IndexOf(paragraph);
             var document = ReadEditorDocument().SetChecklistChecked(paragraphIndex, isChecked);
+            _updatingEditor = true;
+            try { paragraph.TextDecorations = isChecked ? TextDecorations.Strikethrough : new(); }
+            finally { _updatingEditor = false; }
             SetSaveStatus(_updateDocument(_noteId, document));
             _lastAcceptedDocument = document.Copy();
             UpdateToolbar();
@@ -692,7 +695,12 @@ public partial class NoteWindow : Window
 
     private Paragraph CreateEditorParagraph(NoteParagraph noteParagraph, int number = 1)
     {
-        var paragraph = new Paragraph { Margin = new Thickness(0, 0, 0, 8) };
+        var paragraph = new Paragraph
+        {
+            Margin = new Thickness(0, 0, 0, 8),
+            TextDecorations = noteParagraph.Kind == NoteBlockKind.Checklist && noteParagraph.IsChecked
+                ? TextDecorations.Strikethrough : new()
+        };
         if (noteParagraph.Kind == NoteBlockKind.Numbered)
         {
             paragraph.Inlines.Add(new InlineUIContainer(new TextBlock
