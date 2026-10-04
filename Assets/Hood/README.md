@@ -8,7 +8,7 @@ Each action has 12-16 distinct poses. Idle holds a neutral pose between gentle b
 
 The sharper v3 artwork was created with the built-in imagegen tool using the original Hood action preview as a character reference. Generated sources and exact prompts are retained under `source/v3/`; both earlier source sheets remain under `source/`. `tools/Generate-HoodSpritesheet.ps1` deterministically packs the complete sprites, preserving alpha and isolating each crop before resampling to prevent neighboring poses from bleeding into the output. Run it in PowerShell 7 on Windows to regenerate the runtime PNG, manifest, and preview without image generation or network access.
 
-The project owner confirmed ownership and personal-use release scope on 2026-10-01; no external redistribution is planned. No separate license file accompanied the earlier source sheets.
+No separate license file accompanied the earlier source sheets.
 
 For replacement artwork, follow [changing sprites](../../docs/changing-sprites.md), then rebuild. The packing script overwrites the runtime assets and preview from the retained v3 sources.
 

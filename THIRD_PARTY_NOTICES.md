@@ -18,4 +18,4 @@ The self-contained Windows publish includes Microsoft .NET and Windows Desktop r
 
 The runtime is self-contained, so it does not receive updates from an installed .NET runtime. See Microsoft's [self-contained deployment guidance](https://learn.microsoft.com/en-us/dotnet/core/deploying/) and [.NET support policy](https://dotnet.microsoft.com/en-us/platform/support/policy/dotnet-core) for servicing requirements.
 
-The packaged Hood art is the project owner's work and is intended for personal use only; no external redistribution is planned.
+The packaged Hood artwork was generated with AI.
