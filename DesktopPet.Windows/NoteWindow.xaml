@@ -72,7 +72,7 @@
             <RichTextBox x:Name="Editor" Grid.Row="1" Margin="12,8,12,0"
                          AcceptsTab="True" IsUndoEnabled="False" IsDocumentEnabled="True"
                          VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
-                         Padding="0" BorderThickness="0" Background="Transparent"
+                         Padding="0,0,12,0" BorderThickness="0" Background="Transparent"
                          FontFamily="Segoe UI" FontSize="16" Foreground="{DynamicResource NotesTextBrush}"
                          SelectionChanged="OnSelectionChanged" TextChanged="OnTextChanged">
                 <RichTextBox.Template>

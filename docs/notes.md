@@ -18,7 +18,7 @@ Closing a note with its window's close button saves it as a closed note; it will
 
 ## Edit text
 
-Click in a note editor to type. The toolbar applies bold, italic, underline, strikethrough, bullets, numbering, and checklists to selected text or the current paragraph. Checked checklist items display their text with strikethrough. Unchecking removes this completion effect while preserving manually applied formatting. Enter continues a list; Enter on an empty item exits it. Long content scrolls in the editor. Standard text selection, copy, cut, paste, and clipboard shortcuts are provided by the Windows rich-text control.
+Click in a note editor to type. The toolbar applies bold, italic, underline, strikethrough, bullets, numbering, and checklists to selected text or the current paragraph. Checked checklist items display their text in muted grey with strikethrough. Unchecking restores the normal text color and removes this completion effect while preserving manually applied formatting. Enter continues a list; Enter on an empty item exits it. Long content scrolls in the editor. Standard text selection, copy, cut, paste, and clipboard shortcuts are provided by the Windows rich-text control.
 
 When the editor has focus, Hood supports **Ctrl+B** (bold), **Ctrl+I** (italic), **Ctrl+U** (underline), **Ctrl+Shift+X** (strikethrough), **Ctrl+Z** (undo), and **Ctrl+Y** (redo). Undo and redo apply to the current note and last for that Hood session. Toolbar buttons reflect the selected formatting. Notes list uses **Enter** or double-click to open an active note; **Enter** on a Trash item restores it.
 

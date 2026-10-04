@@ -424,7 +424,7 @@ public partial class NoteWindow : Window
             var paragraphIndex = GetEditorParagraphs(Editor.Document).ToList().IndexOf(paragraph);
             var document = ReadEditorDocument().SetChecklistChecked(paragraphIndex, isChecked);
             _updatingEditor = true;
-            try { paragraph.TextDecorations = isChecked ? TextDecorations.Strikethrough : new(); }
+            try { ApplyChecklistCompletionAppearance(paragraph, isChecked); }
             finally { _updatingEditor = false; }
             SetSaveStatus(_updateDocument(_noteId, document));
             _lastAcceptedDocument = document.Copy();
@@ -695,12 +695,7 @@ public partial class NoteWindow : Window
 
     private Paragraph CreateEditorParagraph(NoteParagraph noteParagraph, int number = 1)
     {
-        var paragraph = new Paragraph
-        {
-            Margin = new Thickness(0, 0, 0, 8),
-            TextDecorations = noteParagraph.Kind == NoteBlockKind.Checklist && noteParagraph.IsChecked
-                ? TextDecorations.Strikethrough : new()
-        };
+        var paragraph = new Paragraph { Margin = new Thickness(0, 0, 0, 8) };
         if (noteParagraph.Kind == NoteBlockKind.Numbered)
         {
             paragraph.Inlines.Add(new InlineUIContainer(new TextBlock
@@ -733,7 +728,18 @@ public partial class NoteWindow : Window
             AddStyledText(paragraph, noteRun);
         }
 
+        if (noteParagraph.Kind == NoteBlockKind.Checklist)
+            ApplyChecklistCompletionAppearance(paragraph, noteParagraph.IsChecked);
         return paragraph;
+    }
+
+    private static void ApplyChecklistCompletionAppearance(Paragraph paragraph, bool isChecked)
+    {
+        paragraph.TextDecorations = isChecked ? TextDecorations.Strikethrough : new();
+        if (isChecked)
+            paragraph.SetResourceReference(TextElement.ForegroundProperty, "NotesSecondaryTextBrush");
+        else
+            paragraph.ClearValue(TextElement.ForegroundProperty);
     }
 
     private void RefreshNumberedMarkers()

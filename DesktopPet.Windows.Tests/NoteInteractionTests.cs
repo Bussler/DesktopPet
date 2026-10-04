@@ -57,6 +57,47 @@ public sealed class NoteInteractionTests
     }
 
     [TestMethod]
+    [DataRow(NoteBlockKind.Paragraph, 240)]
+    [DataRow(NoteBlockKind.Checklist, 240)]
+    [DataRow(NoteBlockKind.Bulleted, 640)]
+    [DataRow(NoteBlockKind.Numbered, 640)]
+    public void WrappedTextLeavesAGapBeforeTheScrollbar(NoteBlockKind kind, int width)
+    {
+        var document = NotesDocument.FromText(new string('i', 2000)).SetListKind(0, 2000, kind);
+        var window = CreateChecklistWindow(_ => { }, document: document);
+        try
+        {
+            window.Width = width;
+            ShowHidden(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            var viewer = (ScrollViewer)editor.Template.FindName("PART_ContentHost", editor);
+            var scrollbar = (ScrollBar)viewer.Template.FindName("PART_VerticalScrollBar", viewer);
+            Assert.AreEqual(Visibility.Visible, viewer.ComputedVerticalScrollBarVisibility);
+            AssertGap();
+            editor.SelectAll();
+            Click((ToggleButton)window.FindName("BoldButton"));
+            AssertGap();
+
+            void AssertGap()
+            {
+                editor.UpdateLayout();
+                var scrollbarLeft = scrollbar.TranslatePoint(new Point(), editor).X;
+                var rightmost = 0d;
+                for (var position = editor.Document.ContentStart; position is not null;
+                     position = position.GetNextInsertionPosition(LogicalDirection.Forward))
+                {
+                    var bounds = position.GetCharacterRect(LogicalDirection.Forward);
+                    if (bounds.Top >= 0 && bounds.Bottom <= editor.ActualHeight)
+                        rightmost = Math.Max(rightmost, bounds.Right);
+                }
+                Assert.IsTrue(scrollbarLeft - rightmost >= 10,
+                    $"Wrapped text must leave a gap before the scrollbar; actual gap: {scrollbarLeft - rightmost:F1}.");
+            }
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
     [DataRow(12, 1)]
     [DataRow(16, 12)]
     [DataRow(24, 12)]
@@ -240,6 +281,11 @@ public sealed class NoteInteractionTests
             var before = RenderText();
             Click(checkbox);
             var after = RenderText();
+            var muted = ((SolidColorBrush)window.FindResource("NotesSecondaryTextBrush")).Color;
+            Assert.IsTrue(Enumerable.Range(0, after.Length / 4).Any(index =>
+                after[index * 4] == muted.B && after[index * 4 + 1] == muted.G
+                && after[index * 4 + 2] == muted.R && after[index * 4 + 3] == 255),
+                "Completed text must actually render in the muted theme color.");
             Assert.IsTrue(Enumerable.Range(0, crop.Height).Any(y => Enumerable.Range(0, crop.Width)
                 .Count(x => after[(y * crop.Width + x) * 4 + 3] - before[(y * crop.Width + x) * 4 + 3] > 32)
                     > crop.Width / 3), "Checking must paint a horizontal line through the text.");
@@ -255,6 +301,49 @@ public sealed class NoteInteractionTests
                 var pixels = new byte[crop.Width * crop.Height * 4];
                 bitmap.CopyPixels(crop, pixels, crop.Width * 4, 0);
                 return pixels;
+            }
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    [DataRow("dark", false)]
+    [DataRow("light", false)]
+    [DataRow("dark", true)]
+    [DataRow("light", true)]
+    public void CheckedChecklistTextUsesMutedColorAndRestoresNormalColor(string theme, bool initiallyChecked)
+    {
+        NotesDocument? saved = null;
+        var document = NotesDocument.FromText("Task").SetListKind(0, 4, NoteBlockKind.Checklist)
+            .SetStyle(0, 4, NoteTextStyle.Bold, true).SetChecklistChecked(0, initiallyChecked);
+        var window = CreateChecklistWindow(result => saved = result, theme, document);
+        try
+        {
+            var editor = (RichTextBox)window.FindName("Editor");
+            if (!initiallyChecked)
+            {
+                AssertTextColor(editor.Foreground);
+                Click(ChecklistCheckbox(window));
+            }
+            AssertTextColor((Brush)window.FindResource("NotesSecondaryTextBrush"));
+            window.ApplyAppearance(new NotesConfiguration { Theme = theme == "dark" ? "light" : "dark" }, NoteColor.Green);
+            AssertTextColor((Brush)window.FindResource("NotesSecondaryTextBrush"));
+            editor.SelectAll();
+            Click((ToggleButton)window.FindName("ItalicButton"));
+            AssertTextColor((Brush)window.FindResource("NotesSecondaryTextBrush"));
+            Click(ChecklistCheckbox(window));
+            AssertTextColor(editor.Foreground);
+            Assert.IsNotNull(saved);
+            Assert.IsFalse(saved.Paragraphs[0].IsChecked);
+            Assert.AreEqual("Task", saved.GetPlainText());
+            Assert.AreEqual(NoteTextStyle.Bold | NoteTextStyle.Italic, saved.Paragraphs[0].Runs.Single().Style);
+
+            void AssertTextColor(Brush expected)
+            {
+                var paragraph = (Paragraph)((System.Windows.Documents.List)editor.Document.Blocks.FirstBlock)
+                    .ListItems.FirstListItem.Blocks.FirstBlock;
+                Assert.AreEqual(((SolidColorBrush)expected).Color,
+                    ((SolidColorBrush)paragraph.Inlines.OfType<Run>().Single().Foreground).Color);
             }
         }
         finally { window.CloseWithoutMembershipChange(); }

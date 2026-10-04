@@ -423,10 +423,10 @@ public sealed class HoodSessionTests
     }
 
     [TestMethod]
-    [DataRow(0, DesktopPet.Core.PetAction.Wave)]
-    [DataRow(1, DesktopPet.Core.PetAction.LookAround)]
-    [DataRow(3, DesktopPet.Core.PetAction.LookUp)]
-    public void Advance_SelectsIdleGesturesAndReturnsToRest(int choice, DesktopPet.Core.PetAction expected)
+    [DataRow(0, DesktopPet.Core.PetAction.Wave, 936)]
+    [DataRow(1, DesktopPet.Core.PetAction.LookAround, 2288)]
+    [DataRow(3, DesktopPet.Core.PetAction.LookUp, 720)]
+    public void Advance_SelectsIdleGesturesAndReturnsToRest(int choice, DesktopPet.Core.PetAction expected, int durationMilliseconds)
     {
         var defaults = DesktopPet.Core.HoodConfiguration.Defaults;
         var configuration = defaults with
@@ -444,7 +444,10 @@ public sealed class HoodSessionTests
         Assert.AreEqual(position, session.Position);
 
         var animation = ReadDefinition().GetAnimation(expected);
-        session.Advance(TimeSpan.FromMilliseconds(animation.FrameDurationMilliseconds * animation.Frames.Count));
+        session.Advance(TimeSpan.FromMilliseconds(durationMilliseconds - 1));
+        Assert.AreEqual(expected, session.Presentation.Action);
+        Assert.AreEqual(animation.Frames.Count - 1, session.Presentation.FrameIndex);
+        session.Advance(TimeSpan.FromMilliseconds(1));
         Assert.AreEqual(DesktopPet.Core.PetAction.Idle, session.Presentation.Action);
         Assert.AreEqual(TimeSpan.FromMinutes(1), session.RemainingRandomInterval);
         Assert.AreEqual(position, session.Position);
