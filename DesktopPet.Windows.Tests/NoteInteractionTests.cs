@@ -98,6 +98,52 @@ public sealed class NoteInteractionTests
     }
 
     [TestMethod]
+    [DataRow("light")]
+    [DataRow("dark")]
+    public void ScrollbarOnlyAppearsForScrollOrRightEdgeInteractionWithoutChangingLayout(string theme)
+    {
+        var window = CreateChecklistWindow(_ => { }, theme,
+            NotesDocument.FromText(string.Join("\r\n", Enumerable.Repeat("Long note", 100))));
+        try
+        {
+            ShowHidden(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            var viewer = (ScrollViewer)editor.Template.FindName("PART_ContentHost", editor);
+            var scrollbar = (ScrollBar)viewer.Template.FindName("PART_VerticalScrollBar", viewer);
+            var viewportWidth = viewer.ViewportWidth;
+            Assert.AreEqual(Visibility.Visible, scrollbar.Visibility);
+            Assert.AreEqual(0d, scrollbar.Opacity, "An idle note must hide the scrollbar.");
+            Assert.IsFalse(scrollbar.HasAnimatedProperties, "Initial content layout must not reveal the scrollbar.");
+            Assert.IsTrue(scrollbar.IsHitTestVisible, "The invisible right edge must still receive pointer input.");
+
+            foreach (var property in new[] { "IsMouseOver", "IsMouseCaptureWithin" })
+            {
+                // Simulate WPF input state without moving the user's desktop pointer.
+                var key = (DependencyPropertyKey)typeof(UIElement)
+                    .GetField(property + "PropertyKey", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
+                scrollbar.SetValue(key, true);
+                Assert.AreEqual(1d, scrollbar.Opacity, property + " must reveal the scrollbar.");
+                scrollbar.SetValue(key, false);
+                Assert.AreEqual(0d, scrollbar.Opacity, "Leaving the right edge must hide an idle scrollbar.");
+            }
+
+            viewer.ScrollToVerticalOffset(100);
+            Pump(window);
+            editor.UpdateLayout();
+            Assert.IsTrue(viewer.VerticalOffset > 0, "The real note must scroll.");
+            Assert.AreEqual(1d, scrollbar.Opacity, "Scrolling must reveal the scrollbar.");
+            Assert.AreEqual(0d, scrollbar.GetAnimationBaseValue(UIElement.OpacityProperty),
+                "The scrollbar must return to hidden when the scroll animation stops.");
+            scrollbar.BeginAnimation(UIElement.OpacityProperty, null);
+            editor.UpdateLayout();
+            Assert.AreEqual(0d, scrollbar.Opacity);
+            Assert.AreEqual(viewportWidth, viewer.ViewportWidth, "Revealing the scrollbar must not reflow the note.");
+            Assert.IsTrue(viewer.VerticalOffset > 0, "Hiding the scrollbar must preserve the scroll position.");
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
     [DataRow(12, 1)]
     [DataRow(16, 12)]
     [DataRow(24, 12)]

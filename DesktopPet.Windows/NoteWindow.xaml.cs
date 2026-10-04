@@ -152,6 +152,18 @@ public partial class NoteWindow : Window
             ? (scrollViewer.HorizontalOffset, scrollViewer.VerticalOffset)
             : null;
 
+    private void OnEditorScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (e.VerticalChange != 0 && sender is ScrollViewer viewer &&
+            viewer.Template.FindName("PART_VerticalScrollBar", viewer) is System.Windows.Controls.Primitives.ScrollBar scrollbar)
+        {
+            scrollbar.BeginAnimation(OpacityProperty, new DoubleAnimation(1, 1, TimeSpan.FromSeconds(1))
+            {
+                FillBehavior = FillBehavior.Stop
+            });
+        }
+    }
+
     private void RestoreEditorScrollPosition((double Horizontal, double Vertical)? position)
     {
         if (position is null)
