@@ -31,7 +31,7 @@ try {
     Invoke-Dotnet @('restore', '.\DesktopPet.sln', '--locked-mode')
     & (Join-Path $PSScriptRoot 'Test-HoodRunSprites.ps1')
     Invoke-Dotnet @('test', '.\DesktopPet.sln', '--configuration', 'Release', '--no-restore',
-        '--logger', 'trx;LogFileName=DesktopPet.Tests.trx',
+        '--logger', 'trx',
         '--results-directory', '.\DesktopPet.Tests\TestResults')
     Invoke-Dotnet @('build', '.\DesktopPet.sln', '--configuration', 'Release', '--no-restore')
     Invoke-Dotnet @('publish', '.\DesktopPet.Windows\DesktopPet.Windows.csproj',

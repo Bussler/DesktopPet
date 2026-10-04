@@ -1,0 +1,121 @@
+<Window x:Class="DesktopPet.Windows.NoteWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Hood note"
+        Width="320" Height="300"
+        MinWidth="240" MinHeight="180" MaxWidth="1920" MaxHeight="1080"
+        WindowStartupLocation="Manual"
+        WindowStyle="None" ResizeMode="CanResize"
+        ShowInTaskbar="False" ShowActivated="False" Topmost="False"
+        FontFamily="{DynamicResource AppFontFamily}" FontSize="{DynamicResource AppBodyFontSize}"
+        Background="#FFFFF1AC" Foreground="{DynamicResource NotesTextBrush}"
+        LocationChanged="OnGeometryChanged" SizeChanged="OnGeometryChanged"
+        Closing="OnClosing" PreviewKeyDown="OnPreviewKeyDown">
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0" ResizeBorderThickness="5" CornerRadius="8"
+                      GlassFrameThickness="0" UseAeroCaptionButtons="False" />
+    </WindowChrome.WindowChrome>
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="NotesStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <!-- Hidden keeps the editor's bounds and scroll position unchanged. -->
+            <Style x:Key="FocusedControls" TargetType="FrameworkElement">
+                <Setter Property="Visibility" Value="Hidden" />
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsActive, RelativeSource={RelativeSource AncestorType=Window}}" Value="True">
+                        <Setter Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+                    <DataTrigger Binding="{Binding ContextMenu.IsOpen, ElementName=MenuButton}" Value="True">
+                        <Setter Property="Visibility" Value="Visible" />
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </ResourceDictionary>
+    </Window.Resources>
+    <Border BorderBrush="{DynamicResource NotesBorderBrush}" BorderThickness="1"
+            CornerRadius="{DynamicResource AppWindowRadius}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="44" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="40" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid Grid.Row="0" Background="Transparent" MouseLeftButtonDown="OnHeaderMouseLeftButtonDown">
+                <Border x:Name="NoteHeader" Style="{StaticResource FocusedControls}"
+                        Background="{DynamicResource NotesHoverBrush}" CornerRadius="{DynamicResource AppNoteHeaderRadius}" Padding="10,5,6,5">
+                    <DockPanel>
+                        <Button x:Name="CloseButton" DockPanel.Dock="Right" Style="{StaticResource NoteIconButton}"
+                                FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" Content="&#xE8BB;"
+                                ToolTip="Close note" AutomationProperties.Name="Close note" Click="OnCloseClick" />
+                        <Button x:Name="MenuButton" DockPanel.Dock="Right" Style="{StaticResource NoteIconButton}"
+                                FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16" Content="&#xE712;"
+                                ToolTip="Note menu" AutomationProperties.Name="Note menu" Margin="0,0,4,0"
+                                Click="OnHeaderMenuClick" />
+                        <TextBox x:Name="NoteTitle" VerticalAlignment="Center" HorizontalAlignment="Left"
+                                 FontWeight="{DynamicResource AppNoteTitleFontWeight}" FontSize="{DynamicResource AppNoteTitleFontSize}" Background="Transparent" BorderThickness="0"
+                                 Padding="2,4" Margin="0,0,8,0" MinWidth="48"
+                                 ToolTip="Edit note name" AutomationProperties.Name="Note name" TextChanged="OnNameChanged">
+                            <TextBox.Template>
+                                <ControlTemplate TargetType="TextBox">
+                                    <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                                        <ScrollViewer x:Name="PART_ContentHost" />
+                                    </Border>
+                                </ControlTemplate>
+                            </TextBox.Template>
+                        </TextBox>
+                    </DockPanel>
+                </Border>
+            </Grid>
+            <RichTextBox x:Name="Editor" Grid.Row="1" Margin="12,8,12,0"
+                         AcceptsTab="True" IsUndoEnabled="False" IsDocumentEnabled="True"
+                         VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                         Padding="0" BorderThickness="0" Background="Transparent"
+                         FontFamily="Segoe UI" FontSize="16" Foreground="{DynamicResource NotesTextBrush}"
+                         SelectionChanged="OnSelectionChanged" TextChanged="OnTextChanged">
+                <RichTextBox.Template>
+                    <ControlTemplate TargetType="RichTextBox">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ScrollViewer x:Name="PART_ContentHost" Padding="{TemplateBinding Padding}"
+                                          HorizontalScrollBarVisibility="{TemplateBinding HorizontalScrollBarVisibility}"
+                                          VerticalScrollBarVisibility="{TemplateBinding VerticalScrollBarVisibility}" />
+                        </Border>
+                    </ControlTemplate>
+                </RichTextBox.Template>
+                <FlowDocument PagePadding="0"><Paragraph /></FlowDocument>
+            </RichTextBox>
+            <StackPanel x:Name="FormattingToolbar" Grid.Row="2" Orientation="Horizontal" Margin="12,4,12,4"
+                        Style="{StaticResource FocusedControls}">
+                <ToggleButton x:Name="BoldButton" Style="{StaticResource NoteFormattingButton}" Content="B"
+                              ToolTip="Bold (Ctrl+B)" AutomationProperties.Name="Bold" FontWeight="Bold" Click="OnBoldClick" />
+                <ToggleButton x:Name="ItalicButton" Style="{StaticResource NoteFormattingButton}" Content="I"
+                              ToolTip="Italic (Ctrl+I)" AutomationProperties.Name="Italic" FontStyle="Italic" Click="OnItalicClick" />
+                <ToggleButton x:Name="UnderlineButton" Style="{StaticResource NoteFormattingButton}"
+                              ToolTip="Underline (Ctrl+U)" AutomationProperties.Name="Underline" Click="OnUnderlineClick">
+                    <TextBlock Text="U" TextDecorations="Underline" />
+                </ToggleButton>
+                <ToggleButton x:Name="StrikethroughButton" Style="{StaticResource NoteFormattingButton}"
+                              ToolTip="Strikethrough (Ctrl+Shift+X)" AutomationProperties.Name="Strikethrough" Click="OnStrikethroughClick">
+                    <TextBlock Text="S" TextDecorations="Strikethrough" />
+                </ToggleButton>
+                <Separator Width="1" Margin="6,8" />
+                <ToggleButton x:Name="BulletsButton" Style="{StaticResource NoteFormattingButton}" Content="•"
+                              ToolTip="Bulleted list" AutomationProperties.Name="Bulleted list" Click="OnBulletsClick" />
+                <ToggleButton x:Name="NumberedButton" Style="{StaticResource NoteFormattingButton}" Content="1."
+                              ToolTip="Numbered list" AutomationProperties.Name="Numbered list" Click="OnNumberedClick" />
+                <ToggleButton x:Name="ChecklistButton" Style="{StaticResource NoteFormattingButton}" Content="☑"
+                              ToolTip="Checklist" AutomationProperties.Name="Checklist" Click="OnChecklistClick" />
+            </StackPanel>
+            <DockPanel Grid.Row="3" Margin="12,0,12,8">
+                <Button x:Name="RetrySaveButton" DockPanel.Dock="Right" Content="_Retry save"
+                        ToolTip="Retry saving the latest note changes" AutomationProperties.Name="Retry save"
+                        Margin="8,0,0,0" Padding="8,3" Visibility="Collapsed" Click="OnRetrySaveClick" />
+                <TextBlock x:Name="SaveStatus" FontSize="{DynamicResource AppSmallFontSize}" Foreground="{DynamicResource NotesErrorBrush}"
+                           TextWrapping="Wrap" Visibility="Collapsed" />
+            </DockPanel>
+        </Grid>
+    </Border>
+</Window>

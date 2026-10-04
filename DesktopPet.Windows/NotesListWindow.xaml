@@ -1,0 +1,103 @@
+<Window x:Class="DesktopPet.Windows.NotesListWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Notes"
+        Width="460"
+        Height="540"
+        MinWidth="360"
+        MinHeight="380"
+        WindowStartupLocation="CenterScreen"
+        FontFamily="{DynamicResource AppFontFamily}" FontSize="{DynamicResource AppBodyFontSize}"
+        Background="{DynamicResource NotesSurfaceBrush}" Foreground="{DynamicResource NotesTextBrush}">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="NotesStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+    <DockPanel Margin="{DynamicResource AppWindowPadding}">
+        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+            <TextBlock x:Name="NotesListHeadingText" Text="Notes" FontSize="{DynamicResource AppSettingsHeadingFontSize}" FontWeight="{DynamicResource AppSettingsHeadingFontWeight}" Foreground="{DynamicResource AppSettingsTextBrush}" Margin="0,0,0,16" />
+            <Label x:Name="SearchLabel" Target="{Binding ElementName=SearchBox}" Content="_Search notes" Padding="0,0,0,4" />
+            <TextBox x:Name="SearchBox"
+                     Style="{StaticResource DefaultTextBoxStyle}"
+                     Background="{DynamicResource NotesCardBrush}" Foreground="{DynamicResource NotesTextBrush}"
+                     CaretBrush="{DynamicResource NotesTextBrush}" BorderBrush="{DynamicResource NotesSecondaryTextBrush}"
+                     BorderThickness="1"
+                     AutomationProperties.Name="Search notes"
+                    Height="36"
+                    Padding="10,6"
+                     TextChanged="OnSearchChanged" />
+        </StackPanel>
+        <DockPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+            <Button x:Name="RetrySaveButton" DockPanel.Dock="Right" Content="_Retry save"
+                    ToolTip="Retry saving the latest notes changes" AutomationProperties.Name="Retry save"
+                    Margin="8,0,0,0" Padding="8,3" Visibility="Collapsed" Click="OnRetrySaveClick" />
+            <TextBlock x:Name="ManagerStatus" VerticalAlignment="Center"
+                       Foreground="{DynamicResource NotesErrorBrush}" TextWrapping="Wrap" Visibility="Collapsed" />
+        </DockPanel>
+        <StackPanel x:Name="ActiveActions" DockPanel.Dock="Bottom" Orientation="Horizontal"
+                    HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button x:Name="OpenButton" Content="_Open selected" IsDefault="True" IsEnabled="False" MinWidth="110" Margin="0,0,8,0" Click="OnOpenClick" />
+            <Button x:Name="TrashButton" Content="_Trash" ToolTip="Move selected notes to Trash"
+                    AutomationProperties.Name="Move selected notes to Trash" IsEnabled="False"
+                    MinWidth="80" Margin="0,0,8,0" Click="OnTrashClick" />
+            <Button x:Name="NewNoteButton" Content="_New note" MinWidth="90" Click="OnNewNoteClick" />
+        </StackPanel>
+        <StackPanel x:Name="TrashActions" DockPanel.Dock="Bottom" Orientation="Horizontal"
+                    HorizontalAlignment="Right" Margin="0,10,0,0" Visibility="Collapsed">
+            <Button x:Name="RestoreButton" Content="_Restore selected" IsEnabled="False" MinWidth="120" Margin="0,0,8,0" Click="OnRestoreClick" />
+            <Button x:Name="PermanentlyDeleteButton" Content="Delete _permanently" IsEnabled="False" MinWidth="140" Click="OnPermanentlyDeleteClick" />
+        </StackPanel>
+        <TabControl x:Name="Views" SelectedIndex="0" SelectionChanged="OnViewsSelectionChanged">
+            <TabItem Header="_Notes">
+                <Grid Margin="0,8,0,0">
+                    <ListBox x:Name="ResultsList" Background="Transparent" BorderThickness="0"
+                             SelectionMode="Extended" ToolTip="Ctrl+click to select notes, Shift+click for a range, or Ctrl+A for all results"
+                             ItemContainerStyle="{StaticResource NoteCard}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             AutomationProperties.Name="Active notes"
+                             SelectionChanged="OnSelectionChanged"
+                             MouseDoubleClick="OnResultsDoubleClick"
+                             PreviewKeyDown="OnResultsKeyDown">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" FontWeight="{DynamicResource AppListTitleFontWeight}" FontSize="{DynamicResource AppListTitleFontSize}" />
+                                    <TextBlock Text="{Binding Preview}" TextWrapping="Wrap" MaxHeight="54" FontSize="{DynamicResource AppListPreviewFontSize}" Margin="0,6,0,0" />
+                                    <TextBlock Text="{Binding StateLabel}" Foreground="{DynamicResource NotesSecondaryTextBrush}" FontSize="{DynamicResource AppListSecondaryFontSize}" Margin="0,8,0,0" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <TextBlock x:Name="EmptyState" TextWrapping="Wrap" TextAlignment="Center"
+                               VerticalAlignment="Center" Margin="24" Foreground="{DynamicResource NotesSecondaryTextBrush}" Visibility="Collapsed" />
+                </Grid>
+            </TabItem>
+            <TabItem Header="_Trash">
+                <Grid Margin="0,8,0,0">
+                    <ListBox x:Name="TrashResultsList" Background="Transparent" BorderThickness="0"
+                             SelectionMode="Extended" ToolTip="Ctrl+click to select notes, Shift+click for a range, or Ctrl+A for all results"
+                             ItemContainerStyle="{StaticResource NoteCard}"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             AutomationProperties.Name="Trashed notes"
+                             SelectionChanged="OnSelectionChanged"
+                             PreviewKeyDown="OnTrashResultsKeyDown">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" FontWeight="{DynamicResource AppListTitleFontWeight}" FontSize="{DynamicResource AppListTitleFontSize}" />
+                                    <TextBlock Text="{Binding Preview}" TextWrapping="Wrap" MaxHeight="54" FontSize="{DynamicResource AppListPreviewFontSize}" Margin="0,6,0,0" />
+                                    <TextBlock Text="In Trash" Foreground="{DynamicResource NotesSecondaryTextBrush}" FontSize="{DynamicResource AppListSecondaryFontSize}" Margin="0,8,0,0" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                    <TextBlock x:Name="TrashEmptyState" TextWrapping="Wrap" TextAlignment="Center"
+                               VerticalAlignment="Center" Margin="24" Foreground="{DynamicResource NotesSecondaryTextBrush}" Visibility="Collapsed" />
+                </Grid>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

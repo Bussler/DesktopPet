@@ -18,9 +18,15 @@ public sealed class HoodConfigurationTests
         Assert.IsTrue(File.Exists(store.Path));
         var yaml = File.ReadAllText(store.Path);
         StringAssert.Contains(yaml, "schema_version: 1");
+        StringAssert.Contains(yaml, "ui_style: sticky-notes");
         StringAssert.Contains(yaml, "hunger_points_per_hour: 12.5");
         StringAssert.Contains(yaml, "minimum_minutes: 1");
         StringAssert.Contains(yaml, "maximum_minutes: 5");
+        StringAssert.Contains(yaml, "default_color: yellow");
+        StringAssert.Contains(yaml, "text_size: 16");
+        StringAssert.Contains(yaml, "theme: system");
+        StringAssert.Contains(yaml, "always_on_top: false");
+        StringAssert.Contains(yaml, "animate_show_hide: true");
         Assert.AreEqual(0, Directory.GetFiles(directory.Path, "*.tmp").Length);
 
         File.WriteAllText(store.Path, ReplaceSetting(yaml, "hunger_points_per_hour", "37.25"));
@@ -28,6 +34,180 @@ public sealed class HoodConfigurationTests
         var edited = store.LoadOrCreate();
         Assert.AreEqual(37.25, edited.Needs.HungerPointsPerHour);
         Assert.AreEqual(16, edited.Needs.BoredomPointsPerHour);
+    }
+
+    [TestMethod]
+    public void LoadOrCreate_LegacyConfigurationWithoutNotesUsesDefaultsAndPreservesHoodValues()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new YamlConfigurationStore(Path.Combine(directory.Path, "config.yaml"));
+        store.LoadOrCreate();
+        var legacyYaml = Regex.Replace(
+            File.ReadAllText(store.Path),
+            @"(?m)^notes:\r?\n(?:[ \t]+[^\r\n]*(?:\r?\n|$))*",
+            string.Empty);
+        legacyYaml = ReplaceSetting(legacyYaml, "hunger_points_per_hour", "37.25");
+        legacyYaml = ReplaceSetting(legacyYaml, "always_on_top", "false");
+        File.WriteAllText(store.Path, legacyYaml);
+
+        var configuration = store.LoadOrCreate();
+
+        Assert.AreEqual(new NotesConfiguration(), configuration.Notes);
+        Assert.AreEqual(37.25, configuration.Needs.HungerPointsPerHour);
+        Assert.IsFalse(configuration.Behavior.AlwaysOnTop);
+    }
+
+    [TestMethod]
+    public void LoadOrCreate_ConfigurationWithoutUiStyleDefaultsToStickyNotesAndPreservesValues()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new YamlConfigurationStore(Path.Combine(directory.Path, "config.yaml"));
+        store.LoadOrCreate();
+        var yaml = File.ReadAllText(store.Path);
+        yaml = Regex.Replace(yaml, @"(?m)^ui_style:\s*.*(?:\r?\n|$)", string.Empty);
+        yaml = ReplaceSetting(yaml, "hunger_points_per_hour", "37.25");
+        yaml = ReplaceSetting(yaml, "theme", "dark");
+        File.WriteAllText(store.Path, yaml);
+
+        var restored = store.LoadOrCreate();
+
+        Assert.AreEqual(UiStyleCatalog.StickyNotes, restored.UiStyle);
+        Assert.AreEqual("dark", restored.Notes.Theme);
+        Assert.AreEqual(37.25, restored.Needs.HungerPointsPerHour);
+        store.Save(restored);
+        Assert.AreEqual(UiStyleCatalog.StickyNotes, store.LoadOrCreate().UiStyle);
+    }
+
+    [TestMethod]
+    [DataRow("STICKY-NOTES", "sticky-notes")]
+    [DataRow("MINIMAL", "minimal")]
+    [DataRow("SoFt", "soft")]
+    [DataRow("STuDiO", "studio")]
+    public void UiStyleAcceptsCaseInsensitiveInputAndSavesCanonicalLowercase(string input, string canonical)
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new YamlConfigurationStore(Path.Combine(directory.Path, "config.yaml"));
+        store.LoadOrCreate();
+        File.WriteAllText(store.Path, ReplaceSetting(File.ReadAllText(store.Path), "ui_style", input));
+
+        var restored = store.LoadOrCreate();
+        Assert.AreEqual(canonical, restored.UiStyle);
+        store.Save(restored with { UiStyle = input });
+
+        StringAssert.Contains(File.ReadAllText(store.Path), $"ui_style: {canonical}");
+        Assert.AreEqual(canonical, store.LoadOrCreate().UiStyle);
+    }
+
+    [TestMethod]
+    public void LoadOrCreate_RejectsBlankNullNumericAndUnknownUiStylesWithoutChangingTheFile()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new YamlConfigurationStore(Path.Combine(directory.Path, "config.yaml"));
+        store.LoadOrCreate();
+        var baseline = File.ReadAllText(store.Path);
+
+        foreach (var value in new[] { new string('"', 2), "null", "123", "existing", "unknown" })
+        {
+            var invalid = ReplaceSetting(baseline, "ui_style", value);
+            File.WriteAllText(store.Path, invalid);
+            var exception = Assert.Throws<HoodConfigurationException>(() => store.LoadOrCreate(), value);
+            Assert.AreEqual("ui_style", exception.SettingPath, value);
+            Assert.AreEqual(invalid, File.ReadAllText(store.Path), "Invalid configuration must remain available for correction.");
+        }
+    }
+
+    [TestMethod]
+    public void NotesAppearanceSettings_RoundTripWithoutChangingHoodsIndependentTopmostSetting()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new YamlConfigurationStore(Path.Combine(directory.Path, "config.yaml"));
+        var initial = store.LoadOrCreate();
+        var candidate = initial with
+        {
+            Notes = initial.Notes with
+            {
+                DefaultColor = "blue",
+                TextSize = 24,
+                Theme = "dark",
+                AlwaysOnTop = true,
+                AnimateShowHide = false
+            }
+        };
+
+        store.Save(candidate);
+        var restored = store.LoadOrCreate();
+
+        Assert.AreEqual(candidate, restored);
+        Assert.IsTrue(restored.Notes.AlwaysOnTop);
+        Assert.IsFalse(restored.Notes.AnimateShowHide);
+        Assert.IsTrue(restored.Behavior.AlwaysOnTop);
+        StringAssert.Contains(File.ReadAllText(store.Path), "default_color: blue");
+        StringAssert.Contains(File.ReadAllText(store.Path), "theme: dark");
+        StringAssert.Contains(File.ReadAllText(store.Path), "animate_show_hide: false");
+    }
+
+    [TestMethod]
+    public void SaveAndApply_NotesSettingsPreserveHoodBehaviorAndContinuationState()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new YamlConfigurationStore(Path.Combine(directory.Path, "config.yaml"));
+        var initial = store.LoadOrCreate();
+        var session = CreateSession(initial);
+        session.Advance(TimeSpan.FromSeconds(2));
+        var position = session.Position;
+        var needs = session.Needs;
+        var action = session.Presentation.Action;
+        var mode = session.Mode;
+        var remainingRandomInterval = session.RemainingRandomInterval;
+        var remainingNap = session.RemainingNap;
+        var controller = new HoodConfigurationController(session, store);
+
+        controller.SaveAndApply("notes", initial with
+        {
+            Notes = initial.Notes with
+            {
+                AlwaysOnTop = true,
+                TextSize = 20,
+                Theme = "dark",
+                AnimateShowHide = false
+            }
+        });
+        Assert.IsTrue(controller.Current.Behavior.AlwaysOnTop);
+        Assert.IsTrue(controller.Current.Notes.AlwaysOnTop);
+        Assert.IsFalse(controller.Current.Notes.AnimateShowHide);
+        Assert.AreEqual(position, session.Position);
+        Assert.AreEqual(needs, session.Needs);
+        Assert.AreEqual(action, session.Presentation.Action);
+        Assert.AreEqual(mode, session.Mode);
+        Assert.AreEqual(remainingRandomInterval, session.RemainingRandomInterval);
+        Assert.AreEqual(remainingNap, session.RemainingNap);
+
+        controller.SaveAndApply("behavior.always_on_top", controller.Current with
+        {
+            Behavior = controller.Current.Behavior with { AlwaysOnTop = false }
+        });
+        Assert.IsFalse(controller.Current.Behavior.AlwaysOnTop);
+        Assert.IsTrue(controller.Current.Notes.AlwaysOnTop);
+    }
+
+    [TestMethod]
+    public void Validate_ReportsInvalidNotesAppearanceSettingPathsAndRanges()
+    {
+        var defaults = HoodConfiguration.Defaults;
+        var invalid = new (HoodConfiguration Configuration, string SettingPath)[]
+        {
+            (defaults with { Notes = defaults.Notes with { DefaultColor = "orange" } }, "notes.default_color"),
+            (defaults with { Notes = defaults.Notes with { TextSize = 11 } }, "notes.text_size"),
+            (defaults with { Notes = defaults.Notes with { TextSize = 33 } }, "notes.text_size"),
+            (defaults with { Notes = defaults.Notes with { Theme = "sepia" } }, "notes.theme")
+        };
+
+        foreach (var (configuration, settingPath) in invalid)
+        {
+            var exception = Assert.Throws<HoodConfigurationException>(
+                () => HoodConfigurationValidator.Validate(configuration));
+            Assert.AreEqual(settingPath, exception.SettingPath);
+        }
     }
 
     [TestMethod]
@@ -312,6 +492,42 @@ public sealed class HoodConfigurationTests
         Assert.AreEqual(initial, controller.Current);
         Assert.AreEqual(initial, session.Configuration);
         Assert.IsTrue(controller.Current.Behavior.AlwaysOnTop);
+    }
+
+    [TestMethod]
+    public void SaveAndApply_WhenUiStyleStorageFails_KeepsThePreviousEffectiveStyle()
+    {
+        var initial = HoodConfiguration.Defaults;
+        var session = CreateSession(initial);
+        var controller = new HoodConfigurationController(session, new FailingConfigurationStore());
+
+        var exception = Assert.Throws<HoodConfigurationException>(() =>
+            controller.SaveAndApply("ui_style", initial with { UiStyle = UiStyleCatalog.Minimal }));
+
+        Assert.AreEqual("ui_style", exception.SettingPath);
+        Assert.AreEqual(UiStyleCatalog.StickyNotes, controller.Current.UiStyle);
+        Assert.AreEqual(initial, session.Configuration);
+    }
+
+    [TestMethod]
+    public void SaveAndApply_WhenNotesAppearanceSaveFails_KeepsThePreviousSettingsAndNamesTheField()
+    {
+        var initial = HoodConfiguration.Defaults;
+        var session = CreateSession(initial);
+        var controller = new HoodConfigurationController(session, new FailingConfigurationStore());
+        var candidate = initial with
+        {
+            Notes = initial.Notes with { DefaultColor = "pink", TextSize = 24, AlwaysOnTop = true }
+        };
+
+        var exception = Assert.Throws<HoodConfigurationException>(
+            () => controller.SaveAndApply("notes.text_size", candidate));
+
+        Assert.AreEqual("notes.text_size", exception.SettingPath);
+        Assert.AreEqual(initial, controller.Current);
+        Assert.AreEqual(initial, session.Configuration);
+        Assert.AreEqual("yellow", controller.Current.Notes.DefaultColor);
+        Assert.IsFalse(controller.Current.Notes.AlwaysOnTop);
     }
 
     [TestMethod]

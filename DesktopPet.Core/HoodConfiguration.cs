@@ -9,13 +9,35 @@ namespace DesktopPet.Core;
 public sealed record HoodConfiguration
 {
     public int? SchemaVersion { get; init; } = 1;
+    public string UiStyle { get; init; } = UiStyleCatalog.StickyNotes;
     public BehaviorSettings Behavior { get; init; } = new();
     public NeedSettings Needs { get; init; } = new();
     public SleepSettings Sleep { get; init; } = new();
     public RandomIntervalSettings RandomInterval { get; init; } = new();
     public InitialAreaSettings InitialArea { get; init; } = new();
+    public NotesConfiguration Notes { get; init; } = new();
 
     public static HoodConfiguration Defaults => new();
+}
+
+public static class UiStyleCatalog
+{
+    public const string StickyNotes = "sticky-notes";
+    public const string Minimal = "minimal";
+    public const string Soft = "soft";
+    public const string Studio = "studio";
+
+    public static IReadOnlyList<string> Supported { get; } = Array.AsReadOnly([StickyNotes, Minimal, Soft, Studio]);
+
+    public static bool TryCanonicalize(string? value, out string canonical)
+    {
+        canonical = value?.ToLowerInvariant() ?? string.Empty;
+        return Supported.Contains(canonical, StringComparer.Ordinal);
+    }
+
+    public static string Canonicalize(string? value) => TryCanonicalize(value, out var canonical)
+        ? canonical
+        : throw new HoodConfigurationException("ui_style", "Choose sticky-notes, minimal, soft, or studio.");
 }
 
 public sealed record BehaviorSettings
@@ -57,6 +79,78 @@ public sealed record InitialAreaSettings
     public double BottomMargin { get; init; } = 16;
 }
 
+public sealed record NotesConfiguration
+{
+    public string DefaultColor { get; init; } = "yellow";
+    public int TextSize { get; init; } = 16;
+    public string Theme { get; init; } = "system";
+    public bool AlwaysOnTop { get; init; }
+    public bool AnimateShowHide { get; init; } = true;
+}
+
+public enum NoteColor
+{
+    Yellow,
+    Blue,
+    Green,
+    Pink,
+    Lavender
+}
+
+public enum NoteTheme
+{
+    System,
+    Light,
+    Dark
+}
+
+public static class NoteColorPalette
+{
+    private sealed record StyleBackgrounds(string[] Light, string[] Dark);
+
+    private static readonly IReadOnlyDictionary<string, StyleBackgrounds> Backgrounds =
+        new Dictionary<string, StyleBackgrounds>(StringComparer.Ordinal)
+        {
+            [UiStyleCatalog.StickyNotes] = new(
+                ["#FFFFF4B8", "#FFDCEEFF", "#FFE2F4E7", "#FFFBE1E7", "#FFEDE3FA"],
+                ["#FF4A421F", "#FF243A4D", "#FF284333", "#FF49303A", "#FF3F344F"]),
+            [UiStyleCatalog.Minimal] = new(
+                ["#FFF4F0D8", "#FFDDEAF3", "#FFE1EEE5", "#FFF2E3E5", "#FFE8E5F1"],
+                ["#FF48432C", "#FF273C4B", "#FF2B4034", "#FF46343B", "#FF39354A"]),
+            [UiStyleCatalog.Soft] = new(
+                ["#FFF5E2BC", "#FFD9EAE7", "#FFDCEBDD", "#FFF4DED5", "#FFEBDFEB"],
+                ["#FF4B3826", "#FF27413F", "#FF2D4234", "#FF493330", "#FF453447"]),
+            [UiStyleCatalog.Studio] = new(
+                ["#FFFFE9AF", "#FFD8E5FB", "#FFD6EEE0", "#FFF5DDE8", "#FFE5DCF7"],
+                ["#FF51401F", "#FF293A5A", "#FF294437", "#FF492E3C", "#FF3D3155"])
+        };
+
+    public static IReadOnlyList<NoteColor> Colors { get; } = Array.AsReadOnly(Enum.GetValues<NoteColor>());
+
+    public static bool TryParse(string? value, out NoteColor color) =>
+        Enum.TryParse(value, ignoreCase: true, out color) && Enum.IsDefined(color);
+
+    public static NoteColor Parse(string value) => TryParse(value, out var color)
+        ? color
+        : throw new ArgumentOutOfRangeException(nameof(value), value, "Choose a supported note color.");
+
+    public static string GetBackgroundHex(
+        NoteColor color,
+        bool darkTheme,
+        string style = UiStyleCatalog.StickyNotes)
+    {
+        if (!Enum.IsDefined(color))
+        {
+            throw new ArgumentOutOfRangeException(nameof(color), color, "Choose a supported note color.");
+        }
+
+        var palette = Backgrounds[UiStyleCatalog.Canonicalize(style)];
+        return (darkTheme ? palette.Dark : palette.Light)[(int)color];
+    }
+
+    public static string GetForegroundHex(bool darkTheme) => darkTheme ? "#FFF2F4F7" : "#FF1B1F24";
+}
+
 public sealed class HoodConfigurationException : Exception
 {
     public HoodConfigurationException(string settingPath, string message, Exception? innerException = null)
@@ -77,6 +171,11 @@ public static class HoodConfigurationValidator
         if (configuration.SchemaVersion != 1)
         {
             throw new HoodConfigurationException("schema_version", "This application requires schema version 1.");
+        }
+
+        if (!UiStyleCatalog.TryCanonicalize(configuration.UiStyle, out _))
+        {
+            throw new HoodConfigurationException("ui_style", "Choose sticky-notes, minimal, soft, or studio.");
         }
 
         if (configuration.Behavior is null)
@@ -102,6 +201,26 @@ public static class HoodConfigurationValidator
         if (configuration.InitialArea is null)
         {
             throw new HoodConfigurationException("initial_area", "This section must be a YAML mapping.");
+        }
+
+        if (configuration.Notes is null)
+        {
+            throw new HoodConfigurationException("notes", "This section must be a YAML mapping.");
+        }
+
+        if (!NoteColorPalette.TryParse(configuration.Notes.DefaultColor, out _))
+        {
+            throw new HoodConfigurationException("notes.default_color", "Choose yellow, blue, green, pink, or lavender.");
+        }
+
+        if (configuration.Notes.TextSize is < 12 or > 32)
+        {
+            throw new HoodConfigurationException("notes.text_size", "Note text size must be a whole number from 12 through 32 points.");
+        }
+
+        if (!Enum.TryParse<NoteTheme>(configuration.Notes.Theme, ignoreCase: true, out var noteTheme) || !Enum.IsDefined(noteTheme))
+        {
+            throw new HoodConfigurationException("notes.theme", "Choose system, light, or dark.");
         }
 
         RequireFiniteNonnegative(configuration.Needs.HungerPointsPerHour, "needs.hunger_points_per_hour");
@@ -214,7 +333,7 @@ public sealed class YamlConfigurationStore : IYamlConfigurationStore
     public void Save(HoodConfiguration configuration)
     {
         HoodConfigurationValidator.Validate(configuration);
-        var yaml = Serializer.Serialize(configuration);
+        var yaml = Serializer.Serialize(configuration with { UiStyle = UiStyleCatalog.Canonicalize(configuration.UiStyle) });
         try
         {
             AtomicFile.WriteAllText(_path, yaml);
@@ -240,7 +359,7 @@ public sealed class YamlConfigurationStore : IYamlConfigurationStore
             var configuration = Deserializer.Deserialize<HoodConfiguration>(reader)
                 ?? throw new HoodConfigurationException("config.yaml", "The configuration document is empty.");
             HoodConfigurationValidator.Validate(configuration);
-            return configuration;
+            return configuration with { UiStyle = UiStyleCatalog.Canonicalize(configuration.UiStyle) };
         }
         catch (HoodConfigurationException)
         {
@@ -279,6 +398,7 @@ public sealed class HoodConfigurationController
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(settingPath);
         HoodConfigurationValidator.Validate(candidate);
+        candidate = candidate with { UiStyle = UiStyleCatalog.Canonicalize(candidate.UiStyle) };
         var previous = Current;
         var startupChanged = candidate.Behavior.StartWithWindows != previous.Behavior.StartWithWindows;
         if (startupChanged && _startupRegistration is null)

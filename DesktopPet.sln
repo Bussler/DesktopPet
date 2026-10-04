@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DesktopPet.Windows", "Deskt
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DesktopPet.Tests", "DesktopPet.Tests\DesktopPet.Tests.csproj", "{7D7EFD80-C26E-49DD-867D-CC2CD32726B8}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DesktopPet.Windows.Tests", "DesktopPet.Windows.Tests\DesktopPet.Windows.Tests.csproj", "{2CC53631-A4D2-4BC2-92DA-7D4A57F97F19}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -55,6 +57,18 @@ Global
 		{7D7EFD80-C26E-49DD-867D-CC2CD32726B8}.Release|x64.Build.0 = Release|Any CPU
 		{7D7EFD80-C26E-49DD-867D-CC2CD32726B8}.Release|x86.ActiveCfg = Release|Any CPU
 		{7D7EFD80-C26E-49DD-867D-CC2CD32726B8}.Release|x86.Build.0 = Release|Any CPU
+		{2CC53631-A4D2-4BC2-92DA-7D4A57F97F19}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2CC53631-A4D2-4BC2-92DA-7D4A57F97F19}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2CC53631-A4D2-4BC2-92DA-7D4A57F97F19}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{2CC53631-A4D2-4BC2-92DA-7D4A57F97F19}.Debug|x64.Build.0 = Debug|Any CPU
+		{2CC53631-A4D2-4BC2-92DA-7D4A57F97F19}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{2CC53631-A4D2-4BC2-92DA-7D4A57F97F19}.Debug|x86.Build.0 = Debug|Any CPU
+		{2CC53631-A4D2-4BC2-92DA-7D4A57F97F19}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2CC53631-A4D2-4BC2-92DA-7D4A57F97F19}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2CC53631-A4D2-4BC2-92DA-7D4A57F97F19}.Release|x64.ActiveCfg = Release|Any CPU
+		{2CC53631-A4D2-4BC2-92DA-7D4A57F97F19}.Release|x64.Build.0 = Release|Any CPU
+		{2CC53631-A4D2-4BC2-92DA-7D4A57F97F19}.Release|x86.ActiveCfg = Release|Any CPU
+		{2CC53631-A4D2-4BC2-92DA-7D4A57F97F19}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

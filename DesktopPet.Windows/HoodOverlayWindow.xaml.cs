@@ -21,6 +21,11 @@ public partial class HoodOverlayWindow : Window
     private readonly LoadedHoodAssets _assets;
     private readonly Action _showSettings;
     private readonly Action _quitApplication;
+    private readonly Action _activateNotes;
+    private readonly Action _createNote;
+    private readonly Action _showNotesList;
+    private readonly Action _showNotesSettings;
+    private string _uiStyle;
     private readonly DispatcherTimer _frameTimer = new() { Interval = TimeSpan.FromMilliseconds(33) };
     private long _lastTick;
     private int _suspended;
@@ -38,12 +43,39 @@ public partial class HoodOverlayWindow : Window
     private bool _trackingMouse;
     private bool _dragged;
 
-    internal HoodOverlayWindow(HoodSession session, LoadedHoodAssets assets, Action showSettings, Action quitApplication)
+    internal HoodOverlayWindow(
+        HoodSession session,
+        LoadedHoodAssets assets,
+        Action showSettings,
+        Action quitApplication,
+        Action activateNotes,
+        Action createNote,
+        Action showNotesList,
+        Action showNotesSettings)
+        : this(session, assets, showSettings, quitApplication, activateNotes, createNote, showNotesList, showNotesSettings, UiStyleCatalog.StickyNotes)
+    {
+    }
+
+    internal HoodOverlayWindow(
+        HoodSession session,
+        LoadedHoodAssets assets,
+        Action showSettings,
+        Action quitApplication,
+        Action activateNotes,
+        Action createNote,
+        Action showNotesList,
+        Action showNotesSettings,
+        string uiStyle)
     {
         _session = session;
         _assets = assets;
+        _uiStyle = UiStyleCatalog.Canonicalize(uiStyle);
         _showSettings = showSettings;
         _quitApplication = quitApplication;
+        _activateNotes = activateNotes;
+        _createNote = createNote;
+        _showNotesList = showNotesList;
+        _showNotesSettings = showNotesSettings;
         InitializeComponent();
         Width = PetImage.Width = assets.Definition.DisplayWidth;
         Height = PetImage.Height = assets.Definition.DisplayHeight;
@@ -51,7 +83,7 @@ public partial class HoodOverlayWindow : Window
         Left = session.Position.X;
         Top = session.Position.Y;
         ContextMenu = CreatePetMenu();
-        ContextMenuOpening += (_, _) => UpdateNeedLabels();
+        ContextMenu.Opened += (_, _) => UpdateNeedLabels();
         Closed += OnOverlayClosed;
         _frameTimer.Tick += OnFrameTimerTick;
         RenderPresentation();
@@ -198,6 +230,7 @@ public partial class HoodOverlayWindow : Window
         else
         {
             RunSessionCommand(_session.React);
+            _activateNotes();
         }
 
         _dragged = false;
@@ -226,10 +259,15 @@ public partial class HoodOverlayWindow : Window
     private WpfContextMenu CreatePetMenu()
     {
         var menu = new WpfContextMenu();
+        NotesAppearance.Apply(menu, _session.Configuration.Notes.Theme, _uiStyle);
         menu.Items.Add(new WpfMenuItem { Header = "Hood's needs", IsEnabled = false });
         menu.Items.Add(_hungerMenuItem);
         menu.Items.Add(_boredomMenuItem);
         menu.Items.Add(_sleepMenuItem);
+        foreach (var item in menu.Items.OfType<WpfMenuItem>())
+        {
+            item.SetResourceReference(WpfMenuItem.ForegroundProperty, "NotesSecondaryTextBrush");
+        }
         menu.Items.Add(new WpfSeparator());
         var feed = new WpfMenuItem { Header = "Feed" };
         feed.Click += (_, _) => RunSessionCommand(_session.Feed);
@@ -240,6 +278,18 @@ public partial class HoodOverlayWindow : Window
         _editAreaMenuItem.Click += (_, _) => OpenAreaEditor();
         menu.Items.Add(_editAreaMenuItem);
         menu.Items.Add(new WpfSeparator());
+        var notes = new WpfMenuItem { Header = "_Notes" };
+        var newNote = new WpfMenuItem { Header = "_New note" };
+        newNote.Click += (_, _) => _createNote();
+        var notesList = new WpfMenuItem { Header = "_Notes list" };
+        notesList.Click += (_, _) => _showNotesList();
+        var notesSettings = new WpfMenuItem { Header = "Notes _settings" };
+        notesSettings.Click += (_, _) => _showNotesSettings();
+        notes.Items.Add(newNote);
+        notes.Items.Add(notesList);
+        notes.Items.Add(notesSettings);
+        menu.Items.Add(notes);
+        menu.Items.Add(new WpfSeparator());
         var settings = new WpfMenuItem { Header = "Settings" };
         settings.Click += (_, _) => _showSettings();
         menu.Items.Add(settings);
@@ -247,6 +297,15 @@ public partial class HoodOverlayWindow : Window
         quit.Click += (_, _) => _quitApplication();
         menu.Items.Add(quit);
         return menu;
+    }
+
+    public void ApplyAppearance(string theme, string uiStyle)
+    {
+        _uiStyle = UiStyleCatalog.Canonicalize(uiStyle);
+        if (ContextMenu is { } menu)
+        {
+            NotesAppearance.Apply(menu, theme, _uiStyle);
+        }
     }
 
     private void UpdateNeedLabels()
@@ -332,6 +391,8 @@ public partial class HoodOverlayWindow : Window
     }
 
     internal void ApplyAlwaysOnTop(bool enabled) => Topmost = enabled;
+
+    internal System.Windows.Point PresentationCenter => new(Left + ActualWidth / 2, Top + ActualHeight / 2);
 
     internal void RefreshBehaviorSettings()
     {

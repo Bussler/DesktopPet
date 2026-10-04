@@ -9,51 +9,39 @@
         ResizeMode="CanResize"
         WindowStartupLocation="CenterScreen"
         ShowInTaskbar="True"
-        Background="#FFF4F6F9">
+        FontFamily="{DynamicResource AppFontFamily}" FontSize="{DynamicResource AppBodyFontSize}"
+        Background="{DynamicResource AppSettingsBrush}" Foreground="{DynamicResource AppTextBrush}">
     <Window.Resources>
-        <Style x:Key="VisibleFocus" TargetType="{x:Type Control}">
-            <Setter Property="FocusVisualStyle">
-                <Setter.Value>
-                    <Style>
-                        <Setter Property="Control.Template">
-                            <Setter.Value>
-                                <ControlTemplate>
-                                    <Border Margin="-3"
-                                            BorderBrush="#FF005FB8"
-                                            BorderThickness="2"
-                                            CornerRadius="3" />
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                    </Style>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        <Style TargetType="CheckBox" BasedOn="{StaticResource VisibleFocus}">
-            <Setter Property="Margin" Value="0,0,0,12" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-        </Style>
-        <Style TargetType="Button" BasedOn="{StaticResource VisibleFocus}">
-            <Setter Property="MinHeight" Value="34" />
-            <Setter Property="Padding" Value="12,6" />
-        </Style>
-        <Style TargetType="TextBox" BasedOn="{StaticResource VisibleFocus}">
-            <Setter Property="Padding" Value="6,4" />
-        </Style>
-        <Style TargetType="GroupBox">
-            <Setter Property="Margin" Value="0,0,0,14" />
-            <Setter Property="Padding" Value="14,12,14,4" />
-            <Setter Property="Background" Value="White" />
-            <Setter Property="Foreground" Value="#FF20252B" />
-        </Style>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="NotesStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
     </Window.Resources>
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Margin="20">
-            <TextBlock FontSize="24" FontWeight="SemiBold" Foreground="#FF20252B" Text="Hood settings" />
-            <TextBlock Margin="0,5,0,16"
-                       Foreground="#FF49515A"
+        <StackPanel Margin="{DynamicResource AppWindowPadding}">
+            <TextBlock x:Name="SettingsHeadingText" FontSize="{DynamicResource AppSettingsHeadingFontSize}" FontWeight="{DynamicResource AppSettingsHeadingFontWeight}" Foreground="{DynamicResource AppSettingsTextBrush}" Text="Hood settings" />
+            <TextBlock x:Name="DescriptionText" Margin="0,5,0,16"
+                       Foreground="{DynamicResource AppSettingsSecondaryTextBrush}"
                        Text="Choose how Hood behaves and where he appears. Changes save before they take effect."
                        TextWrapping="Wrap" />
+
+            <GroupBox Header="Appearance">
+                <StackPanel>
+                    <Label Target="{Binding ElementName=UiStyleComboBox}" Content="UI _style" />
+                    <ComboBox x:Name="UiStyleComboBox" SelectedValuePath="Tag" SelectionChanged="OnUiStyleSelectionChanged">
+                        <ComboBoxItem Content="Sticky Notes" Tag="sticky-notes" />
+                        <ComboBoxItem Content="Minimal" Tag="minimal" />
+                        <ComboBoxItem Content="Soft" Tag="soft" />
+                        <ComboBoxItem Content="Studio" Tag="studio" />
+                    </ComboBox>
+                    <TextBlock x:Name="RestartNoticeText" Visibility="Collapsed"
+                               Foreground="{DynamicResource AppSettingsSecondaryTextBrush}"
+                               TextWrapping="Wrap" />
+                    <TextBlock x:Name="AppearanceErrorText" Margin="0,6,0,0" Visibility="Collapsed"
+                               Foreground="{DynamicResource AppErrorBrush}" TextWrapping="Wrap" />
+                </StackPanel>
+            </GroupBox>
 
             <GroupBox Header="Behavior">
                 <StackPanel>
@@ -83,7 +71,7 @@
             <GroupBox Header="Placement">
                 <StackPanel>
                     <TextBlock Margin="0,0,0,10"
-                               Foreground="#FF49515A"
+                               Foreground="{DynamicResource AppSettingsSecondaryTextBrush}"
                                Text="Hood stays inside this area while he roams."
                                TextWrapping="Wrap" />
                     <Button HorizontalAlignment="Left" Content="Edit roaming area" Click="OnEditAreaClick" />
@@ -98,7 +86,7 @@
             </GroupBox>
 
             <TextBlock Margin="0,0,0,10"
-                       Foreground="#FF49515A"
+                       Foreground="{DynamicResource AppSettingsSecondaryTextBrush}"
                        Text="Need rates and nap timing remain editable in config.yaml."
                        TextWrapping="Wrap" />
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">

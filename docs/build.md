@@ -21,3 +21,5 @@ Run `app\DesktopPet.Windows.exe` from that folder. The app includes its .NET run
 The solution contains the portable `DesktopPet.Core`, Windows `DesktopPet.Windows`, and behavior-test `DesktopPet.Tests` projects. NuGet versions are pinned centrally and restore lock files are checked in. To include custom artwork in future builds, edit the source assets as described in [changing sprites](changing-sprites.md).
 
 Settings and saved progress stay under `%LOCALAPPDATA%\HoodDesktopPet`. See [configuration](configuration.md) and [recovery](recovery.md). To update the bundled runtime, update the pinned SDK and locked dependencies, then rebuild.
+
+The published build includes the [Notes guide](notes.md). For manual recovery checks without touching your normal data, set `HOOD_DATA_DIRECTORY` to a new temporary folder before launching the executable.

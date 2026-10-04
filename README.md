@@ -1,12 +1,12 @@
 # Hood desktop pet
 
-Hood is a Windows desktop companion with roaming, feeding, sleep, and local settings.
+Hood is a Windows desktop companion with roaming, feeding, sleep, local settings, and notes.
 
 ## Run the app
 
-In a published build, run `app\DesktopPet.Windows.exe`. The build contains `app`, `docs`, and this README; no separate .NET runtime install is required. Right-click Hood or use the tray menu to open Settings or Quit.
+In a published build, run `app\DesktopPet.Windows.exe`. The build contains `app`, `docs`, and this README; no separate .NET runtime install is required. Left-click Hood to show or hide your open notes. Right-click Hood for care actions, Settings, and the Notes menu. See the [Notes guide](docs/notes.md) for editing, management, storage, and recovery.
 
-Settings and saved progress live in `%LOCALAPPDATA%\HoodDesktopPet`, separately from the app folder. See [configuration](docs/configuration.md), [placement](docs/placement.md), and [recovery](docs/recovery.md).
+Settings and saved progress live in `%LOCALAPPDATA%\HoodDesktopPet`, separately from the app folder. See [configuration](docs/configuration.md), [UI styles](docs/ui-styles.md), [placement](docs/placement.md), and [recovery](docs/recovery.md). The [Notes manual acceptance checklist](docs/notes-manual-acceptance.md) and [UI styles final acceptance checklist](docs/ui-styles-manual-acceptance.md) can be run against a test data folder without touching your normal notes.
 
 ## Change the pet sprites
 
