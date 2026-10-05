@@ -14,6 +14,135 @@ namespace DesktopPet.Windows.Tests;
 public sealed class NoteListShortcutTests
 {
     [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void BackspaceRemovesEmptyChecklistThenReachesPreviousParagraph(bool previousChecklist)
+    {
+        var source = NotesDocument.FromText("Above\r\n");
+        source.Paragraphs[0].Kind = previousChecklist ? NoteBlockKind.Checklist : NoteBlockKind.Paragraph;
+        source.Paragraphs[1].Kind = NoteBlockKind.Checklist;
+        NotesDocument? saved = null;
+        var window = Create(source, document => saved = document);
+        try
+        {
+            ShowHidden(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            Assert.IsTrue(editor.Focus());
+            var list = editor.Document.Blocks.OfType<System.Windows.Documents.List>().Last();
+            var empty = (Paragraph)list.ListItems.LastListItem.Blocks.FirstBlock;
+            editor.CaretPosition = empty.ContentEnd;
+            PressBackspace(editor, window);
+            Assert.IsFalse(editor.CaretPosition.Paragraph!.Inlines.OfType<InlineUIContainer>()
+                .Any(inline => inline.Child is CheckBox), "First Backspace must remove the checkbox.");
+            Assert.IsNotNull(saved);
+            Assert.AreEqual(NoteBlockKind.Paragraph, saved.Paragraphs[1].Kind,
+                "Removing the checkbox must also remove the list item structure.");
+            var previous = editor.Document.Blocks.FirstBlock is Paragraph paragraph ? paragraph :
+                (Paragraph)((System.Windows.Documents.List)editor.Document.Blocks.FirstBlock).ListItems.FirstListItem.Blocks.FirstBlock;
+            PressBackspace(editor, window);
+            Assert.AreEqual("Above", saved!.GetPlainText(), "Second Backspace must remove the paragraph break.");
+            Assert.AreEqual(1, saved.Paragraphs.Count);
+            Assert.AreSame(previous, editor.CaretPosition.Paragraph);
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void BackspaceAtChecklistTextStartRemovesMarkerAndPreservesFormattedText(bool inTable)
+    {
+        var source = NotesDocument.FromText("Task").SetListKind(0, 4, NoteBlockKind.Checklist)
+            .SetChecklistChecked(0, true).SetStyle(0, 4, NoteTextStyle.Bold, true);
+        if (inTable) source.Paragraphs[0].Cell = new NoteTableCell(Guid.NewGuid(), 0, 0);
+        NotesDocument? saved = null;
+        var window = Create(source, document => saved = document);
+        try
+        {
+            ShowHidden(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            Assert.IsTrue(editor.Focus());
+            var blocks = inTable ? editor.Document.Blocks.OfType<Table>().Single().RowGroups[0].Rows[0].Cells[0].Blocks
+                : editor.Document.Blocks;
+            var paragraph = (Paragraph)blocks.OfType<System.Windows.Documents.List>().Single().ListItems.FirstListItem.Blocks.FirstBlock;
+            editor.CaretPosition = paragraph.Inlines.OfType<Run>().Single().ContentStart;
+            PressBackspace(editor, window);
+            Assert.IsNotNull(saved);
+            Assert.AreEqual("Task", saved.GetPlainText());
+            Assert.AreEqual(NoteBlockKind.Paragraph, saved.Paragraphs[0].Kind);
+            Assert.IsFalse(saved.Paragraphs[0].IsChecked);
+            Assert.AreEqual(source.Paragraphs[0].Cell, saved.Paragraphs[0].Cell);
+            CollectionAssert.AreEqual(source.Paragraphs[0].Runs, saved.Paragraphs[0].Runs);
+            Type(editor, "New ");
+            Pump(window);
+            Assert.AreEqual("New Task", saved.GetPlainText());
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void BackspaceInsideChecklistOrOverSelectedTextKeepsTheCheckbox(bool selected)
+    {
+        var source = NotesDocument.FromText("Task").SetListKind(0, 4, NoteBlockKind.Checklist).SetChecklistChecked(0, true);
+        NotesDocument? saved = null;
+        var window = Create(source, document => saved = document);
+        try
+        {
+            ShowHidden(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            Assert.IsTrue(editor.Focus());
+            var paragraph = (Paragraph)((System.Windows.Documents.List)editor.Document.Blocks.FirstBlock).ListItems.FirstListItem.Blocks.FirstBlock;
+            var run = paragraph.Inlines.OfType<Run>().Single();
+            if (selected) editor.Selection.Select(run.ContentStart, run.ContentStart.GetPositionAtOffset(2)!);
+            else editor.CaretPosition = run.ContentStart.GetPositionAtOffset(2)!;
+            PressBackspace(editor, window);
+            Assert.IsNotNull(saved);
+            Assert.AreEqual(selected ? "sk" : "Tsk", saved.GetPlainText());
+            Assert.AreEqual(NoteBlockKind.Checklist, saved.Paragraphs[0].Kind);
+            Assert.IsTrue(saved.Paragraphs[0].IsChecked);
+            Assert.IsTrue(paragraph.Inlines.OfType<InlineUIContainer>().Any(inline => inline.Child is CheckBox));
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    public void RemovingChecklistWithBackspaceSupportsApplicationUndoAndRedo()
+    {
+        var app = NotesApplication.Start(new MemoryNotesStore());
+        var id = app.CreateNote();
+        app.UpdateDocument(id, NotesDocument.FromText("Task").SetListKind(0, 4, NoteBlockKind.Checklist)
+            .SetChecklistChecked(0, true).SetStyle(0, 4, NoteTextStyle.Bold, true));
+        var window = new NoteWindow(app.GetNote(id),
+            (_, document) => { app.UpdateDocument(id, document); return null; }, (_, _) => null, (_, _) => null,
+            (_, undo) => { var moved = undo ? app.Undo(id) : app.Redo(id); return (moved ? app.GetNote(id).Document : null, null); },
+            _ => (true, null), () => { }, () => { }, () => { }, (_, _) => null, _ => null, () => null, new NotesConfiguration());
+        try
+        {
+            ShowHidden(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            Assert.IsTrue(editor.Focus());
+            var paragraph = (Paragraph)((System.Windows.Documents.List)editor.Document.Blocks.FirstBlock).ListItems.FirstListItem.Blocks.FirstBlock;
+            editor.CaretPosition = paragraph.Inlines.OfType<Run>().Single().ContentStart;
+            PressBackspace(editor, window);
+            Assert.AreEqual(NoteBlockKind.Paragraph, app.GetNote(id).Document.Paragraphs[0].Kind);
+            foreach (var undo in new[] { true, false })
+            {
+                typeof(NoteWindow).GetMethod("RestoreHistory", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [undo]);
+                Pump(window);
+                var restored = app.GetNote(id).Document;
+                Assert.AreEqual("Task", restored.GetPlainText());
+                Assert.AreEqual(undo ? NoteBlockKind.Checklist : NoteBlockKind.Paragraph, restored.Paragraphs[0].Kind);
+                Assert.AreEqual(undo, restored.Paragraphs[0].IsChecked);
+                Assert.AreEqual(NoteTextStyle.Bold, restored.Paragraphs[0].Runs.Single().Style);
+                Assert.AreEqual(undo, editor.Document.Blocks.FirstBlock is System.Windows.Documents.List);
+            }
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
     [DataRow("- ", NoteBlockKind.Bulleted, "BulletsButton", false)]
     [DataRow("1) ", NoteBlockKind.Numbered, "NumberedButton", false)]
     [DataRow("- [ ] ", NoteBlockKind.Checklist, "ChecklistButton", false)]
@@ -224,6 +353,15 @@ public sealed class NoteListShortcutTests
             { RoutedEvent = Keyboard.PreviewKeyDownEvent };
         editor.RaiseEvent(key);
         if (!key.Handled) EditingCommands.EnterParagraphBreak.Execute(null, editor);
+        Pump(window);
+    }
+
+    private static void PressBackspace(RichTextBox editor, Window window)
+    {
+        var key = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(editor), 0, Key.Back)
+            { RoutedEvent = Keyboard.PreviewKeyDownEvent };
+        editor.RaiseEvent(key);
+        if (!key.Handled) EditingCommands.Backspace.Execute(null, editor);
         Pump(window);
     }
 }

@@ -6,14 +6,15 @@ if (-not ('AlternateSpritePixels' -as [type])) {
 using System;
 using System.Collections.Generic;
 public static class AlternateSpritePixels {
+    private struct Fragment { public int Size; public int Height; }
     public static void Fragments(byte[] p, int stride, int column, int row) {
         var seen = new bool[384 * 416]; var queue = new int[seen.Length];
-        var parts = new List<(int Size, int Height)>();
-        bool Visible(int i) => p[(row * 416 + i / 384) * stride + (column * 384 + i % 384) * 4 + 3] >= 32;
+        var parts = new List<Fragment>();
+        Func<int, bool> Visible = i => p[(row * 416 + i / 384) * stride + (column * 384 + i % 384) * 4 + 3] >= 32;
         for (int start = 0; start < seen.Length; start++) {
             if (seen[start] || !Visible(start)) continue;
             int head = 0, tail = 0, minY = 416, maxY = 0;
-            void Add(int i) { if (!seen[i] && Visible(i)) { seen[i] = true; queue[tail++] = i; } }
+            Action<int> Add = i => { if (!seen[i] && Visible(i)) { seen[i] = true; queue[tail++] = i; } };
             Add(start);
             while (head < tail) {
                 int i = queue[head++], x = i % 384, y = i / 384;
@@ -21,12 +22,12 @@ public static class AlternateSpritePixels {
                 if (x > 0) Add(i-1); if (x < 383) Add(i+1);
                 if (y > 0) Add(i-384); if (y < 415) Add(i+384);
             }
-            if (tail >= 4) parts.Add((tail,maxY-minY+1));
+            if (tail >= 4) parts.Add(new Fragment { Size = tail, Height = maxY-minY+1 });
         }
         parts.Sort((a,b) => b.Size.CompareTo(a.Size));
         if (parts.Count == 0) throw new InvalidOperationException("Empty pose.");
         for (int i=1;i<parts.Count;i++) if (parts[i].Height >= 8)
-            throw new InvalidOperationException($"Detached artifact: {parts[i].Size} pixels, {parts[i].Height}px tall.");
+            throw new InvalidOperationException(string.Format("Detached artifact: {0} pixels, {1}px tall.", parts[i].Size, parts[i].Height));
     }
     public static double Foot(byte[] p, int stride, int frame, bool mouse) {
         int count = 0, minX = 384, maxX = 0, bottom = 0; double sum = 0;

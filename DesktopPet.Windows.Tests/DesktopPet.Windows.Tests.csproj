@@ -8,5 +8,6 @@
     <PackageReference Include="MSTest" />
     <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
     <ProjectReference Include="..\DesktopPet.Windows\DesktopPet.Windows.csproj" />
+    <None Include="..\tools\Test-AlternatePetSprites.ps1" Link="tools\Test-AlternatePetSprites.ps1" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

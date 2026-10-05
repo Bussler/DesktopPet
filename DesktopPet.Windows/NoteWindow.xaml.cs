@@ -441,6 +441,10 @@ public partial class NoteWindow : Window
         {
             e.Handled = true;
         }
+        else if (!control && !shift && e.Key == Key.Back && RemoveChecklistAtCaret())
+        {
+            e.Handled = true;
+        }
     }
 
     private void ApplyPendingMarkupFormatting()
@@ -609,6 +613,19 @@ public partial class NoteWindow : Window
         {
             SetSaveStatus(exception.Message);
         }
+    }
+
+    private bool RemoveChecklistAtCaret()
+    {
+        if (!Editor.Selection.IsEmpty) return false;
+        var document = ReadEditorDocument();
+        var (start, _) = GetSelectionOffsets(document);
+        var (index, offset) = document.GetParagraphPositionAt(start);
+        if (offset != 0 || document.Paragraphs[index].Kind != NoteBlockKind.Checklist) return false;
+
+        // Removing only the embedded checkbox leaves WPF's list boundaries for later Backspaces.
+        ApplyListKind(NoteBlockKind.Checklist);
+        return true;
     }
 
     private bool ContinueListAtCaret()
