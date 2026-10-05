@@ -5,6 +5,7 @@ Hood is an animated Windows desktop companion with a built-in sticky notes works
 ## What the app does
 
 - **Desktop companion:** feed Hood, let him nap, or leave him to roam and react. Needs and timers pause while the app is closed or Windows is suspended.
+- **Choose your pet:** switch between Hood the owl, Pip the fox with a green wool shawl, Crumb the mouse with a mustard hoodie, and Puddle the slime. Each uses the same controls, reactions, and movement.
 - **Flexible placement:** drag Hood between displays and move or resize his roaming area from any edge or corner. He can roam horizontally, vertically, or diagonally when the area has enough room.
 - **Local notes:** create and name notes, format text, make lists and checklists, and choose individual note colors. Search the Notes list, move notes to recoverable Trash, or restore them later.
 - **Appearance and behavior:** choose Sticky Notes, Minimal, Soft, or Studio styling; use light, dark, or system brightness; configure roaming, random reaction timing, and always-on-top behavior.
@@ -33,13 +34,15 @@ For convenient access, create a shortcut to the executable. To launch Hood when 
 
 Use **Notes > New note** to create another note, **Notes > Notes list** to search or manage notes and Trash, and **Notes > Notes settings** to adjust shared note preferences. Closing a note saves it as closed; hiding the group keeps it available for the next show. See the [Notes guide](docs/notes.md) for formatting shortcuts, selection, saving, and recovery.
 
+Open **Settings > Appearance** to choose a pet or UI style. Each selection previews immediately while your current action, needs, nap, and placement continue. **Save** keeps the choices for the next launch; **Cancel** or closing Settings restores the appearance from before the menu opened.
+
 ## Saved data, updates, and removal
 
 Hood stores data under `%LOCALAPPDATA%\HoodDesktopPet`, separately from the app folder:
 
 | File | Contents |
 | --- | --- |
-| `config.yaml` | Behavior, appearance, startup, and Notes settings. |
+| `config.yaml` | Selected pet, behavior, appearance, startup, and Notes settings. |
 | `state.json` | Pet needs, remaining timers, and placement. |
 | `notes.json` | Note names, text, formatting, colors, window positions, open/hidden state, and Trash. |
 
@@ -53,13 +56,15 @@ Change ordinary options in Settings. For advanced YAML settings, quit Hood befor
 
 ## Change the pet sprites
 
+For the included artwork, use the **Pet** dropdown in Settings. To replace a pet's artwork with custom sprites:
+
 1. Quit Hood from the tray menu.
-2. Back up `app\Assets\Hood\hood_spritesheet.png` and `hood.animations.json` outside the app folder.
+2. Back up `hood_spritesheet.png` and `hood.animations.json` from that pet's folder under `app\Assets` (`Hood`, `Pip`, `Crumb`, or `Puddle`) outside the app folder.
 3. Replace the PNG with your own transparent artwork. For a direct replacement, keep the 6144×4160 sheet, its 16×10 grid of 384×416 pixel cells, and the existing animation positions.
 4. For a different grid or frame sequence, also update `hood.animations.json`. Keep both filenames and all ten required actions. The [sprite guide](docs/changing-sprites.md) explains the layout, JSON fields, and recovery steps.
 5. Relaunch Hood to load the new artwork. The tray icon is embedded separately and stays the same.
 
-In the source project, edit the files under `Assets\Hood` instead, then rebuild. Changes made only to a published copy are not included in later builds.
+In the source project, edit the files under the corresponding `Assets` pet folder instead, then rebuild. Changes made only to a published copy are not included in later builds.
 
 ## Build from source
 

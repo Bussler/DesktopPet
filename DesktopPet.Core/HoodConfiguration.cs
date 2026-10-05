@@ -9,6 +9,7 @@ namespace DesktopPet.Core;
 public sealed record HoodConfiguration
 {
     public int? SchemaVersion { get; init; } = 1;
+    public string Pet { get; init; } = PetCatalog.Hood;
     public string UiStyle { get; init; } = UiStyleCatalog.StickyNotes;
     public BehaviorSettings Behavior { get; init; } = new();
     public NeedSettings Needs { get; init; } = new();
@@ -18,6 +19,26 @@ public sealed record HoodConfiguration
     public NotesConfiguration Notes { get; init; } = new();
 
     public static HoodConfiguration Defaults => new();
+}
+
+public static class PetCatalog
+{
+    public const string Hood = "hood";
+    public const string Pip = "pip";
+    public const string Crumb = "crumb";
+    public const string Puddle = "puddle";
+
+    public static IReadOnlyList<string> Supported { get; } = Array.AsReadOnly([Hood, Pip, Crumb, Puddle]);
+
+    public static bool TryCanonicalize(string? value, out string canonical)
+    {
+        canonical = value?.ToLowerInvariant() ?? string.Empty;
+        return Supported.Contains(canonical, StringComparer.Ordinal);
+    }
+
+    public static string Canonicalize(string? value) => TryCanonicalize(value, out var canonical)
+        ? canonical
+        : throw new HoodConfigurationException("pet", "Choose hood, pip, crumb, or puddle.");
 }
 
 public static class UiStyleCatalog
@@ -178,6 +199,11 @@ public static class HoodConfigurationValidator
             throw new HoodConfigurationException("ui_style", "Choose sticky-notes, minimal, soft, or studio.");
         }
 
+        if (!PetCatalog.TryCanonicalize(configuration.Pet, out _))
+        {
+            throw new HoodConfigurationException("pet", "Choose hood, pip, crumb, or puddle.");
+        }
+
         if (configuration.Behavior is null)
         {
             throw new HoodConfigurationException("behavior", "This section must be a YAML mapping.");
@@ -333,7 +359,11 @@ public sealed class YamlConfigurationStore : IYamlConfigurationStore
     public void Save(HoodConfiguration configuration)
     {
         HoodConfigurationValidator.Validate(configuration);
-        var yaml = Serializer.Serialize(configuration with { UiStyle = UiStyleCatalog.Canonicalize(configuration.UiStyle) });
+        var yaml = Serializer.Serialize(configuration with
+        {
+            Pet = PetCatalog.Canonicalize(configuration.Pet),
+            UiStyle = UiStyleCatalog.Canonicalize(configuration.UiStyle)
+        });
         try
         {
             AtomicFile.WriteAllText(_path, yaml);
@@ -359,7 +389,11 @@ public sealed class YamlConfigurationStore : IYamlConfigurationStore
             var configuration = Deserializer.Deserialize<HoodConfiguration>(reader)
                 ?? throw new HoodConfigurationException("config.yaml", "The configuration document is empty.");
             HoodConfigurationValidator.Validate(configuration);
-            return configuration with { UiStyle = UiStyleCatalog.Canonicalize(configuration.UiStyle) };
+            return configuration with
+            {
+                Pet = PetCatalog.Canonicalize(configuration.Pet),
+                UiStyle = UiStyleCatalog.Canonicalize(configuration.UiStyle)
+            };
         }
         catch (HoodConfigurationException)
         {
@@ -398,7 +432,11 @@ public sealed class HoodConfigurationController
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(settingPath);
         HoodConfigurationValidator.Validate(candidate);
-        candidate = candidate with { UiStyle = UiStyleCatalog.Canonicalize(candidate.UiStyle) };
+        candidate = candidate with
+        {
+            Pet = PetCatalog.Canonicalize(candidate.Pet),
+            UiStyle = UiStyleCatalog.Canonicalize(candidate.UiStyle)
+        };
         var previous = Current;
         var startupChanged = candidate.Behavior.StartWithWindows != previous.Behavior.StartWithWindows;
         if (startupChanged && _startupRegistration is null)

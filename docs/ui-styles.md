@@ -1,6 +1,6 @@
 # UI styles
 
-Choose Sticky Notes, Minimal, Soft, or Studio in Hood Settings and save. The choice applies across notes and their menus, the Notes list and Trash, Hood's menus, both settings windows, nested menus and dropdowns, and the tray menu. A successful save updates open surfaces. If Hood reports an appearance-refresh problem, restart to apply the saved style.
+Choose Sticky Notes, Minimal, Soft, or Studio in Hood Settings to preview it immediately across notes and their menus, the Notes list and Trash, Hood's menus, both settings windows, nested menus and dropdowns, and the tray menu. **Save** keeps the choice for the next launch. **Cancel** or closing Settings restores the previous UI style and pet. Previewing and restoring styles leave configuration and note data untouched. If a preview fails, Hood restores the previous appearance and reports an error.
 
 Brightness stays a separate app-wide choice in Notes Settings: System follows Windows, while Light and Dark remain fixed. Changing a style or brightness preserves each note's saved color category, content, formatting, saved text size, window behavior, and Hood's session. The displayed fill changes with the selected style and brightness.
 

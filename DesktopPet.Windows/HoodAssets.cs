@@ -1,5 +1,4 @@
 using System.IO;
-using System.Text.Json;
 using System.Windows.Media.Imaging;
 using DesktopPet.Core;
 
@@ -9,6 +8,32 @@ internal sealed record LoadedHoodAssets(PetDefinition Definition, BitmapSource S
 
 internal static class HoodAssets
 {
+    public static LoadedHoodAssets LoadPet(string assetsDirectory, string pet, PetDefinition? currentDefinition = null)
+    {
+        var canonical = PetCatalog.Canonicalize(pet);
+        var folder = char.ToUpperInvariant(canonical[0]) + canonical[1..];
+        var assets = Load(Path.Combine(assetsDirectory, folder));
+        if (currentDefinition is not null)
+        {
+            // The session keeps its timers, motion bounds, and current frame during a cosmetic switch.
+            if (assets.Definition.DisplayWidth != currentDefinition.DisplayWidth ||
+                assets.Definition.DisplayHeight != currentDefinition.DisplayHeight ||
+                Enum.GetValues<PetAction>().Any(action =>
+                {
+                    var current = currentDefinition.GetAnimation(action);
+                    var next = assets.Definition.GetAnimation(action);
+                    return current.Frames.Count != next.Frames.Count ||
+                        current.FrameDurationMilliseconds != next.FrameDurationMilliseconds ||
+                        current.Loops != next.Loops || current.MotionBounds != next.MotionBounds;
+                }))
+            {
+                throw new PetAssetException($"{folder}'s animations must match the current pet's frame counts, timing, motion bounds, and display size. Restore the packaged assets before switching pets.");
+            }
+        }
+
+        return assets;
+    }
+
     public static LoadedHoodAssets Load(string directory)
     {
         var manifestPath = Path.Combine(directory, "hood.animations.json");

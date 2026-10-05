@@ -4,7 +4,9 @@ Hood creates `%LOCALAPPDATA%\HoodDesktopPet\config.yaml` on first launch. The fi
 
 The file uses YAML schema version 1. Unknown or duplicate keys are errors. All numeric values must be finite. Rates and gains accept zero or greater; durations and dimensions must be greater than zero.
 
-Choose **Sticky Notes**, **Minimal**, **Soft**, or **Studio** in Hood Settings. The saved style updates open surfaces immediately; if Hood reports an appearance-refresh error, the saved style is retained and restarting applies it. Notes Settings keeps the single app-wide Light/Dark/System brightness choice, separate from the style.
+Choose **Hood**, **Pip**, **Crumb**, or **Puddle** under **Appearance > Pet** in Hood Settings. The sprite previews immediately while the current action, needs, nap, and position continue. **Save** writes the choice to this file; **Cancel** or closing Settings restores the previous pet and UI style. All four pets have the same behavior. The saved choice loads at the next launch; older configurations without `pet` keep Hood. Missing or incompatible replacement assets prevent a preview and leave the previous choice in effect.
+
+Choose **Sticky Notes**, **Minimal**, **Soft**, or **Studio** in Hood Settings to preview the style across open surfaces immediately. **Save** keeps it; **Cancel** or closing Settings restores the style from before the menu opened. Previews do not rewrite configuration or note data. A failed preview or save reports an error and preserves the previous saved configuration. Notes Settings keeps the single app-wide Light/Dark/System brightness choice, separate from the style.
 
 The configured initial area is adjusted when necessary to contain Hood's full frame, and oversized saved areas shrink to fit the usable display while preserving that minimum footprint. See [placement behavior](placement.md) for details.
 
@@ -12,6 +14,7 @@ With roaming enabled, Hood moves in 8-second bouts followed by 32-second idle re
 
 ```yaml
 schema_version: 1
+pet: hood
 ui_style: sticky-notes
 behavior:
   roaming: true
@@ -48,7 +51,8 @@ notes:
 | Setting | Units | Valid bounds |
 | --- | --- | --- |
 | `schema_version` | Version | Must be `1`. |
-| `ui_style` | UI style | `sticky-notes`, `minimal`, `soft`, or `studio`, case-insensitive; defaults to `sticky-notes`. Other identifiers are invalid. Changes apply live after a successful save. |
+| `pet` | Pet artwork | `hood`, `pip`, `crumb`, or `puddle`, case-insensitive; defaults to `hood`. Settings previews selections live; Save persists them. |
+| `ui_style` | UI style | `sticky-notes`, `minimal`, `soft`, or `studio`, case-insensitive; defaults to `sticky-notes`. Other identifiers are invalid. Settings previews selections live; Save persists them. |
 | `behavior.roaming`, `idle_animations`, `random_events`, `always_on_top`, `start_with_windows` | Boolean | `true` or `false`; each option is independent. |
 | `needs.hunger_points_per_hour`, `boredom_points_per_hour`, `sleep_points_per_hour` | Need points per awake active hour | Finite and at least `0`. |
 | `needs.feed_gain` | Hunger points per Feed action | Finite and at least `0`. |

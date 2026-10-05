@@ -23,11 +23,20 @@
             <TextBlock x:Name="SettingsHeadingText" FontSize="{DynamicResource AppSettingsHeadingFontSize}" FontWeight="{DynamicResource AppSettingsHeadingFontWeight}" Foreground="{DynamicResource AppSettingsTextBrush}" Text="Hood settings" />
             <TextBlock x:Name="DescriptionText" Margin="0,5,0,16"
                        Foreground="{DynamicResource AppSettingsSecondaryTextBrush}"
-                       Text="Choose how Hood behaves and where he appears. Changes save before they take effect."
+                       Text="Pet and UI style preview immediately. Other settings take effect on Save."
                        TextWrapping="Wrap" />
 
             <GroupBox Header="Appearance">
                 <StackPanel>
+                    <Label Target="{Binding ElementName=PetComboBox}" Content="_Pet" />
+                    <ComboBox x:Name="PetComboBox" SelectedValuePath="Tag" SelectionChanged="OnPetSelectionChanged">
+                        <ComboBoxItem Content="Hood — owl" Tag="hood" />
+                        <ComboBoxItem Content="Pip — fox with green wool shawl" Tag="pip" />
+                        <ComboBoxItem Content="Crumb — mouse with mustard hoodie" Tag="crumb" />
+                        <ComboBoxItem Content="Puddle — slime" Tag="puddle" />
+                    </ComboBox>
+                    <TextBlock Margin="0,4,0,8" Text="All pets share the same behavior."
+                               Foreground="{DynamicResource AppSettingsSecondaryTextBrush}" TextWrapping="Wrap" />
                     <Label Target="{Binding ElementName=UiStyleComboBox}" Content="UI _style" />
                     <ComboBox x:Name="UiStyleComboBox" SelectedValuePath="Tag" SelectionChanged="OnUiStyleSelectionChanged">
                         <ComboBoxItem Content="Sticky Notes" Tag="sticky-notes" />
@@ -35,7 +44,7 @@
                         <ComboBoxItem Content="Soft" Tag="soft" />
                         <ComboBoxItem Content="Studio" Tag="studio" />
                     </ComboBox>
-                    <TextBlock x:Name="RestartNoticeText" Visibility="Collapsed"
+                    <TextBlock Margin="0,6,0,0" Text="Save keeps appearance changes. Cancel or closing Settings restores the previous appearance."
                                Foreground="{DynamicResource AppSettingsSecondaryTextBrush}"
                                TextWrapping="Wrap" />
                     <TextBlock x:Name="AppearanceErrorText" Margin="0,6,0,0" Visibility="Collapsed"

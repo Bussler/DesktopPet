@@ -1,0 +1,62 @@
+[
+  {
+    "action": "idle",
+    "source": "idle",
+    "frames": 16,
+    "scale": 1.170731707317073
+  },
+  {
+    "action": "runRight",
+    "source": "runRight",
+    "frames": 16,
+    "scale": 0.945273631840796
+  },
+  {
+    "action": "runLeft",
+    "source": "runRight",
+    "frames": 16,
+    "scale": 0.945273631840796
+  },
+  {
+    "action": "wave",
+    "source": "wave",
+    "frames": 12,
+    "scale": 1.1428571428571428
+  },
+  {
+    "action": "lookUp",
+    "source": "lookUp",
+    "frames": 12,
+    "scale": 1.0389610389610389
+  },
+  {
+    "action": "lookAround",
+    "source": "lookAround",
+    "frames": 16,
+    "scale": 1.085972850678733
+  },
+  {
+    "action": "jump",
+    "source": "jump",
+    "frames": 15,
+    "scale": 1.178082191780822
+  },
+  {
+    "action": "feed",
+    "source": "feed",
+    "frames": 15,
+    "scale": 0.967741935483871
+  },
+  {
+    "action": "sleep",
+    "source": "sleep",
+    "frames": 12,
+    "scale": 0.7712765957446809
+  },
+  {
+    "action": "wake",
+    "source": "wake",
+    "frames": 15,
+    "scale": 1.0671936758893281
+  }
+]

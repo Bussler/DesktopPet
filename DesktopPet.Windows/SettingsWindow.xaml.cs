@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Windows;
@@ -11,38 +12,37 @@ public partial class SettingsWindow : Window
     private const string BehaviorSetting = "behavior";
     private readonly HoodConfigurationController _controller;
     private readonly HoodOverlayWindow _petWindow;
-    private readonly Action _applySavedAppearance;
+    private readonly Action<string> _applyUiStyle;
+    private readonly string _originalUiStyle;
+    private readonly string _originalPet;
+    private readonly LoadedHoodAssets _originalAssets;
     private string _effectiveUiStyle;
+    private string _previewPet;
+    private string _theme = "system";
+    private bool _saved;
     private bool _loadingSettings = true;
 
     internal SettingsWindow(HoodConfigurationController controller, HoodOverlayWindow petWindow)
-        : this(controller, petWindow, UiStyleCatalog.StickyNotes, () => { })
+        : this(controller, petWindow, controller.Current.UiStyle)
     {
     }
 
     internal SettingsWindow(HoodConfigurationController controller, HoodOverlayWindow petWindow, string effectiveUiStyle)
-        : this(controller, petWindow, effectiveUiStyle, () => { })
+        : this(controller, petWindow, effectiveUiStyle, style => petWindow.ApplyAppearance(controller.Current.Notes.Theme, style))
     {
     }
 
-    internal SettingsWindow(HoodConfigurationController controller, HoodOverlayWindow petWindow, string effectiveUiStyle, Action applySavedAppearance)
+    internal SettingsWindow(HoodConfigurationController controller, HoodOverlayWindow petWindow, string effectiveUiStyle, Action<string> applyUiStyle)
     {
         _controller = controller;
         _petWindow = petWindow;
-        _effectiveUiStyle = UiStyleCatalog.Canonicalize(effectiveUiStyle);
-        _applySavedAppearance = applySavedAppearance;
+        _originalUiStyle = _effectiveUiStyle = UiStyleCatalog.Canonicalize(effectiveUiStyle);
+        _originalPet = _previewPet = controller.Current.Pet;
+        _originalAssets = petWindow.CurrentAssets;
+        _applyUiStyle = applyUiStyle;
         InitializeComponent();
         ApplyTheme(controller.Current.Notes.Theme, _effectiveUiStyle);
-        UiStyleComboBox.SelectedValue = controller.Current.UiStyle;
-        RoamingCheckBox.IsChecked = controller.Current.Behavior.Roaming;
-        IdleAnimationsCheckBox.IsChecked = controller.Current.Behavior.IdleAnimations;
-        RandomEventsCheckBox.IsChecked = controller.Current.Behavior.RandomEvents;
-        StartWithWindowsCheckBox.IsChecked = controller.Current.Behavior.StartWithWindows;
-        AlwaysOnTopCheckBox.IsChecked = controller.Current.Behavior.AlwaysOnTop;
-        MinimumReactionMinutesTextBox.Text = controller.Current.RandomInterval.MinimumMinutes.ToString(CultureInfo.CurrentCulture);
-        MaximumReactionMinutesTextBox.Text = controller.Current.RandomInterval.MaximumMinutes.ToString(CultureInfo.CurrentCulture);
-        _loadingSettings = false;
-        UpdateUiStyleNotice();
+        LoadSettings(controller.Current);
     }
 
     public void ApplyTheme(string theme, string? style = null)
@@ -52,49 +52,110 @@ public partial class SettingsWindow : Window
             _effectiveUiStyle = UiStyleCatalog.Canonicalize(style);
         }
 
+        _theme = theme;
         NotesAppearance.Apply(this, theme, _effectiveUiStyle);
-        UpdateUiStyleNotice();
     }
 
     private void OnUiStyleSelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
-        if (!_loadingSettings)
+        if (_loadingSettings || UiStyleComboBox.SelectedValue is not string style)
         {
-            UpdateUiStyleNotice();
-        }
-    }
-
-    private void UpdateUiStyleNotice()
-    {
-        var selectedStyle = UiStyleComboBox?.SelectedValue as string;
-        if (selectedStyle is null)
-        {
-            RestartNoticeText.Visibility = Visibility.Collapsed;
             return;
         }
-
-        var differsFromSaved = !string.Equals(selectedStyle, _controller.Current.UiStyle, StringComparison.OrdinalIgnoreCase);
-        var differsFromEffective = !string.Equals(selectedStyle, _effectiveUiStyle, StringComparison.OrdinalIgnoreCase);
-        RestartNoticeText.Visibility = differsFromSaved || differsFromEffective ? Visibility.Visible : Visibility.Collapsed;
-        if (differsFromSaved)
+        try
         {
-            RestartNoticeText.Text = string.Equals(selectedStyle, _effectiveUiStyle, StringComparison.OrdinalIgnoreCase)
-                ? $"Save to keep {DisplayStyle(selectedStyle)} as Hood's selected style."
-                : $"Save to apply {DisplayStyle(selectedStyle)} across Hood.";
+            PreviewUiStyle(style);
+            AppearanceErrorText.Visibility = Visibility.Collapsed;
         }
-        else if (differsFromEffective)
+        catch (Exception exception) when (exception is not OutOfMemoryException)
         {
-            RestartNoticeText.Text = $"{DisplayStyle(selectedStyle)} is saved, but this session uses {DisplayStyle(_effectiveUiStyle)}. Restart Hood to apply the saved style.";
+            _loadingSettings = true;
+            UiStyleComboBox.SelectedValue = _effectiveUiStyle;
+            _loadingSettings = false;
+            ShowAppearanceError($"Could not preview this UI style. Settings were not saved. {exception.Message}");
         }
     }
 
-    private static string DisplayStyle(string style) => style switch
+    private void OnPetSelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
-        UiStyleCatalog.Minimal => "Minimal",
-        UiStyleCatalog.Soft => "Soft",
-        UiStyleCatalog.Studio => "Studio",
-        _ => "Sticky Notes"
-    };
+        if (_loadingSettings || PetComboBox.SelectedValue is not string pet)
+        {
+            return;
+        }
+        try
+        {
+            PreviewPet(pet);
+            AppearanceErrorText.Visibility = Visibility.Collapsed;
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            _loadingSettings = true;
+            PetComboBox.SelectedValue = _previewPet;
+            _loadingSettings = false;
+            ShowAppearanceError($"Could not preview this pet. Settings were not saved. {exception.Message}");
+        }
+    }
+
+    private void PreviewUiStyle(string style)
+    {
+        if (style == _effectiveUiStyle) return;
+        _applyUiStyle(style);
+        ApplyTheme(_theme, style);
+    }
+
+    private void PreviewPet(string pet)
+    {
+        if (pet == _previewPet) return;
+        var assets = pet == _originalPet ? _originalAssets : _petWindow.LoadPetAssets(pet);
+        _petWindow.ApplyPetAssets(assets);
+        _previewPet = pet;
+    }
+
+    private void RestoreAppearance()
+    {
+        if (!ReferenceEquals(_petWindow.CurrentAssets, _originalAssets))
+        {
+            _petWindow.ApplyPetAssets(_originalAssets);
+        }
+        _previewPet = _originalPet;
+        PreviewUiStyle(_originalUiStyle);
+    }
+
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        base.OnClosing(e);
+        if (_saved || e.Cancel) return;
+        try
+        {
+            RestoreAppearance();
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            e.Cancel = true;
+            ShowAppearanceError($"Could not restore the previous appearance. Try closing Settings again. {exception.Message}");
+        }
+    }
+
+    private void LoadSettings(HoodConfiguration configuration)
+    {
+        _loadingSettings = true;
+        PetComboBox.SelectedValue = configuration.Pet;
+        UiStyleComboBox.SelectedValue = configuration.UiStyle;
+        RoamingCheckBox.IsChecked = configuration.Behavior.Roaming;
+        IdleAnimationsCheckBox.IsChecked = configuration.Behavior.IdleAnimations;
+        RandomEventsCheckBox.IsChecked = configuration.Behavior.RandomEvents;
+        StartWithWindowsCheckBox.IsChecked = configuration.Behavior.StartWithWindows;
+        AlwaysOnTopCheckBox.IsChecked = configuration.Behavior.AlwaysOnTop;
+        MinimumReactionMinutesTextBox.Text = configuration.RandomInterval.MinimumMinutes.ToString(CultureInfo.CurrentCulture);
+        MaximumReactionMinutesTextBox.Text = configuration.RandomInterval.MaximumMinutes.ToString(CultureInfo.CurrentCulture);
+        _loadingSettings = false;
+    }
+
+    private void ShowAppearanceError(string message)
+    {
+        AppearanceErrorText.Text = message;
+        AppearanceErrorText.Visibility = Visibility.Visible;
+    }
 
     private void OnSaveClick(object sender, RoutedEventArgs e)
     {
@@ -111,6 +172,7 @@ public partial class SettingsWindow : Window
 
         var candidate = previous with
         {
+            Pet = PetComboBox.SelectedValue as string ?? PetCatalog.Hood,
             UiStyle = UiStyleComboBox.SelectedValue as string ?? UiStyleCatalog.StickyNotes,
             RandomInterval = new RandomIntervalSettings { MinimumMinutes = minimum, MaximumMinutes = maximum },
             Behavior = previous.Behavior with
@@ -125,49 +187,27 @@ public partial class SettingsWindow : Window
 
         try
         {
+            PreviewPet(candidate.Pet);
+            PreviewUiStyle(candidate.UiStyle);
             _petWindow.ApplyAlwaysOnTop(candidate.Behavior.AlwaysOnTop);
             _controller.SaveAndApply(BehaviorSetting, candidate);
+            _saved = true;
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)
         {
-            RoamingCheckBox.IsChecked = previous.Behavior.Roaming;
-            IdleAnimationsCheckBox.IsChecked = previous.Behavior.IdleAnimations;
-            RandomEventsCheckBox.IsChecked = previous.Behavior.RandomEvents;
-            StartWithWindowsCheckBox.IsChecked = previous.Behavior.StartWithWindows;
-            AlwaysOnTopCheckBox.IsChecked = previous.Behavior.AlwaysOnTop;
-            UiStyleComboBox.SelectedValue = previous.UiStyle;
-            UpdateUiStyleNotice();
-            MinimumReactionMinutesTextBox.Text = previous.RandomInterval.MinimumMinutes.ToString(CultureInfo.CurrentCulture);
-            MaximumReactionMinutesTextBox.Text = previous.RandomInterval.MaximumMinutes.ToString(CultureInfo.CurrentCulture);
+            LoadSettings(previous);
             var errorMessage = exception.Message;
             try
             {
                 _petWindow.ApplyAlwaysOnTop(previous.Behavior.AlwaysOnTop);
+                RestoreAppearance();
             }
             catch (Exception restoreException) when (restoreException is not OutOfMemoryException)
             {
-                errorMessage = $"{errorMessage} Always-on-top could not be restored: {restoreException.Message}";
+                errorMessage = $"{errorMessage} The previous appearance could not be fully restored: {restoreException.Message}";
             }
 
-            System.Windows.MessageBox.Show(
-                this,
-                $"The settings were not applied. Hood's previous configuration remains in effect where integrations could be restored. {errorMessage}",
-                "Settings were not saved",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
-            return;
-        }
-
-        try
-        {
-            _applySavedAppearance();
-        }
-        catch (Exception exception) when (exception is not OutOfMemoryException)
-        {
-            AppearanceErrorText.Text = $"Settings were saved, but the appearance could not be updated. Restart Hood to apply the saved style. {exception.Message}";
-            AppearanceErrorText.Visibility = Visibility.Visible;
-            UpdateUiStyleNotice();
-            _petWindow.RefreshBehaviorSettings();
+            ShowAppearanceError($"Settings were not saved. Hood's previous configuration remains in effect where integrations could be restored. {errorMessage}");
             return;
         }
 

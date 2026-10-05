@@ -1,6 +1,8 @@
 # Change the pet sprites
 
-Hood loads `hood_spritesheet.png` and `hood.animations.json` from `app\Assets\Hood` beside a published app. Quit Hood before replacing them and relaunch afterward. Back up both files outside the app folder first.
+Use **Settings > Appearance > Pet** to choose Hood the owl, Pip the fox with a green wool shawl, Crumb the mouse with a mustard hoodie, or Puddle the slime. Each selection previews immediately. **Save** keeps the choice; **Cancel** or closing Settings restores the previous pet and UI style. All pets share the same reactions and movement, and previewing or restoring them preserves the current action, needs, nap, and placement. A saved choice is stored as `pet` in `config.yaml` and restored at startup.
+
+Hood loads `hood_spritesheet.png` and `hood.animations.json` from the selected pet's folder under `app\Assets` (`Hood`, `Pip`, `Crumb`, or `Puddle`). Quit Hood before replacing them and relaunch afterward. Back up both files outside the app folder first.
 
 ## Replace artwork with the same layout
 
@@ -23,7 +25,9 @@ For example, doubling artwork resolution again while preserving Hood's size mean
 
 ## Include sprites in future builds
 
-In a source checkout, edit `Assets\Hood\hood_spritesheet.png` and `Assets\Hood\hood.animations.json`, then run `tools\Build-AndPublish.ps1`. Editing only a published build does not update the source assets.
+Runtime switching requires matching logical display dimensions and each action's frame count, duration, loop flag, and motion bounds. A different grid or frame coordinate layout is supported when those playback values remain the same. If custom sequences change these values, restore the matching manifests before switching pets; the app reports incompatible assets before saving the choice.
+
+In a source checkout, edit the selected pet's `hood_spritesheet.png` and `hood.animations.json` under `Assets`, then run `tools\Build-AndPublish.ps1`. Editing only a published build does not update the source assets.
 
 `Assets\Hood\tools\Generate-HoodSpritesheet.ps1` packs the retained v3 source PNGs and the v4 run parts into the current grid. Run it in PowerShell 7 on Windows only when maintaining these sources; it overwrites the runtime PNG, manifest, and preview. The run parts contain a footless right-facing body followed by one isolated leg/foot; the script assembles the stride and mirrors it for leftward motion. Custom runtime sheets can be edited directly without running it. Jump artwork supplies the poses only; the application supplies vertical lift outside the cell, constrained to the monitor's usable space.
 

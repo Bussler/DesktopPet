@@ -14,6 +14,6 @@
   <ItemGroup>
     <ProjectReference Include="..\DesktopPet.Core\DesktopPet.Core.csproj" />
     <EmbeddedResource Include="..\Assets\Hood\hood.ico" LogicalName="DesktopPet.Hood.ico" />
-    <Content Include="..\Assets\Hood\hood_spritesheet.png;..\Assets\Hood\hood.animations.json" Link="Assets\Hood\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\Assets\**\hood_spritesheet.png;..\Assets\**\hood.animations.json" Link="Assets\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

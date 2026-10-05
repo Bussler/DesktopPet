@@ -18,6 +18,7 @@ public sealed class HoodConfigurationTests
         Assert.IsTrue(File.Exists(store.Path));
         var yaml = File.ReadAllText(store.Path);
         StringAssert.Contains(yaml, "schema_version: 1");
+        StringAssert.Contains(yaml, "pet: hood");
         StringAssert.Contains(yaml, "ui_style: sticky-notes");
         StringAssert.Contains(yaml, "hunger_points_per_hour: 12.5");
         StringAssert.Contains(yaml, "minimum_minutes: 1");
@@ -612,6 +613,84 @@ public sealed class HoodConfigurationTests
         var exception = Assert.Throws<HoodConfigurationException>(() => CreateSession(invalid));
 
         Assert.AreEqual("needs.feed_gain", exception.SettingPath);
+    }
+
+    [TestMethod]
+    public void ConfigurationWithoutPetDefaultsToHoodAndPreservesExistingSettings()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new YamlConfigurationStore(Path.Combine(directory.Path, "config.yaml"));
+        var original = HoodConfiguration.Defaults with { UiStyle = UiStyleCatalog.Studio };
+        store.Save(original);
+        var legacy = Regex.Replace(File.ReadAllText(store.Path), @"(?m)^pet:.*(?:\r?\n|$)", string.Empty);
+        File.WriteAllText(store.Path, legacy);
+
+        Assert.AreEqual(original, store.LoadOrCreate());
+        Assert.AreEqual(legacy, File.ReadAllText(store.Path), "Loading must not rewrite a legacy file.");
+    }
+
+    [TestMethod]
+    [DataRow("HOOD", "hood")]
+    [DataRow("PiP", "pip")]
+    [DataRow("CRUMB", "crumb")]
+    [DataRow("Puddle", "puddle")]
+    public void PetSelectionRoundTripsCanonicalNamesAndPreservesTheSession(string input, string canonical)
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new YamlConfigurationStore(Path.Combine(directory.Path, "config.yaml"));
+        var original = store.LoadOrCreate();
+        File.WriteAllText(store.Path, ReplaceSetting(File.ReadAllText(store.Path), "pet", input));
+        Assert.AreEqual(canonical, store.LoadOrCreate().Pet);
+        var session = CreateSession(original);
+        session.Sleep();
+        session.Advance(TimeSpan.FromMilliseconds(900));
+        var presentation = session.Presentation;
+        var nap = session.RemainingNap;
+        var needs = session.Needs;
+        var controller = new HoodConfigurationController(session, store);
+
+        controller.SaveAndApply("pet", original with { Pet = input });
+
+        Assert.AreEqual(canonical, controller.Current.Pet);
+        Assert.AreEqual(original with { Pet = canonical }, store.LoadOrCreate());
+        StringAssert.Contains(File.ReadAllText(store.Path), $"pet: {canonical}");
+        Assert.AreEqual(presentation, session.Presentation);
+        Assert.AreEqual(needs, session.Needs);
+        Assert.AreEqual(nap, session.RemainingNap);
+    }
+
+    [TestMethod]
+    public void InvalidPetIdentifiersAreRejectedWithoutRewritingConfiguration()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new YamlConfigurationStore(Path.Combine(directory.Path, "config.yaml"));
+        store.LoadOrCreate();
+        var baseline = File.ReadAllText(store.Path);
+        foreach (var value in new[] { "\"\"", "null", "123", "fox", "../Pip" })
+        {
+            var invalid = ReplaceSetting(baseline, "pet", value);
+            File.WriteAllText(store.Path, invalid);
+            var error = Assert.Throws<HoodConfigurationException>(() => store.LoadOrCreate());
+            Assert.AreEqual("pet", error.SettingPath);
+            Assert.AreEqual(invalid, File.ReadAllText(store.Path));
+        }
+    }
+
+    [TestMethod]
+    public void PetSaveFailureKeepsTheEffectivePetAndContinuationState()
+    {
+        var session = CreateSession(HoodConfiguration.Defaults);
+        session.Feed();
+        session.Advance(TimeSpan.FromMilliseconds(180));
+        var presentation = session.Presentation;
+        var controller = new HoodConfigurationController(session, new FailingConfigurationStore());
+
+        var error = Assert.Throws<HoodConfigurationException>(() =>
+            controller.SaveAndApply("pet", controller.Current with { Pet = PetCatalog.Pip }));
+
+        Assert.AreEqual("pet", error.SettingPath);
+        Assert.AreEqual(PetCatalog.Hood, controller.Current.Pet);
+        Assert.AreEqual(presentation, session.Presentation);
     }
 
     private static string ReplaceSetting(string yaml, string setting, string value)

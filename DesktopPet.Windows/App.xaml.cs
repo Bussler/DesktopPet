@@ -81,7 +81,7 @@ public partial class App : System.Windows.Application
                 return;
             }
 
-            var assets = HoodAssets.Load(Path.Combine(AppContext.BaseDirectory, "Assets", "Hood"));
+            var assets = HoodAssets.LoadPet(Path.Combine(AppContext.BaseDirectory, "Assets"), configuration.Pet);
             var displays = WindowsDisplayProvider.GetDisplays();
             _notes?.RecoverNotePlacements(displays);
             try
@@ -353,7 +353,7 @@ public partial class App : System.Windows.Application
             "HoodDesktopPet",
             "config.yaml"));
         _settingsWindow = new SettingsWindow(
-            new HoodConfigurationController(_session, store, _startupRegistration), _petWindow, _effectiveUiStyle, ApplySavedAppearance);
+            new HoodConfigurationController(_session, store, _startupRegistration), _petWindow, _effectiveUiStyle, ApplyUiStyle);
         _settingsWindow.ApplyTheme(_effectiveNotesSettings.Theme, _effectiveUiStyle);
         _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         _settingsWindow.Show();
@@ -444,15 +444,16 @@ public partial class App : System.Windows.Application
         }
     }
 
-    private void ApplySavedAppearance()
+    private void ApplyUiStyle(string style)
     {
-        if (_session is null || string.Equals(_session.Configuration.UiStyle, _effectiveUiStyle, StringComparison.OrdinalIgnoreCase))
+        style = UiStyleCatalog.Canonicalize(style);
+        if (style == _effectiveUiStyle)
         {
             return;
         }
 
         var previousStyle = _effectiveUiStyle;
-        _effectiveUiStyle = _session.Configuration.UiStyle;
+        _effectiveUiStyle = style;
         try
         {
             ApplyNotesAppearance();
@@ -467,13 +468,13 @@ public partial class App : System.Windows.Application
             catch (Exception restoreError) when (restoreError is not OutOfMemoryException)
             {
                 throw new AggregateException(
-                    "The style was saved, but Hood could not refresh the appearance or restore the previous one. Restart Hood to apply the saved style.",
+                    "Hood could not refresh the UI style or restore the previous appearance.",
                     applyError,
                     restoreError);
             }
 
             throw new InvalidOperationException(
-                $"The style was saved, but Hood could not apply it. The previous {previousStyle} appearance was restored; restart Hood to apply the saved style.",
+                $"Hood could not apply the UI style. The previous {previousStyle} appearance was restored.",
                 applyError);
         }
     }

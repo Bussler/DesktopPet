@@ -18,7 +18,7 @@ public partial class HoodOverlayWindow : Window
     private const int WmMouseActivate = 0x0021;
     private const int MaNoActivate = 3;
     private readonly HoodSession _session;
-    private readonly LoadedHoodAssets _assets;
+    private LoadedHoodAssets _assets;
     private readonly Action _showSettings;
     private readonly Action _quitApplication;
     private readonly Action _activateNotes;
@@ -391,6 +391,18 @@ public partial class HoodOverlayWindow : Window
     }
 
     internal void ApplyAlwaysOnTop(bool enabled) => Topmost = enabled;
+
+    internal LoadedHoodAssets CurrentAssets => _assets;
+
+    internal LoadedHoodAssets LoadPetAssets(string pet) =>
+        HoodAssets.LoadPet(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets"), pet, _assets.Definition);
+
+    internal void ApplyPetAssets(LoadedHoodAssets assets)
+    {
+        _assets = assets;
+        _renderedAction = null;
+        RenderPresentation();
+    }
 
     internal System.Windows.Point PresentationCenter => new(Left + ActualWidth / 2, Top + ActualHeight / 2);
 

@@ -1,0 +1,1202 @@
+{
+  "schemaVersion": 1,
+  "name": "Crumb",
+  "spriteSheet": "hood_spritesheet.png",
+  "sheetWidth": 6144,
+  "sheetHeight": 4160,
+  "frameWidth": 384,
+  "frameHeight": 416,
+  "spriteScale": 2,
+  "animations": [
+    {
+      "action": "idle",
+      "frames": [
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 0
+        },
+        {
+          "row": 0,
+          "column": 1
+        },
+        {
+          "row": 0,
+          "column": 2
+        },
+        {
+          "row": 0,
+          "column": 3
+        },
+        {
+          "row": 0,
+          "column": 4
+        },
+        {
+          "row": 0,
+          "column": 5
+        },
+        {
+          "row": 0,
+          "column": 6
+        },
+        {
+          "row": 0,
+          "column": 7
+        },
+        {
+          "row": 0,
+          "column": 8
+        },
+        {
+          "row": 0,
+          "column": 9
+        },
+        {
+          "row": 0,
+          "column": 10
+        },
+        {
+          "row": 0,
+          "column": 11
+        },
+        {
+          "row": 0,
+          "column": 12
+        },
+        {
+          "row": 0,
+          "column": 13
+        },
+        {
+          "row": 0,
+          "column": 14
+        },
+        {
+          "row": 0,
+          "column": 15
+        }
+      ],
+      "frameDurationMilliseconds": 80,
+      "loops": true,
+      "motionBounds": {
+        "height": 208,
+        "width": 192,
+        "y": 0,
+        "x": 0
+      }
+    },
+    {
+      "action": "runRight",
+      "frames": [
+        {
+          "row": 1,
+          "column": 0
+        },
+        {
+          "row": 1,
+          "column": 1
+        },
+        {
+          "row": 1,
+          "column": 2
+        },
+        {
+          "row": 1,
+          "column": 3
+        },
+        {
+          "row": 1,
+          "column": 4
+        },
+        {
+          "row": 1,
+          "column": 5
+        },
+        {
+          "row": 1,
+          "column": 6
+        },
+        {
+          "row": 1,
+          "column": 7
+        },
+        {
+          "row": 1,
+          "column": 8
+        },
+        {
+          "row": 1,
+          "column": 9
+        },
+        {
+          "row": 1,
+          "column": 10
+        },
+        {
+          "row": 1,
+          "column": 11
+        },
+        {
+          "row": 1,
+          "column": 12
+        },
+        {
+          "row": 1,
+          "column": 13
+        },
+        {
+          "row": 1,
+          "column": 14
+        },
+        {
+          "row": 1,
+          "column": 15
+        }
+      ],
+      "frameDurationMilliseconds": 55,
+      "loops": true,
+      "motionBounds": {
+        "height": 208,
+        "width": 192,
+        "y": 0,
+        "x": 0
+      }
+    },
+    {
+      "action": "runLeft",
+      "frames": [
+        {
+          "row": 2,
+          "column": 0
+        },
+        {
+          "row": 2,
+          "column": 1
+        },
+        {
+          "row": 2,
+          "column": 2
+        },
+        {
+          "row": 2,
+          "column": 3
+        },
+        {
+          "row": 2,
+          "column": 4
+        },
+        {
+          "row": 2,
+          "column": 5
+        },
+        {
+          "row": 2,
+          "column": 6
+        },
+        {
+          "row": 2,
+          "column": 7
+        },
+        {
+          "row": 2,
+          "column": 8
+        },
+        {
+          "row": 2,
+          "column": 9
+        },
+        {
+          "row": 2,
+          "column": 10
+        },
+        {
+          "row": 2,
+          "column": 11
+        },
+        {
+          "row": 2,
+          "column": 12
+        },
+        {
+          "row": 2,
+          "column": 13
+        },
+        {
+          "row": 2,
+          "column": 14
+        },
+        {
+          "row": 2,
+          "column": 15
+        }
+      ],
+      "frameDurationMilliseconds": 55,
+      "loops": true,
+      "motionBounds": {
+        "height": 208,
+        "width": 192,
+        "y": 0,
+        "x": 0
+      }
+    },
+    {
+      "action": "wave",
+      "frames": [
+        {
+          "row": 3,
+          "column": 0
+        },
+        {
+          "row": 3,
+          "column": 1
+        },
+        {
+          "row": 3,
+          "column": 2
+        },
+        {
+          "row": 3,
+          "column": 3
+        },
+        {
+          "row": 3,
+          "column": 4
+        },
+        {
+          "row": 3,
+          "column": 5
+        },
+        {
+          "row": 3,
+          "column": 6
+        },
+        {
+          "row": 3,
+          "column": 7
+        },
+        {
+          "row": 3,
+          "column": 8
+        },
+        {
+          "row": 3,
+          "column": 9
+        },
+        {
+          "row": 3,
+          "column": 10
+        },
+        {
+          "row": 3,
+          "column": 11
+        }
+      ],
+      "frameDurationMilliseconds": 78,
+      "loops": false,
+      "motionBounds": {
+        "height": 208,
+        "width": 192,
+        "y": 0,
+        "x": 0
+      }
+    },
+    {
+      "action": "lookUp",
+      "frames": [
+        {
+          "row": 4,
+          "column": 0
+        },
+        {
+          "row": 4,
+          "column": 1
+        },
+        {
+          "row": 4,
+          "column": 2
+        },
+        {
+          "row": 4,
+          "column": 3
+        },
+        {
+          "row": 4,
+          "column": 4
+        },
+        {
+          "row": 4,
+          "column": 5
+        },
+        {
+          "row": 4,
+          "column": 6
+        },
+        {
+          "row": 4,
+          "column": 7
+        },
+        {
+          "row": 4,
+          "column": 8
+        },
+        {
+          "row": 4,
+          "column": 9
+        },
+        {
+          "row": 4,
+          "column": 10
+        },
+        {
+          "row": 4,
+          "column": 11
+        }
+      ],
+      "frameDurationMilliseconds": 60,
+      "loops": false,
+      "motionBounds": {
+        "height": 208,
+        "width": 192,
+        "y": 0,
+        "x": 0
+      }
+    },
+    {
+      "action": "lookAround",
+      "frames": [
+        {
+          "row": 5,
+          "column": 0
+        },
+        {
+          "row": 5,
+          "column": 1
+        },
+        {
+          "row": 5,
+          "column": 2
+        },
+        {
+          "row": 5,
+          "column": 3
+        },
+        {
+          "row": 5,
+          "column": 4
+        },
+        {
+          "row": 5,
+          "column": 5
+        },
+        {
+          "row": 5,
+          "column": 6
+        },
+        {
+          "row": 5,
+          "column": 7
+        },
+        {
+          "row": 5,
+          "column": 8
+        },
+        {
+          "row": 5,
+          "column": 9
+        },
+        {
+          "row": 5,
+          "column": 10
+        },
+        {
+          "row": 5,
+          "column": 11
+        },
+        {
+          "row": 5,
+          "column": 12
+        },
+        {
+          "row": 5,
+          "column": 13
+        },
+        {
+          "row": 5,
+          "column": 14
+        },
+        {
+          "row": 5,
+          "column": 15
+        }
+      ],
+      "frameDurationMilliseconds": 143,
+      "loops": false,
+      "motionBounds": {
+        "height": 208,
+        "width": 192,
+        "y": 0,
+        "x": 0
+      }
+    },
+    {
+      "action": "jump",
+      "frames": [
+        {
+          "row": 6,
+          "column": 0
+        },
+        {
+          "row": 6,
+          "column": 1
+        },
+        {
+          "row": 6,
+          "column": 2
+        },
+        {
+          "row": 6,
+          "column": 3
+        },
+        {
+          "row": 6,
+          "column": 4
+        },
+        {
+          "row": 6,
+          "column": 5
+        },
+        {
+          "row": 6,
+          "column": 6
+        },
+        {
+          "row": 6,
+          "column": 7
+        },
+        {
+          "row": 6,
+          "column": 8
+        },
+        {
+          "row": 6,
+          "column": 9
+        },
+        {
+          "row": 6,
+          "column": 10
+        },
+        {
+          "row": 6,
+          "column": 11
+        },
+        {
+          "row": 6,
+          "column": 12
+        },
+        {
+          "row": 6,
+          "column": 13
+        },
+        {
+          "row": 6,
+          "column": 14
+        }
+      ],
+      "frameDurationMilliseconds": 80,
+      "loops": false,
+      "motionBounds": {
+        "height": 208,
+        "width": 192,
+        "y": 0,
+        "x": 0
+      }
+    },
+    {
+      "action": "feed",
+      "frames": [
+        {
+          "row": 7,
+          "column": 0
+        },
+        {
+          "row": 7,
+          "column": 1
+        },
+        {
+          "row": 7,
+          "column": 2
+        },
+        {
+          "row": 7,
+          "column": 3
+        },
+        {
+          "row": 7,
+          "column": 4
+        },
+        {
+          "row": 7,
+          "column": 5
+        },
+        {
+          "row": 7,
+          "column": 6
+        },
+        {
+          "row": 7,
+          "column": 7
+        },
+        {
+          "row": 7,
+          "column": 8
+        },
+        {
+          "row": 7,
+          "column": 9
+        },
+        {
+          "row": 7,
+          "column": 10
+        },
+        {
+          "row": 7,
+          "column": 11
+        },
+        {
+          "row": 7,
+          "column": 12
+        },
+        {
+          "row": 7,
+          "column": 13
+        },
+        {
+          "row": 7,
+          "column": 14
+        }
+      ],
+      "frameDurationMilliseconds": 60,
+      "loops": false,
+      "motionBounds": {
+        "height": 208,
+        "width": 192,
+        "y": 0,
+        "x": 0
+      }
+    },
+    {
+      "action": "sleep",
+      "frames": [
+        {
+          "row": 8,
+          "column": 0
+        },
+        {
+          "row": 8,
+          "column": 1
+        },
+        {
+          "row": 8,
+          "column": 2
+        },
+        {
+          "row": 8,
+          "column": 3
+        },
+        {
+          "row": 8,
+          "column": 4
+        },
+        {
+          "row": 8,
+          "column": 5
+        },
+        {
+          "row": 8,
+          "column": 6
+        },
+        {
+          "row": 8,
+          "column": 7
+        },
+        {
+          "row": 8,
+          "column": 8
+        },
+        {
+          "row": 8,
+          "column": 9
+        },
+        {
+          "row": 8,
+          "column": 10
+        },
+        {
+          "row": 8,
+          "column": 11
+        }
+      ],
+      "frameDurationMilliseconds": 225,
+      "loops": true,
+      "motionBounds": {
+        "height": 208,
+        "width": 192,
+        "y": 0,
+        "x": 0
+      }
+    },
+    {
+      "action": "wake",
+      "frames": [
+        {
+          "row": 9,
+          "column": 0
+        },
+        {
+          "row": 9,
+          "column": 1
+        },
+        {
+          "row": 9,
+          "column": 2
+        },
+        {
+          "row": 9,
+          "column": 3
+        },
+        {
+          "row": 9,
+          "column": 4
+        },
+        {
+          "row": 9,
+          "column": 5
+        },
+        {
+          "row": 9,
+          "column": 6
+        },
+        {
+          "row": 9,
+          "column": 7
+        },
+        {
+          "row": 9,
+          "column": 8
+        },
+        {
+          "row": 9,
+          "column": 9
+        },
+        {
+          "row": 9,
+          "column": 10
+        },
+        {
+          "row": 9,
+          "column": 11
+        },
+        {
+          "row": 9,
+          "column": 12
+        },
+        {
+          "row": 9,
+          "column": 13
+        },
+        {
+          "row": 9,
+          "column": 14
+        }
+      ],
+      "frameDurationMilliseconds": 60,
+      "loops": false,
+      "motionBounds": {
+        "height": 208,
+        "width": 192,
+        "y": 0,
+        "x": 0
+      }
+    }
+  ]
+}

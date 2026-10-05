@@ -1,11 +1,13 @@
 using System.IO;
 using System.Reflection;
+using System.Text.Json.Nodes;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Shell;
 using DesktopPet.Core;
 using DesktopPet.Windows;
@@ -18,6 +20,51 @@ namespace DesktopPet.Windows.Tests;
 [DoNotParallelize]
 public sealed class SettingsAndStatsTests
 {
+    [TestMethod]
+    public void SelectionPreviewsUiStyleWithoutPersistingChanges()
+    {
+        using var fixture = new Fixture("light");
+        fixture.Store.LoadOrCreate();
+        var baseline = File.ReadAllText(fixture.ConfigPath);
+        var pet = fixture.Pet();
+        var settings = fixture.HoodSettings(pet, UiStyleCatalog.StickyNotes);
+        try
+        {
+            ((ComboBox)settings.FindName("UiStyleComboBox")).SelectedValue = UiStyleCatalog.Minimal;
+
+            Assert.AreEqual("#FF2878D0", ((SolidColorBrush)settings.Resources["AppAccentBrush"]).Color.ToString(),
+                "Selecting a style should update the visible appearance immediately.");
+            Assert.AreEqual(UiStyleCatalog.StickyNotes, fixture.Controller.Current.UiStyle);
+            Assert.AreEqual(baseline, File.ReadAllText(fixture.ConfigPath));
+        }
+        finally { settings.Close(); pet.Close(); }
+    }
+
+    [TestMethod]
+    public void SelectionPreviewsPetWithoutPersistingChanges()
+    {
+        using var fixture = new Fixture("light");
+        fixture.Store.LoadOrCreate();
+        var baseline = File.ReadAllText(fixture.ConfigPath);
+        fixture.Session.Feed();
+        fixture.Session.Advance(TimeSpan.FromMilliseconds(180));
+        var presentation = fixture.Session.Presentation;
+        var pet = fixture.Pet();
+        var settings = fixture.HoodSettings(pet, UiStyleCatalog.StickyNotes);
+        try
+        {
+            ((ComboBox)settings.FindName("PetComboBox")).SelectedValue = PetCatalog.Pip;
+
+            var source = (BitmapImage)((CroppedBitmap)((Image)pet.FindName("PetImage")).Source).Source;
+            StringAssert.Contains(source.UriSource.LocalPath.ToLowerInvariant(), "pip",
+                "Selecting a pet should replace the visible sheet immediately.");
+            Assert.AreEqual(presentation, fixture.Session.Presentation);
+            Assert.AreEqual(PetCatalog.Hood, fixture.Controller.Current.Pet);
+            Assert.AreEqual(baseline, File.ReadAllText(fixture.ConfigPath));
+        }
+        finally { settings.Close(); pet.Close(); }
+    }
+
     [TestMethod]
     [DataRow("light", "#FFF4F6F9", "#FFFFFFFF", "#FFF9F9F9")]
     [DataRow("dark", "#FF202020", "#FF2D2D2D", "#FF2C2C2C")]
@@ -58,7 +105,7 @@ public sealed class SettingsAndStatsTests
     [DataRow(UiStyleCatalog.Minimal)]
     [DataRow(UiStyleCatalog.Soft)]
     [DataRow(UiStyleCatalog.Studio)]
-    public void HoodSettingsSavesStyleWithoutPreviewAndRestoresTheSavedChoice(string style)
+    public void HoodSettingsPreviewsStyleThenSavesAndRestoresTheSavedChoice(string style)
     {
         using var fixture = new Fixture("light");
         fixture.Store.LoadOrCreate();
@@ -74,30 +121,30 @@ public sealed class SettingsAndStatsTests
             var existingAccent = ((SolidColorBrush)settings.Resources["AppAccentBrush"]).Color;
             selector.SelectedValue = style;
 
-            Assert.AreEqual(existingAccent, ((SolidColorBrush)settings.Resources["AppAccentBrush"]).Color,
-                "Selecting a style must not preview it before Save.");
-            Assert.AreEqual(Visibility.Visible, ((TextBlock)settings.FindName("RestartNoticeText")).Visibility);
+            var previewAccent = ((SolidColorBrush)settings.Resources["AppAccentBrush"]).Color;
+            Assert.AreNotEqual(existingAccent, previewAccent, "Selecting a style must preview it before Save.");
+            Assert.AreEqual(UiStyleCatalog.StickyNotes, fixture.Store.LoadOrCreate().UiStyle);
             typeof(SettingsWindow).GetMethod("OnSaveClick", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(settings, [settings, new RoutedEventArgs(Button.ClickEvent)]);
 
             Assert.AreEqual(style, fixture.Controller.Current.UiStyle);
             Assert.AreEqual(style, fixture.Store.LoadOrCreate().UiStyle);
             Assert.AreEqual("yellow", fixture.Controller.Current.Notes.DefaultColor);
+            Assert.AreEqual(previewAccent, ((SolidColorBrush)settings.Resources["AppAccentBrush"]).Color,
+                "Saving must retain the preview instead of rolling it back on close.");
 
-            var reopened = fixture.HoodSettings(pet, UiStyleCatalog.StickyNotes);
+            var reopened = fixture.HoodSettings(pet, style);
             try
             {
                 Assert.AreEqual(style, ((ComboBox)reopened.FindName("UiStyleComboBox")).SelectedValue);
-                Assert.AreEqual(Visibility.Visible, ((TextBlock)reopened.FindName("RestartNoticeText")).Visibility);
-                Assert.AreEqual(existingAccent, ((SolidColorBrush)reopened.Resources["AppAccentBrush"]).Color,
-                    "A saved style without an application callback must not partially apply.");
+                Assert.AreEqual(previewAccent, ((SolidColorBrush)reopened.Resources["AppAccentBrush"]).Color);
                 ((ComboBox)reopened.FindName("UiStyleComboBox")).SelectedValue = UiStyleCatalog.StickyNotes;
-                Assert.AreEqual(Visibility.Visible, ((TextBlock)reopened.FindName("RestartNoticeText")).Visibility);
-                StringAssert.Contains(((TextBlock)reopened.FindName("RestartNoticeText")).Text, "Save to keep Sticky Notes");
+                Assert.AreEqual(existingAccent, ((SolidColorBrush)reopened.Resources["AppAccentBrush"]).Color);
                 typeof(SettingsWindow).GetMethod("OnCancelClick", BindingFlags.Instance | BindingFlags.NonPublic)!
                     .Invoke(reopened, [reopened, new RoutedEventArgs(Button.ClickEvent)]);
                 Assert.AreEqual(style, fixture.Controller.Current.UiStyle,
                     "Cancel must leave the saved selection unchanged.");
+                Assert.AreEqual(previewAccent, ((SolidColorBrush)reopened.Resources["AppAccentBrush"]).Color);
             }
             finally { reopened.Close(); }
         }
@@ -126,7 +173,7 @@ public sealed class SettingsAndStatsTests
     [DataRow(UiStyleCatalog.Minimal)]
     [DataRow(UiStyleCatalog.Soft)]
     [DataRow(UiStyleCatalog.Studio)]
-    public void HoodSettingsRefreshCallbackRunsOnlyAfterTheNewStyleIsSaved(string style)
+    public void HoodSettingsRefreshCallbackPreviewsBeforeSavingAndDoesNotRepeatOnSave(string style)
     {
         using var fixture = new Fixture("light");
         fixture.Store.LoadOrCreate();
@@ -134,19 +181,21 @@ public sealed class SettingsAndStatsTests
         var refreshCount = 0;
         var effectiveStyle = UiStyleCatalog.StickyNotes;
         var settings = (SettingsWindow)Activator.CreateInstance(typeof(SettingsWindow), BindingFlags.Instance | BindingFlags.NonPublic,
-            null, [fixture.Controller, pet, effectiveStyle, (Action)(() =>
+            null, [fixture.Controller, pet, effectiveStyle, (Action<string>)(selected =>
             {
-                Assert.AreEqual(style, fixture.Store.LoadOrCreate().UiStyle,
-                    "The refresh callback must run only after successful persistence.");
-                effectiveStyle = fixture.Controller.Current.UiStyle;
+                Assert.AreEqual(UiStyleCatalog.StickyNotes, fixture.Store.LoadOrCreate().UiStyle,
+                    "A preview must happen before persistence.");
+                effectiveStyle = selected;
                 refreshCount++;
             })], null)!;
         try
         {
             var originalAccent = ((SolidColorBrush)settings.Resources["AppAccentBrush"]).Color;
             ((ComboBox)settings.FindName("UiStyleComboBox")).SelectedValue = style;
-            Assert.AreEqual(originalAccent, ((SolidColorBrush)settings.Resources["AppAccentBrush"]).Color,
-                "An unsaved selection must not preview the new appearance.");
+            Assert.AreNotEqual(originalAccent, ((SolidColorBrush)settings.Resources["AppAccentBrush"]).Color);
+            Assert.AreEqual(1, refreshCount);
+            Assert.AreEqual(style, effectiveStyle);
+            Assert.AreEqual(UiStyleCatalog.StickyNotes, fixture.Controller.Current.UiStyle);
             typeof(SettingsWindow).GetMethod("OnSaveClick", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(settings, [settings, new RoutedEventArgs(Button.ClickEvent)]);
 
@@ -160,28 +209,25 @@ public sealed class SettingsAndStatsTests
     [DataRow(UiStyleCatalog.Minimal)]
     [DataRow(UiStyleCatalog.Soft)]
     [DataRow(UiStyleCatalog.Studio)]
-    public void HoodSettingsReportsAppearanceFailureAfterTheStyleWasSaved(string style)
+    public void HoodSettingsReportsPreviewFailureWithoutSavingOrChangingTheChoice(string style)
     {
         using var fixture = new Fixture("light");
         fixture.Store.LoadOrCreate();
         var pet = fixture.Pet();
         var settings = (SettingsWindow)Activator.CreateInstance(typeof(SettingsWindow), BindingFlags.Instance | BindingFlags.NonPublic,
             null, [fixture.Controller, pet, UiStyleCatalog.StickyNotes,
-                (Action)(() => throw new InvalidOperationException("simulated appearance failure"))], null)!;
+                (Action<string>)(_ => throw new InvalidOperationException("simulated appearance failure"))], null)!;
         try
         {
             ((ComboBox)settings.FindName("UiStyleComboBox")).SelectedValue = style;
-            typeof(SettingsWindow).GetMethod("OnSaveClick", BindingFlags.Instance | BindingFlags.NonPublic)!
-                .Invoke(settings, [settings, new RoutedEventArgs(Button.ClickEvent)]);
 
-            Assert.AreEqual(style, fixture.Store.LoadOrCreate().UiStyle);
-            Assert.AreEqual(style, fixture.Controller.Current.UiStyle);
+            Assert.AreEqual(UiStyleCatalog.StickyNotes, fixture.Store.LoadOrCreate().UiStyle);
+            Assert.AreEqual(UiStyleCatalog.StickyNotes, fixture.Controller.Current.UiStyle);
+            Assert.AreEqual(UiStyleCatalog.StickyNotes, ((ComboBox)settings.FindName("UiStyleComboBox")).SelectedValue);
             var error = (TextBlock)settings.FindName("AppearanceErrorText");
             Assert.AreEqual(Visibility.Visible, error.Visibility);
-            StringAssert.Contains(error.Text, "Settings were saved");
-            StringAssert.Contains(error.Text, "Restart Hood");
-            Assert.IsFalse(error.Text.Contains("not saved", StringComparison.OrdinalIgnoreCase));
-            StringAssert.Contains(((TextBlock)settings.FindName("RestartNoticeText")).Text, "this session uses Sticky Notes");
+            StringAssert.Contains(error.Text, "Could not preview");
+            StringAssert.Contains(error.Text, "Settings were not saved");
         }
         finally { settings.Close(); pet.Close(); }
     }
@@ -410,7 +456,7 @@ public sealed class SettingsAndStatsTests
             Assert.AreEqual(expectedHeadingSize, ((TextBlock)notesList.FindName("NotesListHeadingText")).FontSize);
             Assert.AreEqual(expectedHeadingWeight, ((TextBlock)notesList.FindName("NotesListHeadingText")).FontWeight);
             Assert.AreEqual(style, ((ComboBox)hoodSettings.FindName("UiStyleComboBox")).SelectedValue);
-            Assert.AreEqual(Visibility.Collapsed, ((TextBlock)hoodSettings.FindName("RestartNoticeText")).Visibility);
+            Assert.AreEqual(Visibility.Collapsed, ((TextBlock)hoodSettings.FindName("AppearanceErrorText")).Visibility);
             Assert.AreEqual((Color)ColorConverter.ConvertFromString(cardHex)!,
                 ((SolidColorBrush)notesList.Resources["AppCardBrush"]).Color);
             var expectedTray = (Color)ColorConverter.ConvertFromString(trayHex)!;
@@ -586,6 +632,376 @@ public sealed class SettingsAndStatsTests
             Assert.AreEqual("20", input.Text);
         }
         finally { window.Close(); }
+    }
+
+    [TestMethod]
+    public void PetDropdownPreviewsAllFourSheetsAndSaveKeepsTheSleepingSession()
+    {
+        using var fixture = new Fixture("light");
+        fixture.Store.LoadOrCreate();
+        fixture.Session.Sleep();
+        fixture.Session.Advance(TimeSpan.FromMilliseconds(900));
+        var pet = fixture.Pet();
+        try
+        {
+            var image = (Image)pet.FindName("PetImage");
+            var presentation = fixture.Session.Presentation;
+            var needs = fixture.Session.Needs;
+            var nap = fixture.Session.RemainingNap;
+            var interval = fixture.Session.RemainingRandomInterval;
+            foreach (var choice in new[] { PetCatalog.Pip, PetCatalog.Crumb, PetCatalog.Puddle, PetCatalog.Hood })
+            {
+                var settings = fixture.HoodSettings(pet, UiStyleCatalog.StickyNotes);
+                try
+                {
+                    var selector = (ComboBox)settings.FindName("PetComboBox");
+                    CollectionAssert.AreEqual(PetCatalog.Supported.ToArray(),
+                        selector.Items.OfType<ComboBoxItem>().Select(item => (string)item.Tag).ToArray());
+                    Assert.AreEqual(fixture.Controller.Current.Pet, selector.SelectedValue);
+                    var oldImage = image.Source;
+                    var oldChoice = fixture.Controller.Current.Pet;
+                    selector.SelectedValue = choice;
+                    Assert.AreNotSame(oldImage, image.Source, "An unsaved choice must preview the sprite.");
+                    Assert.AreEqual(oldChoice, fixture.Store.LoadOrCreate().Pet);
+                    var previewImage = image.Source;
+                    typeof(SettingsWindow).GetMethod("OnSaveClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+                        .Invoke(settings, [settings, new RoutedEventArgs(Button.ClickEvent)]);
+
+                    Assert.AreEqual(choice, fixture.Store.LoadOrCreate().Pet);
+                    Assert.AreEqual(choice, fixture.Controller.Current.Pet);
+                    Assert.AreEqual(presentation, fixture.Session.Presentation);
+                    Assert.AreEqual(needs, fixture.Session.Needs);
+                    Assert.AreEqual(nap, fixture.Session.RemainingNap);
+                    Assert.AreEqual(interval, fixture.Session.RemainingRandomInterval);
+                    Assert.AreSame(previewImage, image.Source, "Save must retain the preview image.");
+                    var crop = (CroppedBitmap)image.Source;
+                    StringAssert.Contains(((BitmapImage)crop.Source).UriSource.LocalPath.ToLowerInvariant(), $"{Path.DirectorySeparatorChar}{choice}{Path.DirectorySeparatorChar}");
+                    Assert.AreEqual(new Int32Rect(4 * 384, 8 * 416, 384, 416), crop.SourceRect);
+                }
+                finally { settings.Close(); }
+            }
+            var reopened = fixture.HoodSettings(pet, UiStyleCatalog.StickyNotes);
+            try
+            {
+                Assert.AreEqual(PetCatalog.Hood, ((ComboBox)reopened.FindName("PetComboBox")).SelectedValue);
+                var savedImage = image.Source;
+                ((ComboBox)reopened.FindName("PetComboBox")).SelectedValue = PetCatalog.Pip;
+                typeof(SettingsWindow).GetMethod("OnCancelClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(reopened, [reopened, new RoutedEventArgs(Button.ClickEvent)]);
+                Assert.AreSame(((CroppedBitmap)savedImage).Source, ((CroppedBitmap)image.Source).Source);
+                Assert.AreEqual(PetCatalog.Hood, fixture.Store.LoadOrCreate().Pet);
+            }
+            finally { reopened.Close(); }
+        }
+        finally { pet.Close(); }
+    }
+
+    [TestMethod]
+    [DataRow(PetCatalog.Pip)]
+    [DataRow(PetCatalog.Crumb)]
+    [DataRow(PetCatalog.Puddle)]
+    public void SavedPetLoadsAtStartupAndCanSwitchBackDuringFeeding(string choice)
+    {
+        using var fixture = new Fixture("light");
+        fixture.Controller.SaveAndApply("pet", fixture.Controller.Current with { Pet = choice });
+        fixture.Session.Feed();
+        fixture.Session.Advance(TimeSpan.FromMilliseconds(180));
+        var snapshot = new HoodSessionSnapshot
+        {
+            Position = fixture.Session.Position, RoamingArea = fixture.Session.RoamingArea,
+            Action = fixture.Session.Presentation.Action, FrameIndex = fixture.Session.Presentation.FrameIndex,
+            Needs = fixture.Session.Needs, RemainingRandomInterval = fixture.Session.RemainingRandomInterval
+        };
+        var load = typeof(HoodOverlayWindow).Assembly.GetType("DesktopPet.Windows.HoodAssets")!.GetMethod("LoadPet")!;
+        var saved = fixture.Store.LoadOrCreate();
+        var assets = load.Invoke(null, [Path.Combine(AppContext.BaseDirectory, "Assets"), saved.Pet, null])!;
+        var definition = (PetDefinition)assets.GetType().GetProperty("Definition")!.GetValue(assets)!;
+        var session = HoodSession.Start(definition, [new("Primary", new PetBounds(0, 0, 1920, 1040), true)],
+            new FixedRandomSource(), new NoopSessionStore(), saved, snapshot);
+        Action noop = () => { };
+        var pet = (HoodOverlayWindow)Activator.CreateInstance(typeof(HoodOverlayWindow), BindingFlags.Instance | BindingFlags.NonPublic,
+            null, [session, assets, noop, noop, noop, noop, noop, noop, UiStyleCatalog.StickyNotes], null)!;
+        var controller = new HoodConfigurationController(session, fixture.Store);
+        var settings = (SettingsWindow)Activator.CreateInstance(typeof(SettingsWindow), BindingFlags.Instance | BindingFlags.NonPublic,
+            null, [controller, pet], null)!;
+        try
+        {
+            Assert.AreEqual(fixture.Session.Presentation, session.Presentation);
+            Assert.AreEqual(choice, ((ComboBox)settings.FindName("PetComboBox")).SelectedValue);
+            var image = (Image)pet.FindName("PetImage");
+            StringAssert.Contains(((BitmapImage)((CroppedBitmap)image.Source).Source).UriSource.LocalPath.ToLowerInvariant(),
+                $"{Path.DirectorySeparatorChar}{choice}{Path.DirectorySeparatorChar}");
+            ((ComboBox)settings.FindName("PetComboBox")).SelectedValue = PetCatalog.Hood;
+            typeof(SettingsWindow).GetMethod("OnSaveClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(settings, [settings, new RoutedEventArgs(Button.ClickEvent)]);
+            Assert.AreEqual(fixture.Session.Presentation, session.Presentation);
+            Assert.AreEqual(snapshot.Needs, session.Needs);
+            session.Advance(TimeSpan.FromMilliseconds(60));
+            typeof(HoodOverlayWindow).GetMethod("RefreshBehaviorSettings", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(pet, null);
+            Assert.AreEqual(new Int32Rect(4 * 384, 7 * 416, 384, 416), ((CroppedBitmap)image.Source).SourceRect);
+            Assert.AreEqual(PetCatalog.Hood, fixture.Store.LoadOrCreate().Pet);
+        }
+        finally { settings.Close(); pet.Close(); }
+    }
+
+    [TestMethod]
+    public void FailedSettingsSaveKeepsTheCurrentSpriteAndRestoresTheDropdown()
+    {
+        using var fixture = new Fixture("light");
+        fixture.Store.LoadOrCreate();
+        var baseline = File.ReadAllText(fixture.ConfigPath);
+        var pet = fixture.Pet();
+        var settings = fixture.HoodSettings(pet, UiStyleCatalog.StickyNotes);
+        try
+        {
+            var original = ((Image)pet.FindName("PetImage")).Source;
+            ((ComboBox)settings.FindName("PetComboBox")).SelectedValue = PetCatalog.Pip;
+            using (var locked = new FileStream(fixture.ConfigPath, FileMode.Open, FileAccess.Read, FileShare.None))
+            {
+                typeof(SettingsWindow).GetMethod("OnSaveClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(settings, [settings, new RoutedEventArgs(Button.ClickEvent)]);
+            }
+
+            Assert.AreEqual(baseline, File.ReadAllText(fixture.ConfigPath));
+            Assert.AreEqual(PetCatalog.Hood, fixture.Controller.Current.Pet);
+            Assert.AreEqual(PetCatalog.Hood, ((ComboBox)settings.FindName("PetComboBox")).SelectedValue);
+            Assert.AreSame(((CroppedBitmap)original).Source, ((CroppedBitmap)((Image)pet.FindName("PetImage")).Source).Source);
+            Assert.AreEqual(Visibility.Visible, ((TextBlock)settings.FindName("AppearanceErrorText")).Visibility);
+            StringAssert.Contains(((TextBlock)settings.FindName("AppearanceErrorText")).Text, "Settings were not saved");
+        }
+        finally { settings.Close(); pet.Close(); }
+    }
+
+    [TestMethod]
+    public void PetLoaderRejectsMissingAndIncompatibleAssetsBeforeTheCurrentSheetChanges()
+    {
+        using var fixture = new Fixture("light");
+        var pet = fixture.Pet();
+        var root = Path.Combine(Path.GetTempPath(), $"HoodPetAssets-{Guid.NewGuid():N}");
+        try
+        {
+            var original = ((Image)pet.FindName("PetImage")).Source;
+            var definition = (PetDefinition)fixture.Assets.GetType().GetProperty("Definition")!.GetValue(fixture.Assets)!;
+            var load = typeof(HoodOverlayWindow).Assembly.GetType("DesktopPet.Windows.HoodAssets")!.GetMethod("LoadPet")!;
+            var missing = Assert.Throws<TargetInvocationException>(() => load.Invoke(null, [root, PetCatalog.Pip, definition]));
+            Assert.IsInstanceOfType<PetAssetException>(missing.InnerException);
+            var directory = Path.Combine(root, "Pip");
+            Directory.CreateDirectory(directory);
+            File.Copy(Path.Combine(AppContext.BaseDirectory, "Assets", "Pip", "hood_spritesheet.png"), Path.Combine(directory, "hood_spritesheet.png"));
+            var json = JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Assets", "Pip", "hood.animations.json")))!;
+            json["animations"]![0]!["frameDurationMilliseconds"] = 81;
+            File.WriteAllText(Path.Combine(directory, "hood.animations.json"), json.ToJsonString());
+            var incompatible = Assert.Throws<TargetInvocationException>(() => load.Invoke(null, [root, PetCatalog.Pip, definition]));
+            Assert.IsInstanceOfType<PetAssetException>(incompatible.InnerException);
+            StringAssert.Contains(incompatible.InnerException!.Message, "must match");
+            Assert.AreSame(original, ((Image)pet.FindName("PetImage")).Source);
+            Assert.AreEqual(PetCatalog.Hood, fixture.Controller.Current.Pet);
+        }
+        finally
+        {
+            pet.Close();
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    [DataRow(true)]
+    [DataRow(false)]
+    public void CancelAndWindowCloseRestoreBothOriginalChoicesAfterRepeatedPreviews(bool cancelButton)
+    {
+        using var fixture = new Fixture("dark", UiStyleCatalog.Studio);
+        fixture.Store.Save(fixture.Controller.Current);
+        fixture.Session.Sleep();
+        fixture.Session.Advance(TimeSpan.FromMilliseconds(900));
+        var pet = fixture.Pet(UiStyleCatalog.Studio);
+        var initial = fixture.HoodSettings(pet, UiStyleCatalog.Studio);
+        ((ComboBox)initial.FindName("PetComboBox")).SelectedValue = PetCatalog.Pip;
+        typeof(SettingsWindow).GetMethod("OnSaveClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(initial, [initial, new RoutedEventArgs(Button.ClickEvent)]);
+        var settings = fixture.HoodSettings(pet, UiStyleCatalog.Studio);
+        try
+        {
+            ShowHidden(settings);
+            var baseline = File.ReadAllText(fixture.ConfigPath);
+            var image = (Image)pet.FindName("PetImage");
+            var originalSheet = ((CroppedBitmap)image.Source).Source;
+            var originalAccent = ((SolidColorBrush)settings.Resources["AppAccentBrush"]).Color;
+            ((ComboBox)settings.FindName("PetComboBox")).SelectedValue = PetCatalog.Puddle;
+            ((ComboBox)settings.FindName("UiStyleComboBox")).SelectedValue = UiStyleCatalog.Minimal;
+            fixture.Session.Advance(TimeSpan.FromMilliseconds(225));
+            ((ComboBox)settings.FindName("PetComboBox")).SelectedValue = PetCatalog.Crumb;
+            ((ComboBox)settings.FindName("UiStyleComboBox")).SelectedValue = UiStyleCatalog.Soft;
+            ((CheckBox)settings.FindName("RoamingCheckBox")).IsChecked = false;
+
+            Assert.AreNotSame(originalSheet, ((CroppedBitmap)image.Source).Source);
+            Assert.AreNotEqual(originalAccent, ((SolidColorBrush)settings.Resources["AppAccentBrush"]).Color);
+            Assert.IsTrue(fixture.Controller.Current.Behavior.Roaming, "Other settings must remain pending until Save.");
+            var presentation = fixture.Session.Presentation;
+            var needs = fixture.Session.Needs;
+            var remainingNap = fixture.Session.RemainingNap;
+            if (cancelButton)
+                typeof(SettingsWindow).GetMethod("OnCancelClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(settings, [settings, new RoutedEventArgs(Button.ClickEvent)]);
+            else
+                settings.Close();
+
+            Assert.IsFalse(settings.IsVisible);
+            Assert.AreSame(originalSheet, ((CroppedBitmap)image.Source).Source);
+            Assert.AreEqual(originalAccent, ((SolidColorBrush)settings.Resources["AppAccentBrush"]).Color);
+            Assert.AreEqual(originalAccent, ((SolidColorBrush)pet.ContextMenu!.Resources["AppAccentBrush"]).Color);
+            Assert.AreEqual(baseline, File.ReadAllText(fixture.ConfigPath));
+            Assert.AreEqual(PetCatalog.Pip, fixture.Controller.Current.Pet);
+            Assert.AreEqual(UiStyleCatalog.Studio, fixture.Controller.Current.UiStyle);
+            Assert.AreEqual(presentation, fixture.Session.Presentation, "Rollback must not rewind animation progress.");
+            Assert.AreEqual(needs, fixture.Session.Needs);
+            Assert.AreEqual(remainingNap, fixture.Session.RemainingNap);
+            Assert.AreEqual(new Int32Rect(presentation.FrameIndex * 384, 8 * 416, 384, 416), ((CroppedBitmap)image.Source).SourceRect);
+            var reopened = fixture.HoodSettings(pet, UiStyleCatalog.Studio);
+            try
+            {
+                Assert.AreEqual(PetCatalog.Pip, ((ComboBox)reopened.FindName("PetComboBox")).SelectedValue);
+                Assert.AreEqual(UiStyleCatalog.Studio, ((ComboBox)reopened.FindName("UiStyleComboBox")).SelectedValue);
+            }
+            finally { reopened.Close(); }
+        }
+        finally { settings.Close(); initial.Close(); pet.Close(); }
+    }
+
+    [TestMethod]
+    public void SaveKeepsBothLiveChoicesAndDoesNotRollBackOnWindowClose()
+    {
+        using var fixture = new Fixture("light");
+        fixture.Store.LoadOrCreate();
+        var pet = fixture.Pet();
+        var settings = fixture.HoodSettings(pet, UiStyleCatalog.StickyNotes);
+        try
+        {
+            ((ComboBox)settings.FindName("UiStyleComboBox")).SelectedValue = UiStyleCatalog.Soft;
+            ((ComboBox)settings.FindName("PetComboBox")).SelectedValue = PetCatalog.Crumb;
+            var sheet = ((CroppedBitmap)((Image)pet.FindName("PetImage")).Source).Source;
+            var accent = ((SolidColorBrush)settings.Resources["AppAccentBrush"]).Color;
+            typeof(SettingsWindow).GetMethod("OnSaveClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(settings, [settings, new RoutedEventArgs(Button.ClickEvent)]);
+
+            Assert.AreEqual(PetCatalog.Crumb, fixture.Store.LoadOrCreate().Pet);
+            Assert.AreEqual(UiStyleCatalog.Soft, fixture.Store.LoadOrCreate().UiStyle);
+            Assert.AreSame(sheet, ((CroppedBitmap)((Image)pet.FindName("PetImage")).Source).Source);
+            Assert.AreEqual(accent, ((SolidColorBrush)settings.Resources["AppAccentBrush"]).Color);
+            Assert.AreEqual(accent, ((SolidColorBrush)pet.ContextMenu!.Resources["AppAccentBrush"]).Color);
+        }
+        finally { settings.Close(); pet.Close(); }
+    }
+
+    [TestMethod]
+    public void FailedRollbackKeepsSettingsOpenForAnotherCloseAttempt()
+    {
+        using var fixture = new Fixture("light");
+        fixture.Store.LoadOrCreate();
+        var pet = fixture.Pet();
+        var failRestore = true;
+        var settings = (SettingsWindow)Activator.CreateInstance(typeof(SettingsWindow), BindingFlags.Instance | BindingFlags.NonPublic,
+            null, [fixture.Controller, pet, UiStyleCatalog.StickyNotes, (Action<string>)(style =>
+            {
+                if (style == UiStyleCatalog.StickyNotes && failRestore) throw new InvalidOperationException("restore failed");
+            })], null)!;
+        try
+        {
+            ShowHidden(settings);
+            ((ComboBox)settings.FindName("UiStyleComboBox")).SelectedValue = UiStyleCatalog.Minimal;
+            settings.Close();
+            Assert.IsTrue(settings.IsVisible);
+            StringAssert.Contains(((TextBlock)settings.FindName("AppearanceErrorText")).Text, "Could not restore");
+            Assert.AreEqual(UiStyleCatalog.StickyNotes, fixture.Store.LoadOrCreate().UiStyle);
+            failRestore = false;
+            settings.Close();
+            Assert.IsFalse(settings.IsVisible);
+            Assert.AreEqual("#FF446DA5", ((SolidColorBrush)settings.Resources["AppAccentBrush"]).Color.ToString());
+        }
+        finally { failRestore = false; settings.Close(); pet.Close(); }
+    }
+
+    [TestMethod]
+    public void InvalidPetPreviewPreservesTheLastSuccessfulPreviewAndTheSavedChoice()
+    {
+        using var fixture = new Fixture("light");
+        fixture.Store.LoadOrCreate();
+        var pet = fixture.Pet();
+        var settings = fixture.HoodSettings(pet, UiStyleCatalog.StickyNotes);
+        try
+        {
+            var selector = (ComboBox)settings.FindName("PetComboBox");
+            selector.SelectedValue = PetCatalog.Pip;
+            var image = ((Image)pet.FindName("PetImage")).Source;
+            selector.Items.Add(new ComboBoxItem { Tag = "missing", Content = "Missing pet" });
+            selector.SelectedValue = "missing";
+            Assert.AreEqual(PetCatalog.Pip, selector.SelectedValue);
+            Assert.AreSame(image, ((Image)pet.FindName("PetImage")).Source);
+            Assert.AreEqual(PetCatalog.Hood, fixture.Store.LoadOrCreate().Pet);
+            StringAssert.Contains(((TextBlock)settings.FindName("AppearanceErrorText")).Text, "Could not preview this pet");
+        }
+        finally { settings.Close(); pet.Close(); }
+    }
+
+    [TestMethod]
+    public void AppPreviewsAndRestoresStyleAcrossOpenNotesSettingsListsMenusAndTray()
+    {
+        using var fixture = new Fixture("light");
+        fixture.Store.LoadOrCreate();
+        var notesPath = fixture.ConfigPath + ".notes.json";
+        var notes = NotesApplication.Start(new JsonNotesStore(notesPath));
+        var noteData = notes.GetNote(notes.CreateNote());
+        var note = new NoteWindow(noteData,
+            (_, _) => null, (_, _) => null, (_, _) => null, (_, _) => (null, null), _ => (true, null),
+            () => { }, () => { }, () => { }, (_, _) => null, _ => null, () => null, fixture.Controller.Current.Notes);
+        var notesBaseline = File.ReadAllText(notesPath);
+        var configurationBaseline = File.ReadAllText(fixture.ConfigPath);
+        var pet = fixture.Pet();
+        var notesSettings = fixture.Settings();
+        var notesList = new NotesListWindow(_ => [], _ => [], _ => { }, () => { }, _ => null, _ => null, () => null, "light");
+        using var tray = new Forms.ContextMenuStrip();
+        tray.Items.Add("Settings");
+        using var icon = new Forms.NotifyIcon { ContextMenuStrip = tray };
+        var app = System.Windows.Application.Current as App ?? new App { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        var fields = new[] { "_session", "_notes", "_petWindow", "_settingsWindow", "_notesSettingsWindow", "_notesListWindow", "_trayIcon", "_effectiveNotesSettings", "_effectiveUiStyle" }
+            .Select(name => typeof(App).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!).ToArray();
+        var originalValues = fields.Select(field => field.GetValue(app)).ToArray();
+        var apply = typeof(App).GetMethod("ApplyUiStyle", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var settings = (SettingsWindow)Activator.CreateInstance(typeof(SettingsWindow), BindingFlags.Instance | BindingFlags.NonPublic,
+            null, [fixture.Controller, pet, UiStyleCatalog.StickyNotes, (Action<string>)(style => apply.Invoke(app, [style]))], null)!;
+        var windows = (Dictionary<Guid, NoteWindow>)typeof(App).GetField("_noteWindows", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(app)!;
+        object[] values = [fixture.Session, notes, pet, settings, notesSettings, notesList, icon, fixture.Controller.Current.Notes, UiStyleCatalog.StickyNotes];
+        for (var index = 0; index < fields.Length; index++) fields[index].SetValue(app, values[index]);
+        windows.Add(noteData.Id, note);
+        try
+        {
+            foreach (var (style, expectedAccent) in new[] { (UiStyleCatalog.Soft, "#FF557F70"), (UiStyleCatalog.Studio, "#FF7652CE") })
+            {
+                ((ComboBox)settings.FindName("UiStyleComboBox")).SelectedValue = style;
+                foreach (var surface in new FrameworkElement[] { settings, notesSettings, notesList, note, pet.ContextMenu! })
+                    Assert.AreEqual(expectedAccent, ((SolidColorBrush)surface.Resources["AppAccentBrush"]).Color.ToString());
+                Assert.AreEqual(UiStyleCatalog.StickyNotes, fixture.Controller.Current.UiStyle);
+                Assert.AreEqual(configurationBaseline, File.ReadAllText(fixture.ConfigPath));
+                Assert.AreEqual(notesBaseline, File.ReadAllText(notesPath), "Live styling must not rewrite note data.");
+            }
+            var previewTrayColor = tray.BackColor;
+            settings.Close();
+            foreach (var surface in new FrameworkElement[] { settings, notesSettings, notesList, note, pet.ContextMenu! })
+                Assert.AreEqual("#FF446DA5", ((SolidColorBrush)surface.Resources["AppAccentBrush"]).Color.ToString());
+            Assert.AreNotEqual(previewTrayColor, tray.BackColor, "Closing without Save must also restore the tray.");
+            Assert.AreEqual(DrawingColor.FromArgb(255, 249, 249, 249), tray.BackColor);
+            Assert.AreEqual(configurationBaseline, File.ReadAllText(fixture.ConfigPath));
+            Assert.AreEqual(notesBaseline, File.ReadAllText(notesPath));
+            Assert.AreEqual(noteData.Color, notes.GetNote(noteData.Id).Color);
+            Assert.AreEqual(noteData.Document.GetPlainText(), notes.GetNote(noteData.Id).Document.GetPlainText());
+        }
+        finally
+        {
+            settings.Close();
+            windows.Remove(noteData.Id);
+            for (var index = 0; index < fields.Length; index++) fields[index].SetValue(app, originalValues[index]);
+            notesSettings.Close(); notesList.Close(); note.Close(); pet.Close();
+            File.Delete(notesPath);
+        }
     }
 
     private static void ShowHidden(Window window)
