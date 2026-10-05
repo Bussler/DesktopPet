@@ -7,6 +7,84 @@ namespace DesktopPet.Tests;
 public sealed class NotesApplicationTests
 {
     [TestMethod]
+    public void FailedTableSaveRetainsTheSavedTableAndRetriesTheEditableChanges()
+    {
+        var store = new SwitchableNotesStore();
+        var app = NotesApplication.Start(store);
+        var id = app.CreateNote();
+        var document = NoteTableTests.Parse();
+        app.UpdateDocument(id, document);
+        store.ShouldFail = true;
+        var expanded = NoteTables.Change(document, document.Paragraphs[0].Cell!.TableId, NoteTableChange.InsertRow, 2);
+        app.UpdateDocument(id, expanded);
+        Assert.IsTrue(app.HasUnsavedChanges);
+        Assert.AreEqual(7, store.Load()!.Notes.Single().Document.Paragraphs.Count);
+        Assert.AreEqual(10, app.GetNote(id).Document.Paragraphs.Count);
+        store.ShouldFail = false;
+        Assert.IsTrue(app.Flush());
+        Assert.IsFalse(app.HasUnsavedChanges);
+        Assert.AreEqual(10, store.Load()!.Notes.Single().Document.Paragraphs.Count);
+    }
+
+    [TestMethod]
+    public void TablesPersistSearchAndUndoStructuralAndAlignmentChanges()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new JsonNotesStore(Path.Combine(directory.Path, "notes.json"));
+        var app = NotesApplication.Start(store);
+        var id = app.CreateNote();
+        var document = NoteTableTests.Parse();
+        var tableId = document.Paragraphs[0].Cell!.TableId;
+        app.UpdateDocument(id, document);
+        var aligned = document.Copy();
+        foreach (var paragraph in aligned.Paragraphs.Where(row => row.Cell?.Column == 0))
+            paragraph.Cell = paragraph.Cell! with { Alignment = NoteCellAlignment.Right };
+        app.UpdateDocument(id, aligned);
+        Assert.AreEqual(NoteCellAlignment.Right, store.Load()!.Notes.Single().Document.Paragraphs[0].Cell!.Alignment);
+        Assert.IsTrue(app.Undo(id));
+        Assert.AreEqual(NoteCellAlignment.Left, app.GetNote(id).Document.Paragraphs[0].Cell!.Alignment);
+        Assert.IsTrue(app.Redo(id));
+        var expanded = NoteTables.Change(aligned, tableId, NoteTableChange.InsertRow, 2);
+        app.UpdateDocument(id, expanded);
+        Assert.IsTrue(app.Undo(id));
+        Assert.AreEqual(7, app.GetNote(id).Document.Paragraphs.Count);
+        Assert.IsTrue(app.Redo(id));
+        var restarted = NotesApplication.Start(store);
+        Assert.AreEqual(tableId, restarted.GetNote(id).Document.Paragraphs[0].Cell!.TableId);
+        Assert.AreEqual(10, restarted.GetNote(id).Document.Paragraphs.Count);
+        Assert.AreEqual(id, restarted.Search("Email").Single().Id);
+        Assert.IsTrue(restarted.TryMoveToTrash(id, out _));
+        Assert.IsTrue(restarted.TryRestoreFromTrash(id, out _));
+        Assert.AreEqual(expanded.GetPlainText(), restarted.GetNote(id).Text);
+    }
+
+    [TestMethod]
+    public void CodeFormattingSurvivesUndoRedoSaveRestartAndSearch()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new JsonNotesStore(Path.Combine(directory.Path, "notes.json"));
+        var app = NotesApplication.Start(store);
+        var id = app.CreateNote();
+        var source = NotesDocument.FromText("Use `value`\r\n```\r\n  return value;\r\n```");
+        app.UpdateDocument(id, source);
+        var start = source.GetPlainText().Length;
+        var length = 0;
+        var formatted = NoteCodeFormatting.Apply(source, ref start, ref length);
+        app.UpdateDocument(id, formatted);
+        Assert.IsTrue(app.Undo(id));
+        Assert.AreEqual(source.GetPlainText(), app.GetNote(id).Text);
+        Assert.IsTrue(app.Redo(id));
+        var restored = NotesApplication.Start(store);
+        var note = restored.GetNote(id);
+        Assert.AreEqual("Use value\r\n  return value;\r\n", note.Text);
+        Assert.AreEqual(NoteTextStyle.Code, note.Document.Paragraphs[0].Runs.Last().Style);
+        Assert.AreEqual(NoteBlockKind.Code, note.Document.Paragraphs[1].Kind);
+        Assert.AreEqual(NoteBlockKind.Paragraph, note.Document.Paragraphs[2].Kind);
+        Assert.AreEqual(id, restored.Search("return value").Single().Id);
+        Assert.IsFalse(restored.HasUnsavedChanges);
+    }
+
+    [TestMethod]
     public void Rename_PersistsImmediatelyAndSurvivesCloseTrashAndRestoreWithoutChangingContent()
     {
         using var directory = new TemporaryDirectory();

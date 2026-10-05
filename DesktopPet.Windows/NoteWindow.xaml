@@ -74,6 +74,7 @@
                          VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
                          Padding="0,0,12,0" BorderThickness="0" Background="Transparent"
                          FontFamily="Segoe UI" FontSize="16" Foreground="{DynamicResource NotesTextBrush}"
+                         ToolTip="Use `code` for inline code or triple backticks on separate lines for a code block. Inside code, Enter adds a line and Ctrl+Enter returns to ordinary text."
                          SelectionChanged="OnSelectionChanged" TextChanged="OnTextChanged">
                 <RichTextBox.Template>
                     <ControlTemplate TargetType="RichTextBox">

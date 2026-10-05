@@ -16,6 +16,7 @@ namespace DesktopPet.Windows;
 
 public partial class NoteWindow : Window
 {
+    private static readonly System.Windows.Media.FontFamily CodeFont = new("Consolas");
     private readonly Guid _noteId;
     private readonly Func<Guid, NotesDocument, string?> _updateDocument;
     private readonly Func<Guid, string, string?> _updateName;
@@ -46,6 +47,7 @@ public partial class NoteWindow : Window
     private NotesDocument _lastAcceptedDocument;
     private bool _initializing = true;
     private bool _updatingEditor;
+    private bool _markupFormattingPending;
     private bool _closingForApplicationExit;
 
     public NoteWindow(
@@ -91,6 +93,7 @@ public partial class NoteWindow : Window
         ApplyAppearance(appearanceSettings, note.Color, _uiStyle);
         SetEditorDocument(note.Document, null, null);
         MenuButton.ContextMenu = CreateHeaderMenu();
+        InitializeTableEditing();
         _initializing = false;
     }
 
@@ -124,6 +127,7 @@ public partial class NoteWindow : Window
         {
             NotesAppearance.Apply(menu, settings.Theme, _uiStyle);
         }
+        RefreshTableMenus();
         Background = CreateBrush(NoteColorPalette.GetBackgroundHex(color, darkTheme, _uiStyle));
         var foreground = CreateBrush(NoteColorPalette.GetForegroundHex(darkTheme));
         Foreground = foreground;
@@ -274,11 +278,18 @@ public partial class NoteWindow : Window
                 return;
             }
 
+            if (e.Changes.Any(change => change.RemovedLength > 0)) ResetDeletedInlineCodeTyping(document);
             SetSaveStatus(_updateDocument(_noteId, document));
             _lastAcceptedDocument = document.Copy();
             _updatingEditor = true;
             try { RefreshNumberedMarkers(); }
             finally { _updatingEditor = false; }
+            if (!_markupFormattingPending && (_tablePasteRequested || document.GetPlainText().IndexOfAny(['`', '|']) >= 0))
+            {
+                _markupFormattingPending = true;
+                // TextChanged still runs inside WPF's edit transaction; replace the document after it ends.
+                Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(ApplyPendingMarkupFormatting));
+            }
         }
         catch (Exception exception) when (exception is InvalidDataException or ArgumentException or InvalidOperationException)
         {
@@ -373,10 +384,101 @@ public partial class NoteWindow : Window
             ApplyStyle(NoteTextStyle.Underline, UnderlineButton.IsChecked != true);
             e.Handled = true;
         }
+        else if (HandleTableKey(e.Key, control, shift))
+        {
+            e.Handled = true;
+        }
+        else if (!shift && e.Key == Key.Enter && Editor.Selection.IsEmpty && ContinueCodeAtCaret(control))
+        {
+            e.Handled = true;
+        }
         else if (!control && !shift && e.Key == Key.Enter && Editor.Selection.IsEmpty && ContinueListAtCaret())
         {
             e.Handled = true;
         }
+    }
+
+    private void ApplyPendingMarkupFormatting()
+    {
+        if (!_markupFormattingPending) return;
+        _markupFormattingPending = false;
+        try
+        {
+            var document = ReadEditorDocument();
+            var (start, length) = GetSelectionOffsets(document);
+            var formatted = NoteTableMarkdown.Apply(document, _tablePasteRequested, ref start, ref length);
+            _tablePasteRequested = false;
+            formatted = NoteCodeFormatting.Apply(formatted, ref start, ref length);
+            if (ReferenceEquals(formatted, document)) return;
+            var scrollPosition = CaptureEditorScrollPosition();
+            SetEditorDocument(formatted, start, length);
+            RestoreEditorScrollPosition(scrollPosition);
+            var (paragraphIndex, localOffset) = formatted.GetParagraphPositionAt(start);
+            var row = formatted.Paragraphs[paragraphIndex];
+            var runEnd = 0;
+            var endsInlineCode = row.Runs.Any(run =>
+            {
+                runEnd += NormalizeLineBreaks(run.Text).Length;
+                return runEnd == localOffset && run.Style.HasFlag(NoteTextStyle.Code);
+            });
+            if (length == 0 && row.Kind != NoteBlockKind.Code && endsInlineCode)
+                ResetCodeTypingFormat();
+            SetSaveStatus(_updateDocument(_noteId, formatted));
+            _lastAcceptedDocument = formatted.Copy();
+        }
+        catch (Exception exception) when (exception is InvalidDataException or ArgumentException or InvalidOperationException)
+        {
+            SetSaveStatus(exception.Message);
+        }
+    }
+
+    private void ResetDeletedInlineCodeTyping(NotesDocument document)
+    {
+        var (start, length) = GetSelectionOffsets(document);
+        var (index, offset) = document.GetParagraphPositionAt(start);
+        var row = document.Paragraphs[index];
+        if (length != 0 || row.Kind == NoteBlockKind.Code) return;
+        var runEnd = 0;
+        var touchesCode = row.Runs.Any(run =>
+        {
+            var runStart = runEnd;
+            runEnd += NormalizeLineBreaks(run.Text).Length;
+            return run.Style.HasFlag(NoteTextStyle.Code) && runStart <= offset && offset <= runEnd;
+        });
+        if (!touchesCode) ResetCodeTypingFormat();
+    }
+
+    private void ResetCodeTypingFormat()
+    {
+        _updatingEditor = true;
+        try
+        {
+            Editor.Selection.ApplyPropertyValue(TextElement.FontFamilyProperty, Editor.FontFamily);
+            Editor.Selection.ApplyPropertyValue(TextElement.BackgroundProperty, System.Windows.Media.Brushes.Transparent);
+        }
+        finally { _updatingEditor = false; }
+    }
+
+    private bool ContinueCodeAtCaret(bool exit)
+    {
+        var document = ReadEditorDocument();
+        var (start, _) = GetSelectionOffsets(document);
+        var index = document.GetParagraphIndexAt(start);
+        if (document.Paragraphs[index].Kind != NoteBlockKind.Code) return false;
+        if (!exit)
+        {
+            EditingCommands.EnterLineBreak.Execute(null, Editor);
+            return true;
+        }
+
+        var (paragraphStart, paragraphLength) = document.GetParagraphRange(index);
+        if (index + 1 == document.Paragraphs.Count || document.Paragraphs[index + 1].Cell is not null ||
+            document.Paragraphs[index + 1].Kind != NoteBlockKind.Paragraph)
+            document.Paragraphs.Insert(index + 1, new NoteParagraph());
+        SetEditorDocument(document, paragraphStart + paragraphLength + 2, 0);
+        SetSaveStatus(_updateDocument(_noteId, document));
+        _lastAcceptedDocument = document.Copy();
+        return true;
     }
 
     private void ApplyStyle(NoteTextStyle style, bool enabled)
@@ -492,6 +594,7 @@ public partial class NoteWindow : Window
 
     private void OnClosing(object? sender, CancelEventArgs e)
     {
+        ApplyPendingMarkupFormatting();
         if (_closingForApplicationExit)
         {
             CancelPositionTransition(restoreRestingPosition: false);
@@ -600,6 +703,8 @@ public partial class NoteWindow : Window
 
     private void SetEditorDocument(NotesDocument document, int? selectionStart, int? selectionLength)
     {
+        _markupFormattingPending = false;
+        _tablePasteRequested = false;
         _updatingEditor = true;
         var flowDocument = new FlowDocument
         {
@@ -607,9 +712,34 @@ public partial class NoteWindow : Window
             FontFamily = Editor.FontFamily,
             FontSize = Editor.FontSize
         };
-        for (var index = 0; index < document.Paragraphs.Count;)
+        AddEditorBlocks(flowDocument.Blocks, document.Paragraphs, allowTables: true);
+        Editor.Document = flowDocument;
+        UpdateTableWidths();
+        if (selectionStart.HasValue)
         {
-            var noteParagraph = document.Paragraphs[index];
+            var textLength = document.GetPlainText().Length;
+            var startOffset = Math.Clamp(selectionStart.Value, 0, textLength);
+            var endOffset = Math.Clamp(selectionStart.Value + selectionLength.GetValueOrDefault(), startOffset, textLength);
+            var start = FindTextPosition(flowDocument, document, startOffset);
+            var end = FindTextPosition(flowDocument, document, endOffset);
+            Editor.Selection.Select(start, end);
+        }
+
+        _updatingEditor = false;
+    }
+
+    private void AddEditorBlocks(BlockCollection blocks, IReadOnlyList<NoteParagraph> paragraphs, bool allowTables = false)
+    {
+        for (var index = 0; index < paragraphs.Count;)
+        {
+            var noteParagraph = paragraphs[index];
+            if (noteParagraph.Cell is { } cell && allowTables)
+            {
+                var rows = paragraphs.Skip(index).TakeWhile(row => row.Cell?.TableId == cell.TableId).ToArray();
+                blocks.Add(CreateEditorTable(rows));
+                index += rows.Length;
+                continue;
+            }
             if (noteParagraph.Kind is NoteBlockKind.Bulleted or NoteBlockKind.Numbered or NoteBlockKind.Checklist)
             {
                 var listKind = noteParagraph.Kind;
@@ -619,44 +749,50 @@ public partial class NoteWindow : Window
                     MarkerStyle = listKind == NoteBlockKind.Bulleted ? TextMarkerStyle.Disc : TextMarkerStyle.None,
                     MarkerOffset = 18
                 };
+                if (noteParagraph.Cell is not null) list.Margin = new Thickness(0);
                 var number = 1;
-                while (index < document.Paragraphs.Count && document.Paragraphs[index].Kind == listKind)
+                while (index < paragraphs.Count && paragraphs[index].Kind == listKind && paragraphs[index].Cell == noteParagraph.Cell)
                 {
-                    list.ListItems.Add(new ListItem(CreateEditorParagraph(document.Paragraphs[index], number++)));
+                    list.ListItems.Add(new ListItem(CreateEditorParagraph(paragraphs[index], number++)));
                     index++;
                 }
 
-                flowDocument.Blocks.Add(list);
+                blocks.Add(list);
                 foreach (var paragraph in list.ListItems.SelectMany(item => item.Blocks.OfType<Paragraph>()))
                     ApplyInlineMarkerSpacing(paragraph);
                 continue;
             }
 
-            flowDocument.Blocks.Add(CreateEditorParagraph(noteParagraph));
+            blocks.Add(CreateEditorParagraph(noteParagraph));
             index++;
         }
 
-        Editor.Document = flowDocument;
-        if (selectionStart.HasValue)
-        {
-            var start = FindTextPosition(flowDocument, document, selectionStart.Value);
-            var end = FindTextPosition(flowDocument, document, selectionStart.Value + selectionLength.GetValueOrDefault());
-            Editor.Selection.Select(start, end);
-        }
-
-        _updatingEditor = false;
     }
 
     private NotesDocument ReadEditorDocument()
     {
         var paragraphs = new List<NoteParagraph>();
-        foreach (var block in Editor.Document.Blocks)
+        ReadEditorBlocks(Editor.Document.Blocks, paragraphs);
+        if (paragraphs.Count == 0) paragraphs.Add(new NoteParagraph());
+        return new NotesDocument { Paragraphs = paragraphs };
+    }
+
+    private void ReadEditorBlocks(BlockCollection blocks, List<NoteParagraph> paragraphs, NoteTableCell? cell = null)
+    {
+        foreach (var block in blocks)
         {
             if (block is Paragraph paragraph)
             {
                 var runs = new List<NoteTextRun>();
                 ReadInlines(paragraph.Inlines, NoteTextStyle.None, runs);
-                paragraphs.Add(new NoteParagraph { Runs = runs });
+                if (paragraph.Tag is NoteBlockKind.Code)
+                    runs = runs.Select(run => run with { Style = run.Style & ~NoteTextStyle.Code }).ToList();
+                paragraphs.Add(new NoteParagraph
+                {
+                    Cell = cell,
+                    Kind = paragraph.Tag is NoteBlockKind.Code ? NoteBlockKind.Code : NoteBlockKind.Paragraph,
+                    Runs = runs
+                });
             }
             else if (block is System.Windows.Documents.List list)
             {
@@ -679,35 +815,59 @@ public partial class NoteWindow : Window
                                 .Select(container => container.Child)
                                 .OfType<System.Windows.Controls.CheckBox>()
                                 .Any(checkBox => checkBox.IsChecked == true);
-                            paragraphs.Add(new NoteParagraph { Kind = kind, IsChecked = isChecked, Runs = runs });
+                            paragraphs.Add(new NoteParagraph { Cell = cell, Kind = kind, IsChecked = isChecked, Runs = runs });
                         }
                         else
                         {
                             var text = new TextRange(itemBlock.ContentStart, itemBlock.ContentEnd).Text;
                             paragraphs.AddRange(NotesDocument.FromText(text).Paragraphs.Select(noteParagraph =>
-                                new NoteParagraph { Kind = kind, Runs = noteParagraph.Runs }));
+                                new NoteParagraph { Cell = cell, Kind = kind, Runs = noteParagraph.Runs }));
                         }
                     }
+                }
+            }
+            else if (block is Table table)
+            {
+                if (cell is not null) throw new InvalidDataException("Nested note tables are unsupported.");
+                var id = table.Tag is Guid identity ? identity : Guid.NewGuid();
+                table.Tag = id;
+                var rowIndex = 0;
+                foreach (var row in table.RowGroups.SelectMany(group => group.Rows))
+                {
+                    for (var column = 0; column < row.Cells.Count; column++)
+                    {
+                        var source = row.Cells[column];
+                        if (source.RowSpan != 1 || source.ColumnSpan != 1)
+                            throw new InvalidDataException("Merged note cells are unsupported.");
+                        var alignment = source.TextAlignment switch
+                        { TextAlignment.Center => NoteCellAlignment.Center, TextAlignment.Right => NoteCellAlignment.Right, _ => NoteCellAlignment.Left };
+                        var position = new NoteTableCell(id, rowIndex, column, alignment);
+                        var before = paragraphs.Count;
+                        ReadEditorBlocks(source.Blocks, paragraphs, position);
+                        if (paragraphs.Count == before) paragraphs.Add(new NoteParagraph { Cell = position });
+                    }
+                    rowIndex++;
                 }
             }
             else
             {
                 var text = new TextRange(block.ContentStart, block.ContentEnd).Text;
-                paragraphs.AddRange(NotesDocument.FromText(text).Paragraphs);
+                paragraphs.AddRange(NotesDocument.FromText(text).Paragraphs.Select(row => { row.Cell = cell; return row; }));
             }
         }
 
-        if (paragraphs.Count == 0)
-        {
-            paragraphs.Add(new NoteParagraph());
-        }
-
-        return new NotesDocument { Paragraphs = paragraphs };
     }
 
     private Paragraph CreateEditorParagraph(NoteParagraph noteParagraph, int number = 1)
     {
         var paragraph = new Paragraph { Margin = new Thickness(0, 0, 0, 8) };
+        if (noteParagraph.Kind == NoteBlockKind.Code)
+        {
+            paragraph.Tag = NoteBlockKind.Code;
+            paragraph.FontFamily = CodeFont;
+            paragraph.Padding = new Thickness(8);
+            paragraph.SetResourceReference(TextElement.BackgroundProperty, "NotesCodeBrush");
+        }
         if (noteParagraph.Kind == NoteBlockKind.Numbered)
         {
             paragraph.Inlines.Add(new InlineUIContainer(new TextBlock
@@ -756,7 +916,7 @@ public partial class NoteWindow : Window
 
     private void RefreshNumberedMarkers()
     {
-        foreach (var list in Editor.Document.Blocks.OfType<System.Windows.Documents.List>()
+        foreach (var list in GetEditorBlocks(Editor.Document.Blocks).OfType<System.Windows.Documents.List>()
                      .Where(list => list.Tag is NoteBlockKind.Numbered))
         {
             var index = 1;
@@ -848,6 +1008,7 @@ public partial class NoteWindow : Window
             ? inheritedStyle | NoteTextStyle.Bold
             : inheritedStyle & ~NoteTextStyle.Bold;
         style = inline.FontStyle == FontStyles.Italic ? style | NoteTextStyle.Italic : style & ~NoteTextStyle.Italic;
+        style = inline.FontFamily.Source == CodeFont.Source ? style | NoteTextStyle.Code : style & ~NoteTextStyle.Code;
         foreach (var decoration in inline.TextDecorations)
         {
             if (decoration.Location == TextDecorationLocation.Underline)
@@ -894,6 +1055,11 @@ public partial class NoteWindow : Window
                     FontStyle = noteRun.Style.HasFlag(NoteTextStyle.Italic) ? FontStyles.Italic : FontStyles.Normal,
                     TextDecorations = CreateDecorations(noteRun.Style)
                 };
+                if (noteRun.Style.HasFlag(NoteTextStyle.Code))
+                {
+                    run.FontFamily = CodeFont;
+                    run.SetResourceReference(TextElement.BackgroundProperty, "NotesCodeBrush");
+                }
                 paragraph.Inlines.Add(run);
             }
 
@@ -955,22 +1121,22 @@ public partial class NoteWindow : Window
 
     private static IEnumerable<Paragraph> GetEditorParagraphs(FlowDocument document)
     {
-        foreach (var block in document.Blocks)
+        return GetEditorBlocks(document.Blocks).OfType<Paragraph>();
+    }
+
+    private static IEnumerable<Block> GetEditorBlocks(BlockCollection blocks)
+    {
+        foreach (var block in blocks)
         {
-            if (block is Paragraph paragraph)
-            {
-                yield return paragraph;
-            }
-            else if (block is System.Windows.Documents.List list)
+            yield return block;
+            if (block is System.Windows.Documents.List list)
             {
                 foreach (var item in list.ListItems)
-                {
-                    foreach (var itemBlock in item.Blocks.OfType<Paragraph>())
-                    {
-                        yield return itemBlock;
-                    }
-                }
+                    foreach (var nested in GetEditorBlocks(item.Blocks)) yield return nested;
             }
+            else if (block is Table table)
+                foreach (var cell in table.RowGroups.SelectMany(group => group.Rows).SelectMany(row => row.Cells))
+                    foreach (var nested in GetEditorBlocks(cell.Blocks)) yield return nested;
         }
     }
 

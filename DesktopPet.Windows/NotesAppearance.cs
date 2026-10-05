@@ -42,6 +42,8 @@ internal static class NotesAppearance
         }
 
         ApplicationAppearance.Apply(surface, palette, style);
+        surface.Resources["NotesCodeBrush"] = new System.Windows.Media.SolidColorBrush(
+            dark ? System.Windows.Media.Color.FromArgb(45, 255, 255, 255) : System.Windows.Media.Color.FromArgb(24, 0, 0, 0));
         if (surface is NoteWindow noteWindow && WindowChrome.GetWindowChrome(noteWindow) is { } chrome)
         {
             if (chrome.IsFrozen)

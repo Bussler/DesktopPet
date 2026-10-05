@@ -24,6 +24,34 @@ Click in a note editor to type. The toolbar applies bold, italic, underline, str
 
 When the editor has focus, Hood supports **Ctrl+B** (bold), **Ctrl+I** (italic), **Ctrl+U** (underline), **Ctrl+Shift+X** (strikethrough), **Ctrl+Z** (undo), and **Ctrl+Y** (redo). Undo and redo apply to the current note and last for that Hood session. Toolbar buttons reflect the selected formatting. Notes list uses **Enter** or double-click to open an active note; **Enter** on a Trash item restores it.
 
+Wrap text in single backticks, such as `` `value` ``, to turn it into inline code with a monospace font and a subtle background. For a larger code block, put three backticks on their own line before and after the code. An optional language name on the opening line, such as ` ```cs `, is accepted; code uses one text color. Completing the closing markers removes the markers, formats the code, and moves the caret into ordinary text below the block, including when pasting. Indentation, tabs, and blank lines are preserved. Incomplete markers stay as text. Inside a formatted code block, **Enter** adds a line and **Ctrl+Enter** moves to ordinary text after the block. Code formatting saves with the note and supports undo and redo.
+
+## Tables
+
+Right-click in the note editor and choose **Create table** to insert a blank table with one row and one column at the caret. The cell is ready to type in; right-click it to add columns or rows. If the caret is inside a table or code block, the new table is inserted immediately after that block.
+
+You can also type a complete Markdown table, then add a blank line after it to render it. Pasting a complete Markdown table renders it immediately. A header and separator row are required, and every row must have the same number of cells. Incomplete or malformed tables stay as text; tables inside code blocks remain literal.
+
+```markdown
+| Name | Status | Action Points |
+| --- | :---: | --- |
+| Alice | Open | Call customer |
+| Bob | Waiting | Review draft |
+```
+
+Click a cell to edit it. The existing formatting controls and shortcuts work inside cells, including inline code. Use the bullets control to make actual bullet items inside an Action Points cell. Tables fit the note width, and cell text wraps. The first row has a shaded header; `:---`, `:---:`, and `---:` select left, center, and right column alignment.
+
+| Key | Inside a table |
+| --- | --- |
+| Tab / Shift+Tab | Move to the next / previous cell. Tab from the final cell adds a row. |
+| Enter | Add a paragraph or continue the current bullet list. Enter on an empty bullet exits the list. |
+| Shift+Enter | Add a line break within the current paragraph or bullet item. |
+| Ctrl+Enter | Move to ordinary text after the table. |
+
+Right-click a cell to insert rows above/below, insert columns left/right, delete a row or column, or **Copy table as Markdown**. Deleting the header promotes the next row; deleting the final row or column removes the table. Table edits support undo and redo and save with the note.
+
+Selecting a whole table and copying it also produces Markdown. Paste that Markdown into another note to preserve cells, line breaks, bullet items, alignment, and inline formatting. The clipboard representation uses `<br>` between cell paragraphs, `<br/>` for continuation lines, bullet markers for list items, and simple inline HTML tags for text formatting. For example, `• Call<br>• Email` becomes two real bullets in a cell. Escaped pipes and literal HTML characters are preserved. Merged cells, nested tables, formulas, sorting, manual column resizing, and multiline code blocks inside cells are not supported.
+
 ## Shared settings and individual color
 
 Open **Notes settings** from Hood's Notes menu or a note's menu. Shared settings apply to all notes: default color for new notes (yellow, blue, green, pink, or lavender), text size (12–32 pt, default 16), light/dark/system theme (default system), notes always-on-top (default off), and show/hide animation (default on). Type a whole-number text size in the field or use the slider; they stay synchronized, and invalid values must be corrected before saving. Notes always-on-top is independent of Hood's setting. Existing notes keep their individual color when the default changes; choose a per-note color in **Note color**. Choose the app-wide UI style separately in Hood Settings; style changes preserve each saved note-color category, content, formatting, and the saved text-size preference; each style supplies its own light and dark fills for those categories.

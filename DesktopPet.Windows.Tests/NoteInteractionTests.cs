@@ -633,7 +633,7 @@ public sealed class NoteInteractionTests
         try
         {
             OpenMenu(menu);
-            var colors = (MenuItem)menu.Items[1];
+            var colors = menu.Items.OfType<MenuItem>().Single(item => (string)item.Header == "Note _color");
             colors.IsSubmenuOpen = true;
             menu.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
             var border = (Border)colors.Template.FindName("SubmenuBorder", colors);

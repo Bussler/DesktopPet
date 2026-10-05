@@ -1,4 +1,5 @@
 using static DesktopPet.Core.NoteTextOffsets;
+using System.Text.Json.Serialization;
 
 namespace DesktopPet.Core;
 
@@ -9,7 +10,8 @@ public enum NoteTextStyle
     Bold = 1,
     Italic = 2,
     Underline = 4,
-    Strikethrough = 8
+    Strikethrough = 8,
+    Code = 16
 }
 
 public enum NoteBlockKind
@@ -17,19 +19,23 @@ public enum NoteBlockKind
     Paragraph,
     Bulleted,
     Numbered,
-    Checklist
+    Checklist,
+    Code
 }
 
 public sealed record NoteTextRun(string Text, NoteTextStyle Style = NoteTextStyle.None);
 
 public sealed class NoteParagraph
 {
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public NoteTableCell? Cell { get; set; }
     public NoteBlockKind Kind { get; set; } = NoteBlockKind.Paragraph;
     public bool IsChecked { get; set; }
     public List<NoteTextRun> Runs { get; set; } = [];
 
     internal NoteParagraph Copy() => new()
     {
+        Cell = Cell,
         Kind = Kind,
         IsChecked = IsChecked,
         Runs = [.. Runs]
@@ -41,7 +47,8 @@ public sealed class NotesDocument
     private const NoteTextStyle SupportedStyles = NoteTextStyle.Bold |
         NoteTextStyle.Italic |
         NoteTextStyle.Underline |
-        NoteTextStyle.Strikethrough;
+        NoteTextStyle.Strikethrough |
+        NoteTextStyle.Code;
 
     public List<NoteParagraph> Paragraphs { get; set; } = [new()];
 
@@ -107,7 +114,7 @@ public sealed class NotesDocument
                 offset = runEnd;
             }
 
-            paragraphs.Add(new NoteParagraph { Kind = source.Kind, IsChecked = source.IsChecked, Runs = runs });
+            paragraphs.Add(new NoteParagraph { Cell = source.Cell, Kind = source.Kind, IsChecked = source.IsChecked, Runs = runs });
             if (paragraphIndex < Paragraphs.Count - 1)
             {
                 offset += 2;
@@ -298,6 +305,7 @@ public sealed class NotesDocument
 
         var right = new NoteParagraph
         {
+            Cell = source.Cell,
             Kind = source.Kind,
             IsChecked = false,
             Runs = rightRuns

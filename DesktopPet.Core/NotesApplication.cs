@@ -158,7 +158,7 @@ public static class NotesSnapshotValidator
 
             foreach (var run in paragraph.Runs)
             {
-                if (run is null || run.Text is null || ((int)run.Style & ~15) != 0)
+                if (run is null || run.Text is null || ((int)run.Style & ~31) != 0)
                 {
                     throw new InvalidDataException("Each text run must contain readable text and supported inline styles.");
                 }
@@ -166,6 +166,7 @@ public static class NotesSnapshotValidator
             }
         }
 
+        NoteTables.Validate(document);
         if (document.GetPlainText().Length > MaximumTextCharacters)
         {
             throw new InvalidDataException($"Each note must contain no more than {MaximumTextCharacters:N0} characters.");
@@ -700,6 +701,7 @@ public sealed class NotesApplication
             var leftParagraph = left.Paragraphs[index];
             var rightParagraph = right.Paragraphs[index];
             if (leftParagraph.Kind != rightParagraph.Kind ||
+                leftParagraph.Cell != rightParagraph.Cell ||
                 leftParagraph.IsChecked != rightParagraph.IsChecked ||
                 !leftParagraph.Runs.SequenceEqual(rightParagraph.Runs))
             {
