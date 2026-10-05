@@ -14,6 +14,39 @@ namespace DesktopPet.Windows.Tests;
 public sealed class NoteCodeInteractionTests
 {
     [TestMethod]
+    public void EnterReplacesSelectedCodeWithALineBreakInTheSameBlock()
+    {
+        var source = new NotesDocument
+        {
+            Paragraphs = [new NoteParagraph { Kind = NoteBlockKind.Code, Runs = [new NoteTextRun("first second third")] }]
+        };
+        NotesDocument? saved = null;
+        var window = CreateWindow(source, document => saved = document);
+        try
+        {
+            ShowHidden(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            Assert.IsTrue(editor.Focus());
+            var paragraph = (Paragraph)editor.Document.Blocks.FirstBlock;
+            var run = paragraph.Inlines.OfType<Run>().Single();
+            editor.Selection.Select(run.ContentStart.GetPositionAtOffset(6)!, run.ContentStart.GetPositionAtOffset(12)!);
+            var key = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(editor), 0, Key.Enter)
+                { RoutedEvent = Keyboard.PreviewKeyDownEvent };
+            editor.RaiseEvent(key);
+            Assert.IsTrue(key.Handled);
+            Pump(window);
+            Assert.IsNotNull(saved);
+            Assert.AreEqual("first \r\n third", saved.GetPlainText());
+            Assert.AreEqual(NoteBlockKind.Code, saved.Paragraphs.Single().Kind);
+            Assert.AreSame(paragraph, editor.CaretPosition.Paragraph);
+            Type(editor, "replacement");
+            Pump(window);
+            Assert.AreEqual("first \r\nreplacement third", saved.GetPlainText());
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
     [DataRow(0)]
     [DataRow(2)]
     [DataRow(4)]

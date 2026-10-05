@@ -48,6 +48,8 @@ public partial class NoteWindow : Window
     private bool _initializing = true;
     private bool _updatingEditor;
     private bool _markupFormattingPending;
+    private string? _markupOriginalText;
+    private bool _editorRecoveryPending;
     private bool _closingForApplicationExit;
 
     public NoteWindow(
@@ -263,7 +265,7 @@ public partial class NoteWindow : Window
 
     private void OnTextChanged(object sender, TextChangedEventArgs e)
     {
-        if (_initializing || _updatingEditor)
+        if (_initializing || _updatingEditor || _editorRecoveryPending)
         {
             return;
         }
@@ -273,12 +275,12 @@ public partial class NoteWindow : Window
             var document = ReadEditorDocument();
             if (document.GetPlainText().Length > NotesSnapshotValidator.MaximumTextCharacters)
             {
-                SetEditorDocument(_lastAcceptedDocument, null, null);
-                SetSaveStatus($"A note is limited to {NotesSnapshotValidator.MaximumTextCharacters:N0} characters; the extra text was not accepted.");
+                RejectEditorChange($"A note is limited to {NotesSnapshotValidator.MaximumTextCharacters:N0} characters; the extra text was not accepted.");
                 return;
             }
 
             if (e.Changes.Any(change => change.RemovedLength > 0)) ResetDeletedInlineCodeTyping(document);
+            var originalText = _lastAcceptedDocument.GetPlainText();
             SetSaveStatus(_updateDocument(_noteId, document));
             _lastAcceptedDocument = document.Copy();
             _updatingEditor = true;
@@ -287,18 +289,41 @@ public partial class NoteWindow : Window
             if (!_markupFormattingPending && (_tablePasteRequested || document.GetPlainText().IndexOfAny(['`', '|']) >= 0))
             {
                 _markupFormattingPending = true;
+                _markupOriginalText = originalText;
                 // TextChanged still runs inside WPF's edit transaction; replace the document after it ends.
                 Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(ApplyPendingMarkupFormatting));
             }
         }
         catch (Exception exception) when (exception is InvalidDataException or ArgumentException or InvalidOperationException)
         {
-            SetEditorDocument(_lastAcceptedDocument, null, null);
-            SetSaveStatus(exception.Message);
+            RejectEditorChange(exception.Message);
         }
     }
 
-    private void OnSelectionChanged(object sender, RoutedEventArgs e) => UpdateToolbar();
+    private void RejectEditorChange(string error)
+    {
+        SetSaveStatus(error);
+        if (_editorRecoveryPending) return;
+        _editorRecoveryPending = true;
+        _markupFormattingPending = false;
+        _markupOriginalText = null;
+        _tablePasteRequested = false;
+        // A document replacement inside TextChanged causes WPF to terminate the process.
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(() =>
+        {
+            if (_editorRecoveryPending) SetEditorDocument(_lastAcceptedDocument, null, null);
+        }));
+    }
+
+    private void OnSelectionChanged(object sender, RoutedEventArgs e)
+    {
+        if (_editorRecoveryPending) return;
+        try { UpdateToolbar(); }
+        catch (Exception exception) when (exception is InvalidDataException or ArgumentException or InvalidOperationException)
+        {
+            RejectEditorChange(exception.Message);
+        }
+    }
 
     private void OnBoldClick(object sender, RoutedEventArgs e) => ApplyStyle(NoteTextStyle.Bold, BoldButton.IsChecked == true);
     private void OnItalicClick(object sender, RoutedEventArgs e) => ApplyStyle(NoteTextStyle.Italic, ItalicButton.IsChecked == true);
@@ -352,6 +377,12 @@ public partial class NoteWindow : Window
             return;
         }
 
+        if (_editorRecoveryPending)
+        {
+            e.Handled = true;
+            return;
+        }
+
         var control = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
         var shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
         if (control && !shift && e.Key == Key.Z)
@@ -388,7 +419,7 @@ public partial class NoteWindow : Window
         {
             e.Handled = true;
         }
-        else if (!shift && e.Key == Key.Enter && Editor.Selection.IsEmpty && ContinueCodeAtCaret(control))
+        else if (!shift && e.Key == Key.Enter && ContinueCodeAtCaret(control))
         {
             e.Handled = true;
         }
@@ -406,9 +437,17 @@ public partial class NoteWindow : Window
         {
             var document = ReadEditorDocument();
             var (start, length) = GetSelectionOffsets(document);
-            var formatted = NoteTableMarkdown.Apply(document, _tablePasteRequested, ref start, ref length);
+            var text = document.GetPlainText();
+            var original = _markupOriginalText ?? text;
+            _markupOriginalText = null;
+            var prefix = 0;
+            while (prefix < Math.Min(original.Length, text.Length) && original[prefix] == text[prefix]) prefix++;
+            var oldEnd = original.Length;
+            var newEnd = text.Length;
+            while (oldEnd > prefix && newEnd > prefix && original[oldEnd - 1] == text[newEnd - 1]) { oldEnd--; newEnd--; }
+            var formatted = NoteCodeFormatting.Apply(document, ref start, ref length, (prefix, newEnd - prefix));
+            formatted = NoteTableMarkdown.Apply(formatted, _tablePasteRequested, ref start, ref length);
             _tablePasteRequested = false;
-            formatted = NoteCodeFormatting.Apply(formatted, ref start, ref length);
             if (ReferenceEquals(formatted, document)) return;
             var scrollPosition = CaptureEditorScrollPosition();
             SetEditorDocument(formatted, start, length);
@@ -462,16 +501,17 @@ public partial class NoteWindow : Window
     private bool ContinueCodeAtCaret(bool exit)
     {
         var document = ReadEditorDocument();
-        var (start, _) = GetSelectionOffsets(document);
+        var (start, length) = GetSelectionOffsets(document);
         var index = document.GetParagraphIndexAt(start);
         if (document.Paragraphs[index].Kind != NoteBlockKind.Code) return false;
+        var (paragraphStart, paragraphLength) = document.GetParagraphRange(index);
+        if (start + length > paragraphStart + paragraphLength) return false;
         if (!exit)
         {
             EditingCommands.EnterLineBreak.Execute(null, Editor);
             return true;
         }
 
-        var (paragraphStart, paragraphLength) = document.GetParagraphRange(index);
         if (index + 1 == document.Paragraphs.Count || document.Paragraphs[index + 1].Cell is not null ||
             document.Paragraphs[index + 1].Kind != NoteBlockKind.Paragraph)
             document.Paragraphs.Insert(index + 1, new NoteParagraph());
@@ -704,6 +744,8 @@ public partial class NoteWindow : Window
     private void SetEditorDocument(NotesDocument document, int? selectionStart, int? selectionLength)
     {
         _markupFormattingPending = false;
+        _markupOriginalText = null;
+        _editorRecoveryPending = false;
         _tablePasteRequested = false;
         _updatingEditor = true;
         var flowDocument = new FlowDocument
@@ -916,11 +958,12 @@ public partial class NoteWindow : Window
 
     private void RefreshNumberedMarkers()
     {
+        // Inline edits invalidate WPF block enumerators, so capture the targets first.
         foreach (var list in GetEditorBlocks(Editor.Document.Blocks).OfType<System.Windows.Documents.List>()
-                     .Where(list => list.Tag is NoteBlockKind.Numbered))
+                     .Where(list => list.Tag is NoteBlockKind.Numbered).ToArray())
         {
             var index = 1;
-            foreach (var paragraph in list.ListItems.SelectMany(item => item.Blocks.OfType<Paragraph>()))
+            foreach (var paragraph in list.ListItems.SelectMany(item => item.Blocks.OfType<Paragraph>()).ToArray())
             {
                 var markers = paragraph.Inlines.OfType<InlineUIContainer>().ToArray();
                 var label = markers.FirstOrDefault()?.Child as TextBlock;

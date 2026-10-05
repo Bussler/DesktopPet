@@ -208,6 +208,7 @@ public sealed class NoteInteractionTests
             var paragraphs = list.ListItems.Select(item => (Paragraph)item.Blocks.FirstBlock).ToArray();
             CollectionAssert.AreEqual(Enumerable.Range(1, paragraphs.Length).Select(index => $"{index}.").ToArray(),
                 paragraphs.Select(row => ((TextBlock)((InlineUIContainer)row.Inlines.FirstInline).Child).Text).ToArray());
+            Assert.AreEqual(string.Empty, ((TextBlock)window.FindName("SaveStatus")).Text);
             var run = paragraphs.Last().Inlines.OfType<Run>().Single();
             editor.Selection.Select(run.ContentStart.GetPositionAtOffset(1)!, run.ContentStart.GetPositionAtOffset(3)!);
             Click((ToggleButton)window.FindName("BoldButton"));

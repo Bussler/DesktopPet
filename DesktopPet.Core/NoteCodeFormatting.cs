@@ -5,7 +5,9 @@ namespace DesktopPet.Core;
 public static class NoteCodeFormatting
 {
     // Offsets use the same CRLF-normalized text contract as the editor and edit history.
-    public static NotesDocument Apply(NotesDocument document, ref int selectionStart, ref int selectionLength)
+    // Live cell editing supplies the inserted range; source parsing formats all markers by default.
+    public static NotesDocument Apply(NotesDocument document, ref int selectionStart, ref int selectionLength,
+        (int Start, int Length)? cellCodeInput = null)
     {
         var paragraphs = document.Paragraphs;
         var starts = new int[paragraphs.Count];
@@ -38,7 +40,7 @@ public static class NoteCodeFormatting
             {
                 var end = i + 1;
                 while (end < paragraphs.Count &&
-                       !(paragraphs[end].Kind == NoteBlockKind.Paragraph && texts[end].Trim() == "```"))
+                       !(paragraphs[end].Cell is null && paragraphs[end].Kind == NoteBlockKind.Paragraph && texts[end].Trim() == "```"))
                     end++;
                 if (end == paragraphs.Count || paragraphs.Skip(i + 1).Take(end - i - 1).Any(paragraph => paragraph.Cell is not null))
                 {
@@ -90,6 +92,13 @@ public static class NoteCodeFormatting
                 if (opening < 0) opening = index;
                 else
                 {
+                    // Existing literal cell text (for example after Undo or Markdown decoding) stays literal.
+                    if (row.Cell is not null && cellCodeInput is { } input &&
+                        (starts[i] + index < input.Start || starts[i] + index >= input.Start + input.Length))
+                    {
+                        opening = -1;
+                        continue;
+                    }
                     omit[opening] = omit[index] = true;
                     removed.Add((starts[i] + opening, 1));
                     removed.Add((starts[i] + index, 1));
@@ -126,7 +135,7 @@ public static class NoteCodeFormatting
         int MapOffset(int offset) => offset - removed.Sum(range => Math.Clamp(offset - range.Start, 0, range.Length));
     }
 
-    private static bool IsOpeningFence(string text)
+    internal static bool IsOpeningFence(string text)
     {
         var trimmed = text.Trim();
         return trimmed.StartsWith("```", StringComparison.Ordinal) &&

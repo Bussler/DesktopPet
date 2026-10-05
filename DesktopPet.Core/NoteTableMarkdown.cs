@@ -27,8 +27,8 @@ public static class NoteTableMarkdown
         for (var i = 0; i < rows.Count;)
         {
             var text = Text(rows[i]);
-            if (rows[i].Cell is null && rows[i].Kind != NoteBlockKind.Code && text.TrimStart().StartsWith("```", StringComparison.Ordinal))
-                fenced = !fenced;
+            if (rows[i].Cell is null && rows[i].Kind == NoteBlockKind.Paragraph)
+                fenced = fenced ? text.Trim() != "```" : NoteCodeFormatting.IsOpeningFence(text);
             var header = SplitRow(text);
             var separator = i + 1 < rows.Count ? SplitRow(Text(rows[i + 1])) : [];
             var eligible = !fenced && IsTableStart(document, i);
@@ -162,11 +162,19 @@ public static class NoteTableMarkdown
 
             void Add(string value)
             {
-                var decoded = WebUtility.HtmlDecode(Regex.Replace(value, @"\\([|\\])", "$1"));
-                if (decoded.Length > 0) runs.Add(new NoteTextRun(decoded, style));
+                if (value.Length > 0) runs.Add(new NoteTextRun(value, style));
             }
         }
-        return paragraphs;
+        // Interpret source markers before decoding entities that represent literal characters.
+        var start = 0;
+        var length = 0;
+        var formatted = NoteCodeFormatting.Apply(new NotesDocument { Paragraphs = paragraphs }, ref start, ref length);
+        foreach (var paragraph in formatted.Paragraphs)
+            paragraph.Runs = paragraph.Runs.Select(run => run with
+            {
+                Text = WebUtility.HtmlDecode(Regex.Replace(run.Text, @"\\([|\\])", "$1"))
+            }).ToList();
+        return formatted.Paragraphs;
     }
 
     public static string Write(NotesDocument document, Guid tableId)
@@ -198,7 +206,8 @@ public static class NoteTableMarkdown
                 (NoteTextStyle.Strikethrough, "s"), (NoteTextStyle.Code, "code") }.Where(pair => run.Style.HasFlag(pair.Item1)).ToArray();
             foreach (var tag in tags) result.Append('<').Append(tag.Item2).Append('>');
             var encoded = WebUtility.HtmlEncode(NormalizeLineBreaks(run.Text)).Replace("\\", "\\\\", StringComparison.Ordinal)
-                .Replace("|", "\\|", StringComparison.Ordinal).Replace("\r\n", "<br/>", StringComparison.Ordinal).Replace("\t", "&#9;", StringComparison.Ordinal);
+                .Replace("|", "\\|", StringComparison.Ordinal).Replace("`", "&#96;", StringComparison.Ordinal)
+                .Replace("\r\n", "<br/>", StringComparison.Ordinal).Replace("\t", "&#9;", StringComparison.Ordinal);
             encoded = Regex.Replace(encoded, "^( +)|( +)$", match => string.Concat(Enumerable.Repeat("&#32;", match.Length)));
             encoded = Regex.Replace(encoded, @"(?<=<br/>)([•*-])(?= )|(?<=<br/>)([0-9])(?=[0-9]*\. )", match => $"&#{(int)match.Value[0]};");
             result.Append(encoded);

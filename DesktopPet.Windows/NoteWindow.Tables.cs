@@ -158,13 +158,20 @@ public partial class NoteWindow
 
     private void ChangeTable(Guid id, NoteTableChange change, int index)
     {
-        var document = ReadEditorDocument();
-        var updated = NoteTables.Change(document, id, change, index);
-        var target = updated.Paragraphs.FindIndex(row => row.Cell?.TableId == id &&
-            (change is NoteTableChange.InsertRow or NoteTableChange.DeleteRow ? row.Cell.Row == index : row.Cell.Column == index));
-        if (target < 0) target = updated.Paragraphs.FindIndex(row => row.Cell?.TableId == id);
-        if (target < 0) target = Math.Min(document.Paragraphs.FindIndex(row => row.Cell?.TableId == id), updated.Paragraphs.Count - 1);
-        CommitTableEdit(updated, updated.GetParagraphRange(Math.Max(0, target)).Start);
+        try
+        {
+            var document = ReadEditorDocument();
+            var updated = NoteTables.Change(document, id, change, index);
+            var target = updated.Paragraphs.FindIndex(row => row.Cell?.TableId == id &&
+                (change is NoteTableChange.InsertRow or NoteTableChange.DeleteRow ? row.Cell.Row == index : row.Cell.Column == index));
+            if (target < 0) target = updated.Paragraphs.FindIndex(row => row.Cell?.TableId == id);
+            if (target < 0) target = Math.Min(document.Paragraphs.FindIndex(row => row.Cell?.TableId == id), updated.Paragraphs.Count - 1);
+            CommitTableEdit(updated, updated.GetParagraphRange(Math.Max(0, target)).Start);
+        }
+        catch (Exception exception) when (exception is InvalidDataException or ArgumentException or InvalidOperationException)
+        {
+            SetSaveStatus(exception.Message);
+        }
     }
 
     private void CommitTableEdit(NotesDocument document, int caret)
@@ -179,48 +186,56 @@ public partial class NoteWindow
     private bool HandleTableKey(Key key, bool control, bool shift)
     {
         if (key is not (Key.Tab or Key.Enter)) return false;
-        var document = ReadEditorDocument();
-        var (start, length) = GetSelectionOffsets(document);
-        var paragraphIndex = document.GetParagraphIndexAt(start);
-        var cell = document.Paragraphs[paragraphIndex].Cell;
-        if (cell is null) return false;
-        if (key == Key.Tab && !control)
+        try
         {
-            var cells = document.Paragraphs.Where(row => row.Cell?.TableId == cell.TableId).Select(row => row.Cell!).Distinct().ToList();
-            var next = cells.IndexOf(cell) + (shift ? -1 : 1);
-            if (next == cells.Count)
+            var document = ReadEditorDocument();
+            var (start, length) = GetSelectionOffsets(document);
+            var paragraphIndex = document.GetParagraphIndexAt(start);
+            var cell = document.Paragraphs[paragraphIndex].Cell;
+            if (cell is null) return false;
+            if (key == Key.Tab && !control)
             {
-                document = NoteTables.Change(document, cell.TableId, NoteTableChange.InsertRow, cell.Row + 1);
-                var target = document.Paragraphs.FindIndex(row => row.Cell?.TableId == cell.TableId && row.Cell.Row == cell.Row + 1);
-                CommitTableEdit(document, document.GetParagraphRange(target).Start);
+                var cells = document.Paragraphs.Where(row => row.Cell?.TableId == cell.TableId).Select(row => row.Cell!).Distinct().ToList();
+                var next = cells.IndexOf(cell) + (shift ? -1 : 1);
+                if (next == cells.Count)
+                {
+                    document = NoteTables.Change(document, cell.TableId, NoteTableChange.InsertRow, cell.Row + 1);
+                    var target = document.Paragraphs.FindIndex(row => row.Cell?.TableId == cell.TableId && row.Cell.Row == cell.Row + 1);
+                    CommitTableEdit(document, document.GetParagraphRange(target).Start);
+                }
+                else if (next >= 0)
+                {
+                    var target = document.Paragraphs.FindIndex(row => row.Cell == cells[next]);
+                    Editor.CaretPosition = FindTextPosition(Editor.Document, document, document.GetParagraphRange(target).Start);
+                }
+                else if (paragraphIndex > 0)
+                    Editor.CaretPosition = FindTextPosition(Editor.Document, document, document.GetParagraphRange(paragraphIndex - 1).Start);
+                return true;
             }
-            else if (next >= 0)
+            if (key != Key.Enter || shift || length != 0) return false;
+            if (control)
             {
-                var target = document.Paragraphs.FindIndex(row => row.Cell == cells[next]);
-                Editor.CaretPosition = FindTextPosition(Editor.Document, document, document.GetParagraphRange(target).Start);
+                var last = document.Paragraphs.FindLastIndex(row => row.Cell?.TableId == cell.TableId);
+                if (last + 1 == document.Paragraphs.Count || document.Paragraphs[last + 1].Cell is not null ||
+                    document.Paragraphs[last + 1].Kind != NoteBlockKind.Paragraph)
+                    document.Paragraphs.Insert(last + 1, new NoteParagraph());
+                CommitTableEdit(document, document.GetParagraphRange(last + 1).Start);
             }
-            else if (paragraphIndex > 0)
-                Editor.CaretPosition = FindTextPosition(Editor.Document, document, document.GetParagraphRange(paragraphIndex - 1).Start);
+            else
+            {
+                var (paragraphStart, paragraphLength) = document.GetParagraphRange(paragraphIndex);
+                var source = document.Paragraphs[paragraphIndex];
+                var emptyList = paragraphLength == 0 && source.Kind is NoteBlockKind.Bulleted or NoteBlockKind.Numbered or NoteBlockKind.Checklist;
+                var updated = emptyList ? document.EndEmptyListItem(paragraphIndex) : document.SplitParagraph(paragraphIndex, start - paragraphStart);
+                CommitTableEdit(updated, emptyList ? start : start + 2);
+            }
             return true;
         }
-        if (key != Key.Enter || shift || length != 0) return false;
-        if (control)
+        catch (Exception exception) when (exception is InvalidDataException or ArgumentException or InvalidOperationException)
         {
-            var last = document.Paragraphs.FindLastIndex(row => row.Cell?.TableId == cell.TableId);
-            if (last + 1 == document.Paragraphs.Count || document.Paragraphs[last + 1].Cell is not null ||
-                document.Paragraphs[last + 1].Kind != NoteBlockKind.Paragraph)
-                document.Paragraphs.Insert(last + 1, new NoteParagraph());
-            CommitTableEdit(document, document.GetParagraphRange(last + 1).Start);
+            SetSaveStatus(exception.Message);
+            return true; // Consume rejected edits so WPF does not execute its default Enter or Tab action.
         }
-        else
-        {
-            var (paragraphStart, paragraphLength) = document.GetParagraphRange(paragraphIndex);
-            var source = document.Paragraphs[paragraphIndex];
-            var emptyList = paragraphLength == 0 && source.Kind is NoteBlockKind.Bulleted or NoteBlockKind.Numbered or NoteBlockKind.Checklist;
-            var updated = emptyList ? document.EndEmptyListItem(paragraphIndex) : document.SplitParagraph(paragraphIndex, start - paragraphStart);
-            CommitTableEdit(updated, emptyList ? start : start + 2);
-        }
-        return true;
     }
 
     private void OnTableCopy(object sender, ExecutedRoutedEventArgs e)

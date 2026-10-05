@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -14,6 +15,152 @@ namespace DesktopPet.Windows.Tests;
 public sealed class NoteTableInteractionTests
 {
     private const string Markdown = "| Name | Status | Action Points |\r\n| --- | :---: | ---: |\r\n| Alice | Open | • Call<br>• Email |";
+
+    [TestMethod]
+    [DataRow("column")]
+    [DataRow("row")]
+    [DataRow("nested")]
+    public void UnsupportedXamlTableImportRestoresAcceptedContentAfterTheEditTransaction(string shape)
+    {
+        NotesDocument? saved = null;
+        var window = Create(NotesDocument.FromText("accepted"), document => saved = document);
+        try
+        {
+            var editor = (RichTextBox)window.FindName("Editor");
+            var cell = new TableCell(new Paragraph(new Run("unsupported")));
+            if (shape == "column") cell.ColumnSpan = 2;
+            if (shape == "row") cell.RowSpan = 2;
+            var row = new TableRow();
+            row.Cells.Add(cell);
+            var group = new TableRowGroup();
+            group.Rows.Add(row);
+            var table = new Table();
+            table.RowGroups.Add(group);
+            if (shape == "nested") cell.Blocks.Add(new Table());
+            var imported = new FlowDocument(table);
+            using var xaml = new MemoryStream();
+            new TextRange(imported.ContentStart, imported.ContentEnd).Save(xaml, DataFormats.Xaml);
+            xaml.Position = 0;
+            new TextRange(editor.Document.ContentEnd, editor.Document.ContentEnd).Load(xaml, DataFormats.Xaml);
+            Pump(window);
+            Assert.IsNull(saved, "Unsupported imported content must not be persisted.");
+            Assert.AreEqual("accepted\r\n", new TextRange(editor.Document.ContentStart, editor.Document.ContentEnd).Text);
+            Assert.IsFalse(string.IsNullOrEmpty(((TextBlock)window.FindName("SaveStatus")).Text));
+            editor.CaretPosition = editor.Document.ContentEnd;
+            editor.Selection.Text = " after";
+            Pump(window);
+            Assert.AreEqual("accepted after", saved!.GetPlainText());
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    public void OversizedNativeEditRestoresAcceptedContentAfterTheEditTransaction()
+    {
+        NotesDocument? saved = null;
+        var window = Create(NotesDocument.FromText("accepted"), document => saved = document);
+        try
+        {
+            var editor = (RichTextBox)window.FindName("Editor");
+            editor.CaretPosition = editor.Document.ContentEnd;
+            editor.Selection.Text = new string('x', NotesSnapshotValidator.MaximumTextCharacters);
+            Pump(window);
+            Assert.IsNull(saved);
+            Assert.AreEqual("accepted\r\n", new TextRange(editor.Document.ContentStart, editor.Document.ContentEnd).Text);
+            Assert.IsFalse(string.IsNullOrEmpty(((TextBlock)window.FindName("SaveStatus")).Text));
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    [DataRow("Insert row below")]
+    [DataRow("Insert column right")]
+    [DataRow("Tab")]
+    [DataRow("Enter")]
+    [DataRow("Ctrl+Enter")]
+    public void TableEditsAtTheTextLimitAreRejectedWithoutEscapingOrChangingContent(string action)
+    {
+        var source = new NotesDocument { Paragraphs = [
+            new NoteParagraph { Runs = [new NoteTextRun(new string('x', NotesSnapshotValidator.MaximumTextCharacters - 3))] },
+            new NoteParagraph { Cell = new NoteTableCell(Guid.NewGuid(), 0, 0), Runs = [new NoteTextRun("a")] }
+        ] };
+        NotesSnapshotValidator.ValidateDocument(source);
+        var saves = 0;
+        var window = Create(source, _ => saves++);
+        try
+        {
+            var editor = (RichTextBox)window.FindName("Editor");
+            var accepted = editor.Document;
+            var cell = accepted.Blocks.OfType<Table>().Single().RowGroups[0].Rows[0].Cells[0];
+            editor.CaretPosition = ((Paragraph)cell.Blocks.FirstBlock).ContentEnd;
+            if (action.StartsWith("Insert", StringComparison.Ordinal))
+            {
+                var item = cell.ContextMenu.Items.OfType<MenuItem>().Single(item => (string)item.Header == action);
+                typeof(MenuItem).GetMethod("OnClick", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(item, null);
+            }
+            else Handle(window, action == "Tab" ? Key.Tab : Key.Enter, action == "Ctrl+Enter", false);
+            Pump(window);
+            Assert.AreEqual(0, saves);
+            Assert.AreSame(accepted, editor.Document);
+            Assert.AreEqual("a", new TextRange(cell.ContentStart, cell.ContentEnd).Text.TrimEnd('\r', '\n'));
+            Assert.AreSame(cell, CellAt(editor.CaretPosition));
+            Assert.IsFalse(string.IsNullOrEmpty(((TextBlock)window.FindName("SaveStatus")).Text));
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    public void UndoLiteralBackticksSurviveTableClipboardAndLaterTyping()
+    {
+        var app = NotesApplication.Start(new MemoryNotesStore());
+        var id = app.CreateNote();
+        app.UpdateDocument(id, new NotesDocument { Paragraphs = [
+            new NoteParagraph { Cell = new NoteTableCell(Guid.NewGuid(), 0, 0), Runs = [new NoteTextRun("literal ")] }
+        ] });
+        var window = new NoteWindow(app.GetNote(id),
+            (_, document) => { app.UpdateDocument(id, document); return null; }, (_, _) => null, (_, _) => null,
+            (_, undo) => { var moved = undo ? app.Undo(id) : app.Redo(id); return (moved ? app.GetNote(id).Document : null, null); },
+            _ => (true, null), () => { }, () => { }, () => { }, (_, _) => null, _ => null, () => null, new NotesConfiguration());
+        string markdown;
+        try
+        {
+            ShowHidden(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            Assert.IsTrue(editor.Focus());
+            editor.CaretPosition = editor.Document.Blocks.OfType<Table>().Single().RowGroups[0].Rows[0].Cells[0].ContentEnd;
+            Type(editor, "`value` marker");
+            Pump(window);
+            Assert.AreEqual("literal value marker", app.GetNote(id).Document.GetPlainText());
+            typeof(NoteWindow).GetMethod("RestoreHistory", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [true]);
+            var literal = app.GetNote(id).Document;
+            Assert.AreEqual("literal `value` marker", literal.GetPlainText());
+            Assert.IsTrue(literal.Paragraphs.SelectMany(row => row.Runs).All(run => run.Style == NoteTextStyle.None));
+            markdown = NoteTableMarkdown.Write(literal, literal.Paragraphs[0].Cell!.TableId);
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+        NotesDocument? saved = null;
+        window = Create(NotesDocument.FromText(""), document => saved = document);
+        try
+        {
+            ShowHidden(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            Assert.IsTrue(editor.Focus());
+            Paste(editor, markdown);
+            Pump(window);
+            Assert.AreEqual("literal `value` marker", saved!.GetPlainText());
+            Assert.IsTrue(saved.Paragraphs.SelectMany(row => row.Runs).All(run => run.Style == NoteTextStyle.None));
+            editor.CaretPosition = editor.Document.Blocks.OfType<Table>().Single().RowGroups[0].Rows[0].Cells[0].ContentEnd;
+            Type(editor, " after ");
+            Pump(window);
+            Assert.AreEqual("literal `value` marker after ", saved.GetPlainText());
+            Type(editor, "`new` suffix");
+            Pump(window);
+            Assert.AreEqual("literal `value` marker after new suffix", saved.GetPlainText());
+            CollectionAssert.AreEqual(new[] { "new" }, saved.Paragraphs.SelectMany(row => row.Runs)
+                .Where(run => run.Style.HasFlag(NoteTextStyle.Code)).Select(run => run.Text).ToArray());
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
 
     [TestMethod]
     public void CreateTableIsInEditorRightClickMenuAlongsideStandardEditingCommandsAndAbsentFromHeader()

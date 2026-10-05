@@ -55,6 +55,33 @@ public sealed class NoteTableTests
     }
 
     [TestMethod]
+    public void BacktickPrefixedCodeContentDoesNotCloseTheFenceForTableParsing()
+    {
+        const string body = "```literal\r\n| H |\r\n| --- |\r\n| inside |";
+        var source = NotesDocument.FromText("```text\r\n" + body + "\r\n```\r\n| Outside |\r\n| --- |\r\n| ordinary |");
+        var start = 0;
+        var length = 0;
+        var result = NoteTableMarkdown.Apply(source, true, ref start, ref length);
+        result = NoteCodeFormatting.Apply(result, ref start, ref length);
+        Assert.AreEqual(NoteBlockKind.Code, result.Paragraphs[0].Kind);
+        Assert.AreEqual(body, string.Concat(result.Paragraphs[0].Runs.Select(run => run.Text)));
+        CollectionAssert.AreEqual(new[] { "Outside", "ordinary" }, result.Paragraphs.Where(row => row.Cell is not null)
+            .Select(row => string.Concat(row.Runs.Select(run => run.Text))).ToArray());
+    }
+
+    [TestMethod]
+    public void TableMarkdownDistinguishesLiteralBackticksFromInlineCode()
+    {
+        var source = Parse("| H |\r\n| --- |\r\n| literal &#96;value&#96; and `code` |");
+        Assert.AreEqual("H\r\nliteral `value` and code", source.GetPlainText());
+        Assert.AreEqual(NoteTextStyle.None, source.Paragraphs[1].Runs[0].Style);
+        Assert.AreEqual(NoteTextStyle.Code, source.Paragraphs[1].Runs.Last().Style);
+        var restored = Parse(NoteTableMarkdown.Write(source, source.Paragraphs[0].Cell!.TableId));
+        Assert.AreEqual(source.GetPlainText(), restored.GetPlainText());
+        CollectionAssert.AreEqual(source.Paragraphs.SelectMany(row => row.Runs).ToArray(), restored.Paragraphs.SelectMany(row => row.Runs).ToArray());
+    }
+
+    [TestMethod]
     public void ClipboardMarkdownPreservesSpecialCharactersStylesListsAndLiteralListMarkers()
     {
         var document = Parse("| Head | Other |\r\n| --- | --- |\r\n| &lt;br&gt; \\| C:\\\\Temp | - One<br>- Two |\r\n| &#8226; literal | <b><u>bold &amp; underlined</u></b><br><code>a`b</code> |");
