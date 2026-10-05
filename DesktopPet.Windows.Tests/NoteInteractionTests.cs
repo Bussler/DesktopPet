@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -148,11 +149,11 @@ public sealed class NoteInteractionTests
     [DataRow(16, 12)]
     [DataRow(24, 12)]
     [DataRow(32, 12)]
-    public void ListMarkersStartAtTheBulletPosition(int textSize, int numberedItems)
+    public void ListMarkersStartAtTheNormalTextPosition(int textSize, int numberedItems)
     {
         var document = new NotesDocument
         {
-            Paragraphs = new[] { NoteBlockKind.Bulleted }.Concat(Enumerable.Repeat(NoteBlockKind.Numbered, numberedItems))
+            Paragraphs = new[] { NoteBlockKind.Paragraph, NoteBlockKind.Bulleted }.Concat(Enumerable.Repeat(NoteBlockKind.Numbered, numberedItems))
                 .Append(NoteBlockKind.Checklist).Select(kind => new NoteParagraph { Kind = kind, Runs = [new NoteTextRun("Task")] }).ToList()
         };
         var window = CreateChecklistWindow(_ => { }, document: document);
@@ -169,12 +170,13 @@ public sealed class NoteInteractionTests
             var stride = bitmap.PixelWidth * 4;
             var pixels = new byte[stride * bitmap.PixelHeight];
             bitmap.CopyPixels(pixels, stride, 0);
-            var starts = editor.Document.Blocks.Cast<System.Windows.Documents.List>()
-                .SelectMany(list => list.ListItems.SelectMany(item => item.Blocks.OfType<Paragraph>())).Select(paragraph =>
+            var starts = editor.Document.Blocks.SelectMany(block => block is Paragraph paragraph
+                ? new[] { paragraph }
+                : ((System.Windows.Documents.List)block).ListItems.SelectMany(item => item.Blocks.OfType<Paragraph>())).Select(paragraph =>
             {
                 var bounds = paragraph.Inlines.OfType<Run>().Single().ContentStart.GetCharacterRect(LogicalDirection.Forward);
                 var top = editor.TranslatePoint(bounds.TopLeft, content).Y;
-                for (var x = 14; x < bitmap.PixelWidth - 14; x++)
+                for (var x = 12; x < bitmap.PixelWidth - 14; x++)
                     for (var y = (int)top; y < Math.Min(bitmap.PixelHeight, (int)Math.Ceiling(top + bounds.Height)); y++)
                         if (pixels[y * stride + x * 4 + 3] > 32)
                             return x;
@@ -182,7 +184,275 @@ public sealed class NoteInteractionTests
                 return -1;
             }).ToArray();
             foreach (var start in starts.Skip(1))
-                Assert.AreEqual(starts[0], start, 2, $"Bullet/number/checklist left edges: {string.Join(", ", starts)}.");
+                Assert.AreEqual(starts[0], start, 2, $"Text/bullet/number/checklist left edges: {string.Join(", ", starts)}.");
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    [DataRow(NoteBlockKind.Bulleted, false)]
+    [DataRow(NoteBlockKind.Bulleted, true)]
+    [DataRow(NoteBlockKind.Bulleted, true, true)]
+    [DataRow(NoteBlockKind.Numbered, false)]
+    [DataRow(NoteBlockKind.Checklist, false)]
+    public void RichTextTransferBetweenNotesPreservesListMarkers(NoteBlockKind kind, bool selectTextOnly, bool singleItem = false)
+    {
+        var text = singleItem ? "First" : "First\r\nSecond";
+        var document = NotesDocument.FromText(text).SetListKind(0, text.Length, kind).SetStyle(0, 5, NoteTextStyle.Bold, true);
+        if (kind == NoteBlockKind.Checklist) document = document.SetChecklistChecked(0, true);
+        NotesDocument? saved = null;
+        var source = CreateChecklistWindow(_ => { }, document: document);
+        var target = CreateChecklistWindow(result => saved = result, document: NotesDocument.FromText(""));
+        try
+        {
+            var sourceEditor = (RichTextBox)source.FindName("Editor");
+            var targetEditor = (RichTextBox)target.FindName("Editor");
+            using var payload = new MemoryStream();
+            var listItems = ((System.Windows.Documents.List)sourceEditor.Document.Blocks.FirstBlock).ListItems;
+            var range = selectTextOnly
+                ? new TextRange(((Paragraph)listItems.FirstListItem.Blocks.FirstBlock).Inlines.OfType<Run>().First().ContentStart,
+                    ((Paragraph)listItems.LastListItem.Blocks.FirstBlock).Inlines.OfType<Run>().Last().ContentEnd)
+                : new TextRange(sourceEditor.Document.ContentStart, sourceEditor.Document.ContentEnd);
+            sourceEditor.Selection.Select(range.Start, range.End);
+            range.Save(payload, DataFormats.Xaml);
+            var data = new DataObject(DataFormats.Xaml, System.Text.Encoding.UTF8.GetString(payload.ToArray()));
+            sourceEditor.RaiseEvent(new DataObjectCopyingEventArgs(data, false));
+            payload.Position = 0;
+            targetEditor.SelectAll();
+            var paste = new DataObjectPastingEventArgs(data, false, DataFormats.Xaml);
+            targetEditor.RaiseEvent(paste);
+            if (!paste.CommandCancelled) targetEditor.Selection.Load(payload, DataFormats.Xaml);
+            Pump(target);
+            Assert.IsNotNull(saved);
+            Assert.AreEqual(document.GetPlainText(), saved.GetPlainText());
+            Assert.IsTrue(saved.Paragraphs.All(row => row.Kind == kind));
+            Assert.IsTrue(saved.Paragraphs[0].Runs.All(run => run.Style.HasFlag(NoteTextStyle.Bold)));
+            var list = (System.Windows.Documents.List)targetEditor.Document.Blocks.FirstBlock;
+            if (kind == NoteBlockKind.Bulleted)
+                Assert.AreEqual(TextMarkerStyle.Disc, list.MarkerStyle);
+            else
+                Assert.IsTrue(list.ListItems.All(item => ((Paragraph)item.Blocks.FirstBlock).Inlines
+                    .OfType<InlineUIContainer>().Any()), "Pasted list markers must remain visible and editable.");
+            Assert.AreEqual(string.Empty, ((TextBlock)target.FindName("SaveStatus")).Text);
+            if (kind == NoteBlockKind.Checklist)
+            {
+                var checkbox = ChecklistCheckbox(target);
+                Assert.IsTrue(checkbox.IsChecked);
+                Click(checkbox);
+                Assert.IsFalse(saved.Paragraphs[0].IsChecked);
+                Assert.AreEqual(text, saved.GetPlainText());
+            }
+        }
+        finally { source.CloseWithoutMembershipChange(); target.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void ListPasteReplacesOnlySelectedTextAndPreservesSurroundingContent(bool insideTable)
+    {
+        var sourceDocument = NotesDocument.FromText("First\r\nSecond").SetListKind(0, 13, NoteBlockKind.Bulleted)
+            .SetStyle(0, 5, NoteTextStyle.Bold, true);
+        var targetDocument = NotesDocument.FromText("Before\r\nleft OLD right\r\nAfter");
+        if (insideTable) targetDocument.Paragraphs[1].Cell = new NoteTableCell(Guid.NewGuid(), 0, 0);
+        NotesDocument? saved = null;
+        var source = CreateChecklistWindow(_ => { }, document: sourceDocument);
+        var target = CreateChecklistWindow(result => saved = result, document: targetDocument);
+        try
+        {
+            var editor = (RichTextBox)target.FindName("Editor");
+            var paragraph = insideTable
+                ? (Paragraph)((Table)editor.Document.Blocks.ElementAt(1)).RowGroups[0].Rows[0].Cells[0].Blocks.FirstBlock
+                : (Paragraph)editor.Document.Blocks.ElementAt(1);
+            var run = paragraph.Inlines.OfType<Run>().Single();
+            editor.Selection.Select(run.ContentStart.GetPositionAtOffset(5)!, run.ContentStart.GetPositionAtOffset(8)!);
+            var sourceEditor = (RichTextBox)source.FindName("Editor");
+            sourceEditor.SelectAll();
+            var data = new DataObject(DataFormats.UnicodeText, sourceDocument.GetPlainText());
+            sourceEditor.RaiseEvent(new DataObjectCopyingEventArgs(data, false));
+            editor.RaiseEvent(new DataObjectPastingEventArgs(data, false, DataFormats.UnicodeText));
+            Pump(target);
+            Assert.IsNotNull(saved);
+            Assert.AreEqual("Before\r\nleft First\r\nSecond right\r\nAfter", saved.GetPlainText());
+            Assert.AreEqual(NoteBlockKind.Bulleted, saved.Paragraphs[1].Kind);
+            Assert.AreEqual(NoteBlockKind.Bulleted, saved.Paragraphs[2].Kind);
+            Assert.AreEqual(targetDocument.Paragraphs[1].Cell, saved.Paragraphs[1].Cell);
+            Assert.AreEqual(targetDocument.Paragraphs[1].Cell, saved.Paragraphs[2].Cell);
+            Assert.AreEqual(NoteTextStyle.Bold, saved.Paragraphs[1].Runs.Single(item => item.Text == "First").Style);
+            Assert.AreEqual(NoteTextStyle.None, saved.Paragraphs[1].Runs.Single(item => item.Text == "left ").Style);
+            Assert.IsTrue(editor.Selection.IsEmpty);
+            Assert.AreEqual(" right", new TextRange(editor.CaretPosition, editor.CaretPosition.Paragraph!.ContentEnd).Text);
+            NotesSnapshotValidator.ValidateDocument(saved);
+        }
+        finally { source.CloseWithoutMembershipChange(); target.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    [DataRow(NoteBlockKind.Bulleted, false)]
+    [DataRow(NoteBlockKind.Numbered, false)]
+    [DataRow(NoteBlockKind.Checklist, false)]
+    [DataRow(NoteBlockKind.Bulleted, true)]
+    [DataRow(NoteBlockKind.Numbered, true)]
+    [DataRow(NoteBlockKind.Checklist, true)]
+    public void ListCopiedFromTableCellPreservesMarkersAndUsesDestinationCell(NoteBlockKind kind, bool targetInTable)
+    {
+        var document = NotesDocument.FromText("First\r\nOther").SetListKind(0, 5, kind)
+            .SetStyle(0, 5, NoteTextStyle.Bold, true);
+        var sourceCell = new NoteTableCell(Guid.NewGuid(), 0, 0);
+        foreach (var row in document.Paragraphs) row.Cell = sourceCell;
+        if (kind == NoteBlockKind.Checklist) document = document.SetChecklistChecked(0, true);
+        var destination = NotesDocument.FromText("old");
+        if (targetInTable) destination.Paragraphs[0].Cell = new NoteTableCell(Guid.NewGuid(), 0, 0);
+        NotesDocument? saved = null;
+        var source = CreateChecklistWindow(_ => { }, document: document);
+        var target = CreateChecklistWindow(result => saved = result, document: destination);
+        try
+        {
+            var editor = (RichTextBox)source.FindName("Editor");
+            var cell = ((Table)editor.Document.Blocks.FirstBlock).RowGroups[0].Rows[0].Cells[0];
+            var paragraph = (Paragraph)((System.Windows.Documents.List)cell.Blocks.FirstBlock).ListItems.FirstListItem.Blocks.FirstBlock;
+            var run = paragraph.Inlines.OfType<Run>().Single();
+            editor.Selection.Select(run.ContentStart, run.ContentEnd);
+            var data = CopySelection(editor);
+            var targetEditor = (RichTextBox)target.FindName("Editor");
+            targetEditor.SelectAll();
+            PasteSelection(targetEditor, data);
+            Assert.IsNotNull(saved);
+            Assert.AreEqual("First", saved.GetPlainText());
+            Assert.AreEqual(kind, saved.Paragraphs.Single().Kind);
+            Assert.AreEqual(kind == NoteBlockKind.Checklist, saved.Paragraphs[0].IsChecked);
+            Assert.AreEqual(destination.Paragraphs[0].Cell, saved.Paragraphs[0].Cell);
+            Assert.IsTrue(saved.Paragraphs[0].Runs.All(item => item.Style == NoteTextStyle.Bold));
+            NotesSnapshotValidator.ValidateDocument(saved);
+        }
+        finally { source.CloseWithoutMembershipChange(); target.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    [DataRow(NoteBlockKind.Bulleted, 0, false)]
+    [DataRow(NoteBlockKind.Numbered, 0, false)]
+    [DataRow(NoteBlockKind.Checklist, 0, false)]
+    [DataRow(NoteBlockKind.Bulleted, 5, false)]
+    [DataRow(NoteBlockKind.Numbered, 5, false)]
+    [DataRow(NoteBlockKind.Checklist, 5, false)]
+    [DataRow(NoteBlockKind.Bulleted, 10, false)]
+    [DataRow(NoteBlockKind.Numbered, 10, false)]
+    [DataRow(NoteBlockKind.Checklist, 10, false)]
+    [DataRow(NoteBlockKind.Bulleted, 5, true)]
+    [DataRow(NoteBlockKind.Numbered, 5, true)]
+    [DataRow(NoteBlockKind.Checklist, 5, true)]
+    public void InlineListFragmentPreservesDestinationParagraphAndCheckedState(NoteBlockKind kind, int start, bool checkedTarget)
+    {
+        var document = NotesDocument.FromText("Task word tail").SetListKind(0, 14, kind)
+            .SetStyle(0, 14, NoteTextStyle.Bold, true);
+        var destination = NotesDocument.FromText("Hello target end");
+        if (checkedTarget) destination = destination.SetListKind(0, 16, NoteBlockKind.Checklist).SetChecklistChecked(0, true);
+        NotesDocument? saved = null;
+        var source = CreateChecklistWindow(_ => { }, document: document);
+        var target = CreateChecklistWindow(result => saved = result, document: destination);
+        try
+        {
+            var editor = (RichTextBox)source.FindName("Editor");
+            var run = ((Paragraph)((System.Windows.Documents.List)editor.Document.Blocks.FirstBlock)
+                .ListItems.FirstListItem.Blocks.FirstBlock).Inlines.OfType<Run>().Single();
+            editor.Selection.Select(run.ContentStart.GetPositionAtOffset(start)!, run.ContentStart.GetPositionAtOffset(start + 4)!);
+            var data = CopySelection(editor);
+            var targetEditor = (RichTextBox)target.FindName("Editor");
+            var paragraph = checkedTarget
+                ? (Paragraph)((System.Windows.Documents.List)targetEditor.Document.Blocks.FirstBlock).ListItems.FirstListItem.Blocks.FirstBlock
+                : (Paragraph)targetEditor.Document.Blocks.FirstBlock;
+            var targetRun = paragraph.Inlines.OfType<Run>().Single();
+            targetEditor.Selection.Select(targetRun.ContentStart.GetPositionAtOffset(6)!, targetRun.ContentStart.GetPositionAtOffset(12)!);
+            PasteSelection(targetEditor, data);
+            Assert.IsNotNull(saved);
+            var fragment = document.GetPlainText().Substring(start, 4);
+            Assert.AreEqual($"Hello {fragment} end", saved.GetPlainText());
+            Assert.AreEqual(destination.Paragraphs[0].Kind, saved.Paragraphs.Single().Kind);
+            Assert.AreEqual(checkedTarget, saved.Paragraphs[0].IsChecked);
+            Assert.AreEqual(NoteTextStyle.Bold, saved.Paragraphs[0].Runs.Single(item => item.Text == fragment).Style);
+        }
+        finally { source.CloseWithoutMembershipChange(); target.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    [DataRow("\r")]
+    [DataRow("\n")]
+    [DataRow("\r\n")]
+    public void MultilineListCopyClipsRunsAfterPrecedingContent(string lineBreak)
+    {
+        var document = new NotesDocument
+        {
+            Paragraphs =
+            [
+                new() { Runs = [new NoteTextRun("Before")] },
+                new() { Kind = NoteBlockKind.Bulleted, Runs = [new NoteTextRun("First" + lineBreak + "soft", NoteTextStyle.Bold)] },
+                new() { Kind = NoteBlockKind.Numbered, Runs = [new NoteTextRun("Second", NoteTextStyle.Italic)] },
+                new() { Runs = [new NoteTextRun("After")] }
+            ]
+        };
+        var window = CreateChecklistWindow(_ => { }, document: document);
+        try
+        {
+            var editor = (RichTextBox)window.FindName("Editor");
+            var lists = editor.Document.Blocks.OfType<System.Windows.Documents.List>().ToArray();
+            var first = ((Paragraph)lists[0].ListItems.FirstListItem.Blocks.FirstBlock).Inlines.OfType<Run>().First();
+            var last = ((Paragraph)lists[1].ListItems.FirstListItem.Blocks.FirstBlock).Inlines.OfType<Run>().Single();
+            editor.Selection.Select(first.ContentStart.GetPositionAtOffset(1)!, last.ContentStart.GetPositionAtOffset(4)!);
+            var data = CopySelection(editor);
+            var copied = System.Text.Json.JsonSerializer.Deserialize<NotesDocument>((string)data.GetData("Hood.Notes.List.v1")!)!;
+            Assert.AreEqual("irst\r\nsoft\r\nSeco", copied.GetPlainText());
+            CollectionAssert.AreEqual(new[] { NoteBlockKind.Bulleted, NoteBlockKind.Numbered }, copied.Paragraphs.Select(row => row.Kind).ToArray());
+            // WPF represents a soft line break separately from the styled text runs.
+            CollectionAssert.AreEqual(new[] { new NoteTextRun("irst", NoteTextStyle.Bold), new NoteTextRun("\r\n"),
+                new NoteTextRun("soft", NoteTextStyle.Bold) }, copied.Paragraphs[0].Runs.ToArray());
+            Assert.IsTrue(copied.Paragraphs[1].Runs.All(run => run.Style == NoteTextStyle.Italic));
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    private static DataObject CopySelection(RichTextBox editor)
+    {
+        using var stream = new MemoryStream();
+        editor.Selection.Save(stream, DataFormats.Xaml);
+        var data = new DataObject(DataFormats.Xaml, System.Text.Encoding.UTF8.GetString(stream.ToArray()));
+        editor.RaiseEvent(new DataObjectCopyingEventArgs(data, false));
+        return data;
+    }
+
+    private static void PasteSelection(RichTextBox editor, DataObject data)
+    {
+        var paste = new DataObjectPastingEventArgs(data, false, DataFormats.Xaml);
+        editor.RaiseEvent(paste);
+        if (!paste.CommandCancelled)
+        {
+            using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes((string)data.GetData(DataFormats.Xaml)!));
+            editor.Selection.Load(stream, DataFormats.Xaml);
+        }
+        editor.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+    }
+
+    [TestMethod]
+    [DataRow("invalid")]
+    [DataRow("oversized")]
+    public void InvalidListPasteLeavesAcceptedContentUntouched(string scenario)
+    {
+        NotesDocument? saved = null;
+        var window = CreateChecklistWindow(result => saved = result, document: NotesDocument.FromText("accepted"));
+        try
+        {
+            var editor = (RichTextBox)window.FindName("Editor");
+            editor.CaretPosition = editor.Document.ContentEnd;
+            var payload = scenario == "invalid" ? "{invalid" : System.Text.Json.JsonSerializer.Serialize(
+                NotesDocument.FromText(new string('x', NotesSnapshotValidator.MaximumTextCharacters))
+                    .SetListKind(0, 1, NoteBlockKind.Bulleted));
+            var data = new DataObject("Hood.Notes.List.v1", payload);
+            var paste = new DataObjectPastingEventArgs(data, false, "Hood.Notes.List.v1");
+            editor.RaiseEvent(paste);
+            Pump(window);
+            Assert.IsTrue(paste.CommandCancelled);
+            Assert.IsNull(saved);
+            Assert.AreEqual("accepted\r\n", new TextRange(editor.Document.ContentStart, editor.Document.ContentEnd).Text);
+            Assert.IsFalse(string.IsNullOrEmpty(((TextBlock)window.FindName("SaveStatus")).Text));
         }
         finally { window.CloseWithoutMembershipChange(); }
     }

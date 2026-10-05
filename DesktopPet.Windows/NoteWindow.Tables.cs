@@ -83,10 +83,17 @@ public partial class NoteWindow
 
     private Table CreateEditorTable(IReadOnlyList<NoteParagraph> paragraphs)
     {
-        var table = new Table { Tag = paragraphs[0].Cell!.TableId, CellSpacing = 0, Margin = new Thickness(0, 0, 0, 8) };
+        var table = new Table
+        {
+            Tag = paragraphs[0].Cell!.TableId, CellSpacing = 0,
+            Margin = new Thickness(0, 0, 0, 8), BorderThickness = new Thickness(1)
+        };
+        table.SetResourceReference(TextElement.BackgroundProperty, "NotesTableBrush");
+        table.SetResourceReference(Block.BorderBrushProperty, "NotesContentBorderBrush");
         var group = new TableRowGroup();
         table.RowGroups.Add(group);
         var columns = paragraphs.Max(row => row.Cell!.Column) + 1;
+        var rowCount = paragraphs.Max(row => row.Cell!.Row) + 1;
         for (var i = 0; i < columns; i++) table.Columns.Add(new TableColumn());
         foreach (var rows in paragraphs.GroupBy(row => row.Cell!.Row))
         {
@@ -94,9 +101,13 @@ public partial class NoteWindow
             group.Rows.Add(row);
             foreach (var contents in rows.GroupBy(item => item.Cell!.Column))
             {
-                var cell = new TableCell { Padding = new Thickness(6), BorderThickness = new Thickness(.5) };
-                cell.SetResourceReference(TableCell.BorderBrushProperty, "NotesBorderBrush");
-                if (rows.Key == 0) cell.SetResourceReference(TextElement.BackgroundProperty, "NotesHoverBrush");
+                var cell = new TableCell
+                {
+                    BorderThickness = new Thickness(0, 0, contents.Key < columns - 1 ? 1 : 0, rows.Key < rowCount - 1 ? 1 : 0)
+                };
+                cell.SetResourceReference(TableCell.PaddingProperty, "NotesTableCellPadding");
+                cell.SetResourceReference(TableCell.BorderBrushProperty, "NotesContentBorderBrush");
+                if (rows.Key == 0) cell.SetResourceReference(TextElement.BackgroundProperty, "NotesTableHeaderBrush");
                 cell.TextAlignment = contents.First().Cell!.Alignment switch
                 { NoteCellAlignment.Center => TextAlignment.Center, NoteCellAlignment.Right => TextAlignment.Right, _ => TextAlignment.Left };
                 row.Cells.Add(cell);
@@ -113,7 +124,11 @@ public partial class NoteWindow
         _updatingEditor = true;
         try
         {
-            var available = Math.Max(1, (Editor.ActualWidth > 0 ? Editor.ActualWidth : Width - 24) - Editor.Padding.Left - Editor.Padding.Right - 2);
+            var viewport = Editor.Template.FindName("PART_ContentHost", Editor) as ScrollViewer;
+            var width = viewport?.ViewportWidth > 0 ? viewport.ViewportWidth :
+                (Editor.ActualWidth > 0 ? Editor.ActualWidth : Width - 24) - Editor.Padding.Left - Editor.Padding.Right;
+            // RichTextBox adds document padding for the caret, beyond the editor's gutter.
+            var available = Math.Max(1, width - Editor.Document.PagePadding.Left - Editor.Document.PagePadding.Right - 2);
             foreach (var table in Editor.Document.Blocks.OfType<Table>())
                 foreach (var column in table.Columns) column.Width = new GridLength(available / table.Columns.Count);
         }

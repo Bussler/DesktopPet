@@ -4,6 +4,9 @@ using System.Windows.Controls;
 using System.Windows.Shell;
 using DesktopPet.Core;
 using Microsoft.Win32;
+using MediaColor = System.Windows.Media.Color;
+using MediaColors = System.Windows.Media.Colors;
+using SolidColorBrush = System.Windows.Media.SolidColorBrush;
 
 namespace DesktopPet.Windows;
 
@@ -42,8 +45,6 @@ internal static class NotesAppearance
         }
 
         ApplicationAppearance.Apply(surface, palette, style);
-        surface.Resources["NotesCodeBrush"] = new System.Windows.Media.SolidColorBrush(
-            dark ? System.Windows.Media.Color.FromArgb(45, 255, 255, 255) : System.Windows.Media.Color.FromArgb(24, 0, 0, 0));
         if (surface is NoteWindow noteWindow && WindowChrome.GetWindowChrome(noteWindow) is { } chrome)
         {
             if (chrome.IsFrozen)
@@ -57,6 +58,32 @@ internal static class NotesAppearance
 
         return dark;
     }
+
+    public static void ApplyContent(FrameworkElement surface, bool dark, NoteColor color, string style)
+    {
+        var palette = ApplicationAppearance.Resolve(dark ? "dark" : "light", style);
+        var note = (MediaColor)System.Windows.Media.ColorConverter.ConvertFromString(NoteColorPalette.GetBackgroundHex(color, dark, style));
+        var accent = style switch { UiStyleCatalog.Minimal => .06, UiStyleCatalog.Soft => .10, UiStyleCatalog.Studio => .18, _ => 0 };
+        var tint = Mix(note, palette.Accent, accent);
+        // Share the note/style hue while preserving the contrast checked by the content tests.
+        var surfaceTone = dark ? MediaColors.Black : MediaColors.White;
+        var edgeTone = dark ? MediaColors.White : MediaColors.Black;
+        SetBrush("NotesCodeBrush", Mix(tint, surfaceTone, dark ? .55 : .40));
+        SetBrush("NotesInlineCodeBrush", Mix(tint, MediaColors.Black, dark ? .55 : .24));
+        SetBrush("NotesTableBrush", Mix(tint, surfaceTone, dark ? .35 : .75));
+        SetBrush("NotesTableHeaderBrush", Mix(tint, edgeTone, dark ? .14 : .18));
+        SetBrush("NotesContentBorderBrush", Mix(tint, edgeTone, dark ? .70 : .64));
+        var padding = style switch { UiStyleCatalog.Minimal => 4, UiStyleCatalog.Soft => 8, _ => 6 };
+        surface.Resources["NotesTableCellPadding"] = new Thickness(padding);
+        surface.Resources["NotesCodePadding"] = new Thickness(padding + 2);
+
+        void SetBrush(string key, MediaColor value) => surface.Resources[key] = new SolidColorBrush(value);
+    }
+
+    private static MediaColor Mix(MediaColor first, MediaColor second, double amount) => MediaColor.FromRgb(
+        Blend(first.R, second.R, amount), Blend(first.G, second.G, amount), Blend(first.B, second.B, amount));
+
+    private static byte Blend(byte first, byte second, double amount) => (byte)Math.Round(first * (1 - amount) + second * amount);
 
     internal static bool IsDarkTheme(string theme, bool? systemIsDark = null)
     {

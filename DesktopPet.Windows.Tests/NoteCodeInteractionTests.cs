@@ -261,7 +261,9 @@ public sealed class NoteCodeInteractionTests
             var code = ((Paragraph)editor.Document.Blocks.FirstBlock).Inlines.OfType<Run>().Single(run => run.Text == "value");
             Assert.AreEqual("Consolas", code.FontFamily.Source);
             Assert.IsInstanceOfType<SolidColorBrush>(code.Background);
-            Assert.AreEqual((byte)(theme == "dark" ? 45 : 24), ((SolidColorBrush)code.Background).Color.A);
+            Assert.AreEqual((byte)255, ((SolidColorBrush)code.Background).Color.A);
+            Assert.AreEqual(((SolidColorBrush)window.FindResource("NotesInlineCodeBrush")).Color,
+                ((SolidColorBrush)code.Background).Color);
 
             Type(editor, " after");
             Pump(window);
@@ -336,7 +338,9 @@ public sealed class NoteCodeInteractionTests
             window.ApplyAppearance(new NotesConfiguration { Theme = "light" }, NoteColor.Yellow);
             var block = editor.Document.Blocks.OfType<Paragraph>().Single(row => row.Tag is NoteBlockKind.Code);
             Assert.AreEqual("Consolas", block.FontFamily.Source);
-            Assert.AreEqual((byte)24, ((SolidColorBrush)block.Background).Color.A);
+            Assert.AreEqual((byte)255, ((SolidColorBrush)block.Background).Color.A);
+            Assert.AreEqual(((SolidColorBrush)window.FindResource("NotesCodeBrush")).Color,
+                ((SolidColorBrush)block.Background).Color);
         }
         finally { window.CloseWithoutMembershipChange(); }
     }

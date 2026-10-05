@@ -96,6 +96,7 @@ public partial class NoteWindow : Window
         SetEditorDocument(note.Document, null, null);
         MenuButton.ContextMenu = CreateHeaderMenu();
         InitializeTableEditing();
+        InitializeListClipboard();
         _initializing = false;
     }
 
@@ -114,6 +115,14 @@ public partial class NoteWindow : Window
 
     public void ApplyAppearance(NotesConfiguration settings, NoteColor color, string? uiStyle = null)
     {
+        var updatingEditor = _updatingEditor;
+        _updatingEditor = true;
+        try { UpdateAppearance(settings, color, uiStyle); }
+        finally { _updatingEditor = updatingEditor; }
+    }
+
+    private void UpdateAppearance(NotesConfiguration settings, NoteColor color, string? uiStyle)
+    {
         var previousSettings = _appearanceSettings;
         var scrollPosition = CaptureEditorScrollPosition();
         _appearanceSettings = settings;
@@ -131,6 +140,7 @@ public partial class NoteWindow : Window
         }
         RefreshTableMenus();
         Background = CreateBrush(NoteColorPalette.GetBackgroundHex(color, darkTheme, _uiStyle));
+        NotesAppearance.ApplyContent(this, darkTheme, color, _uiStyle);
         var foreground = CreateBrush(NoteColorPalette.GetForegroundHex(darkTheme));
         Foreground = foreground;
         NoteTitle.Foreground = foreground;
@@ -141,9 +151,12 @@ public partial class NoteWindow : Window
         {
             Editor.FontSize = settings.TextSize;
             Editor.Document.FontSize = settings.TextSize;
-            foreach (var list in Editor.Document.Blocks.OfType<System.Windows.Documents.List>())
+            foreach (var list in GetEditorBlocks(Editor.Document.Blocks).OfType<System.Windows.Documents.List>())
+            {
+                list.Padding = new Thickness(GetListMarkerWidth(), 0, 0, 0);
                 foreach (var paragraph in list.ListItems.SelectMany(item => item.Blocks.OfType<Paragraph>()))
                     ApplyInlineMarkerSpacing(paragraph);
+            }
         }
         SaveStatus.Foreground = CreateBrush(darkTheme ? "#FFFFB4AB" : "#FF8B1F1F");
         if (!_appearanceInitialized || previousSettings.AlwaysOnTop != settings.AlwaysOnTop)
@@ -160,6 +173,7 @@ public partial class NoteWindow : Window
 
     private void OnEditorScrollChanged(object sender, ScrollChangedEventArgs e)
     {
+        if (e.ViewportWidthChange != 0) UpdateTableWidths();
         if (e.VerticalChange != 0 && sender is ScrollViewer viewer &&
             viewer.Template.FindName("PART_VerticalScrollBar", viewer) is System.Windows.Controls.Primitives.ScrollBar scrollbar)
         {
@@ -796,7 +810,8 @@ public partial class NoteWindow : Window
                 {
                     Tag = listKind,
                     MarkerStyle = listKind == NoteBlockKind.Bulleted ? TextMarkerStyle.Disc : TextMarkerStyle.None,
-                    MarkerOffset = 18
+                    MarkerOffset = 18,
+                    Padding = new Thickness(GetListMarkerWidth(), 0, 0, 0)
                 };
                 if (noteParagraph.Cell is not null) list.Margin = new Thickness(0);
                 var number = 1;
@@ -914,7 +929,9 @@ public partial class NoteWindow : Window
         {
             paragraph.Tag = NoteBlockKind.Code;
             paragraph.FontFamily = CodeFont;
-            paragraph.Padding = new Thickness(8);
+            paragraph.SetResourceReference(Block.PaddingProperty, "NotesCodePadding");
+            paragraph.BorderThickness = new Thickness(1);
+            paragraph.SetResourceReference(Block.BorderBrushProperty, "NotesContentBorderBrush");
             paragraph.SetResourceReference(TextElement.BackgroundProperty, "NotesCodeBrush");
         }
         if (noteParagraph.Kind == NoteBlockKind.Numbered)
@@ -997,8 +1014,7 @@ public partial class NoteWindow : Window
             return;
 
         // Match the native disc marker's left edge while keeping wrapped text aligned.
-        var bullet = Measure("\u009f", new Typeface("Wingdings"));
-        var markerWidth = 18 + bullet.Width - bullet.BuildGeometry(new System.Windows.Point()).Bounds.Left;
+        var markerWidth = GetListMarkerWidth();
         paragraph.TextIndent = -markerWidth;
         if (marker is System.Windows.Controls.CheckBox)
             marker.Margin = new Thickness(0, 0, markerWidth - marker.Width, 0);
@@ -1018,6 +1034,14 @@ public partial class NoteWindow : Window
         FormattedText Measure(string text, Typeface typeface) => new(text,
             System.Globalization.CultureInfo.CurrentCulture, System.Windows.FlowDirection.LeftToRight,
             typeface, Editor.FontSize, Editor.Foreground, VisualTreeHelper.GetDpi(Editor).PixelsPerDip);
+    }
+
+    private double GetListMarkerWidth()
+    {
+        var bullet = new FormattedText("\u009f", System.Globalization.CultureInfo.CurrentCulture,
+            System.Windows.FlowDirection.LeftToRight, new Typeface("Wingdings"), Editor.FontSize,
+            Editor.Foreground, VisualTreeHelper.GetDpi(Editor).PixelsPerDip);
+        return 18 + bullet.Width - bullet.BuildGeometry(new System.Windows.Point()).Bounds.Left;
     }
 
     private static void ReadInlines(InlineCollection inlines, NoteTextStyle inheritedStyle, List<NoteTextRun> runs)
@@ -1108,7 +1132,7 @@ public partial class NoteWindow : Window
                 if (noteRun.Style.HasFlag(NoteTextStyle.Code))
                 {
                     run.FontFamily = CodeFont;
-                    run.SetResourceReference(TextElement.BackgroundProperty, "NotesCodeBrush");
+                    run.SetResourceReference(TextElement.BackgroundProperty, "NotesInlineCodeBrush");
                 }
                 paragraph.Inlines.Add(run);
             }

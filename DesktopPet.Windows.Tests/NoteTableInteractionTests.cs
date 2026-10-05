@@ -5,6 +5,8 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using DesktopPet.Core;
 using DesktopPet.Windows;
 
@@ -388,6 +390,18 @@ public sealed class NoteTableInteractionTests
             var paragraph = (Paragraph)longCell.Blocks.FirstBlock;
             Assert.IsTrue(paragraph.ContentEnd.GetCharacterRect(LogicalDirection.Backward).Top >
                 paragraph.ContentStart.GetCharacterRect(LogicalDirection.Forward).Top);
+            var header = table.RowGroups[0].Rows[0].Cells.Last();
+            var end = ((Paragraph)header.Blocks.LastBlock).ContentEnd.GetCharacterRect(LogicalDirection.Backward);
+            var content = (FrameworkElement)window.Content;
+            var sample = editor.TranslatePoint(new Point(end.Right + 2, end.Top + end.Height / 2), content);
+            var bitmap = new RenderTargetBitmap((int)content.ActualWidth, (int)content.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(content);
+            var pixels = new byte[bitmap.PixelWidth * 4];
+            bitmap.CopyPixels(new Int32Rect(0, (int)sample.Y, bitmap.PixelWidth, 1), pixels, pixels.Length, 0);
+            var border = ((SolidColorBrush)table.BorderBrush).Color;
+            Assert.IsTrue(Enumerable.Range((int)sample.X, bitmap.PixelWidth - (int)sample.X).Any(x =>
+                pixels[x * 4] == border.B && pixels[x * 4 + 1] == border.G && pixels[x * 4 + 2] == border.R),
+                "The table's right outline must render inside the editor instead of being clipped.");
         }
         finally { window.CloseWithoutMembershipChange(); }
     }
