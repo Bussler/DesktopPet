@@ -286,7 +286,7 @@ public partial class NoteWindow : Window
             _updatingEditor = true;
             try { RefreshNumberedMarkers(); }
             finally { _updatingEditor = false; }
-            if (!_markupFormattingPending && (_tablePasteRequested || document.GetPlainText().IndexOfAny(['`', '|']) >= 0))
+            if (!_markupFormattingPending && (_tablePasteRequested || document.GetPlainText().IndexOfAny(['`', '|', '-', '[', ')']) >= 0))
             {
                 _markupFormattingPending = true;
                 _markupOriginalText = originalText;
@@ -440,12 +440,8 @@ public partial class NoteWindow : Window
             var text = document.GetPlainText();
             var original = _markupOriginalText ?? text;
             _markupOriginalText = null;
-            var prefix = 0;
-            while (prefix < Math.Min(original.Length, text.Length) && original[prefix] == text[prefix]) prefix++;
-            var oldEnd = original.Length;
-            var newEnd = text.Length;
-            while (oldEnd > prefix && newEnd > prefix && original[oldEnd - 1] == text[newEnd - 1]) { oldEnd--; newEnd--; }
-            var formatted = NoteCodeFormatting.Apply(document, ref start, ref length, (prefix, newEnd - prefix));
+            var formatted = NoteListFormatting.Apply(document, GetInsertedRange(original, text), ref start, ref length);
+            formatted = NoteCodeFormatting.Apply(formatted, ref start, ref length, GetInsertedRange(original, formatted.GetPlainText()));
             formatted = NoteTableMarkdown.Apply(formatted, _tablePasteRequested, ref start, ref length);
             _tablePasteRequested = false;
             if (ReferenceEquals(formatted, document)) return;
@@ -464,11 +460,22 @@ public partial class NoteWindow : Window
                 ResetCodeTypingFormat();
             SetSaveStatus(_updateDocument(_noteId, formatted));
             _lastAcceptedDocument = formatted.Copy();
+            UpdateToolbar();
         }
         catch (Exception exception) when (exception is InvalidDataException or ArgumentException or InvalidOperationException)
         {
             SetSaveStatus(exception.Message);
         }
+    }
+
+    private static (int Start, int Length) GetInsertedRange(string original, string text)
+    {
+        var prefix = 0;
+        while (prefix < Math.Min(original.Length, text.Length) && original[prefix] == text[prefix]) prefix++;
+        var oldEnd = original.Length;
+        var newEnd = text.Length;
+        while (oldEnd > prefix && newEnd > prefix && original[oldEnd - 1] == text[newEnd - 1]) { oldEnd--; newEnd--; }
+        return (prefix, newEnd - prefix);
     }
 
     private void ResetDeletedInlineCodeTyping(NotesDocument document)
