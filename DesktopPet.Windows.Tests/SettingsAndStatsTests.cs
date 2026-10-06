@@ -21,6 +21,32 @@ namespace DesktopPet.Windows.Tests;
 public sealed class SettingsAndStatsTests
 {
     [TestMethod]
+    public void TrayNotesSubmenuTextFollowsThemeAndStyleChanges()
+    {
+        using var tray = new Forms.ContextMenuStrip();
+        var notes = new Forms.ToolStripMenuItem("Notes");
+        notes.DropDownItems.Add("New note");
+        notes.DropDownItems.Add("Notes list");
+        notes.DropDownItems.Add("Notes settings");
+        tray.Items.Add(notes);
+        var apply = typeof(App).Assembly.GetType("DesktopPet.Windows.TrayMenuAppearance")!
+            .GetMethod("Apply", BindingFlags.Static | BindingFlags.Public)!;
+        foreach (var style in UiStyleCatalog.Supported)
+        foreach (var (theme, systemIsDark, dark) in new[]
+        {
+            ("dark", false, true), ("light", true, false), ("system", true, true), ("system", false, false)
+        })
+        {
+            apply.Invoke(null, [tray, theme, style, systemIsDark]);
+            Assert.IsTrue(dark ? tray.ForeColor.GetBrightness() > .8 : tray.ForeColor.GetBrightness() < .3);
+            Assert.AreEqual(tray.ForeColor, notes.ForeColor);
+            Assert.AreEqual(tray.ForeColor, notes.DropDown.ForeColor, $"Notes submenu: {theme}/{style}/{systemIsDark}");
+            foreach (Forms.ToolStripItem item in notes.DropDownItems)
+                Assert.AreEqual(tray.ForeColor, item.ForeColor, $"{item.Text}: {theme}/{style}/{systemIsDark}");
+        }
+    }
+
+    [TestMethod]
     public void HiddenStartupCanEditRoamingAreaWithoutShowingOrAnimatingSprites()
     {
         using var fixture = new Fixture("light");

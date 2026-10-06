@@ -197,9 +197,20 @@ internal static class TrayMenuAppearance
     {
         var palette = ApplicationAppearance.Resolve(theme, style, systemIsDark);
         menu.BackColor = Opaque(palette.Menu);
-        menu.ForeColor = Opaque(palette.Text);
+        ApplyTextColor(menu, Opaque(palette.Text));
         menu.RenderMode = Forms.ToolStripRenderMode.Professional;
         menu.Renderer = new Forms.ToolStripProfessionalRenderer(new HoodColorTable(palette));
+    }
+
+    private static void ApplyTextColor(Forms.ToolStrip menu, System.Drawing.Color color)
+    {
+        menu.ForeColor = color;
+        foreach (Forms.ToolStripItem item in menu.Items)
+        {
+            item.ForeColor = color;
+            if (item is Forms.ToolStripMenuItem { HasDropDownItems: true } submenu)
+                ApplyTextColor(submenu.DropDown, color);
+        }
     }
 
     private static System.Drawing.Color Opaque(MediaColor color) =>
