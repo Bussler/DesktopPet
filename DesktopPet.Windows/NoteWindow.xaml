@@ -47,10 +47,6 @@
                 <Border x:Name="NoteHeader" Style="{StaticResource FocusedControls}"
                         Background="{DynamicResource NotesHoverBrush}" CornerRadius="{DynamicResource AppNoteHeaderRadius}" Padding="10,5,6,5">
                     <DockPanel>
-                        <Button x:Name="NewNoteButton" DockPanel.Dock="Left" Style="{StaticResource NoteIconButton}"
-                                FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16" Content="&#xE710;"
-                                ToolTip="New note" AutomationProperties.Name="New note" Margin="0,0,6,0"
-                                Click="OnNewNoteClick" />
                         <Button x:Name="CloseButton" DockPanel.Dock="Right" Style="{StaticResource NoteIconButton}"
                                 FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" Content="&#xE8BB;"
                                 ToolTip="Close note" AutomationProperties.Name="Close note" Click="OnCloseClick" />
@@ -58,6 +54,10 @@
                                 FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16" Content="&#xE712;"
                                 ToolTip="Note menu" AutomationProperties.Name="Note menu" Margin="0,0,4,0"
                                 Click="OnHeaderMenuClick" />
+                        <Button x:Name="NewNoteButton" DockPanel.Dock="Right" Style="{StaticResource NoteIconButton}"
+                                FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16" Content="&#xE710;"
+                                ToolTip="New note" AutomationProperties.Name="New note" Margin="0,0,4,0"
+                                Click="OnNewNoteClick" />
                         <TextBox x:Name="NoteTitle" VerticalAlignment="Center" HorizontalAlignment="Left"
                                  FontWeight="{DynamicResource AppNoteTitleFontWeight}" FontSize="{DynamicResource AppNoteTitleFontSize}" Background="Transparent" BorderThickness="0"
                                  Padding="2,4" Margin="0,0,8,0" MinWidth="48"
