@@ -8,6 +8,41 @@ namespace DesktopPet.Tests;
 public sealed class HoodSessionPersistenceTests
 {
     [TestMethod]
+    [DataRow(PetAction.Idle)]
+    [DataRow(PetAction.RunRight)]
+    [DataRow(PetAction.Jump)]
+    [DataRow(PetAction.Sleep)]
+    public void HiddenSpritesPauseAnimationsMovementNeedsAndTimersUntilShown(PetAction action)
+    {
+        var snapshot = action == PetAction.Sleep ? CreateSleepingSnapshot() : CreateAwakeSnapshot() with { Action = action };
+        var configuration = HoodConfiguration.Defaults;
+        var session = CreateSession(snapshot, configuration);
+        using var directory = new TemporaryDirectory();
+        var controller = new HoodConfigurationController(session, new YamlConfigurationStore(Path.Combine(directory.Path, "config.yaml")));
+        controller.SaveAndApply("behavior.show_sprites", configuration with
+        {
+            Behavior = configuration.Behavior with { ShowSprites = false }
+        });
+        var presentation = session.Presentation;
+        Assert.IsFalse(session.RequiresAnimationFrames);
+
+        session.Advance(TimeSpan.FromDays(10));
+
+        Assert.AreEqual(presentation, session.Presentation);
+        Assert.AreEqual(snapshot.Needs, session.Needs);
+        Assert.AreEqual(snapshot.RemainingNap, session.RemainingNap);
+        Assert.AreEqual(snapshot.RemainingRandomInterval, session.RemainingRandomInterval);
+        Assert.AreEqual(snapshot.RemainingEarlyWakeGrace, session.RemainingEarlyWakeGrace);
+        var restored = CreateSession(snapshot, controller.Current);
+        restored.Advance(TimeSpan.FromDays(10));
+        Assert.AreEqual(presentation, restored.Presentation, "Starting hidden must also pause a restored action.");
+        controller.SaveAndApply("behavior.show_sprites", configuration);
+        session.Advance(TimeSpan.FromMilliseconds(250));
+        Assert.IsTrue(session.RequiresAnimationFrames);
+        Assert.AreNotEqual(snapshot.Needs, session.Needs, "Active time resumes without catching up hidden time.");
+    }
+
+    [TestMethod]
     public void JsonSessionStore_LoadsNoFileAsFreshAndRoundTripsEveryContinuationField()
     {
         using var directory = new TemporaryDirectory();

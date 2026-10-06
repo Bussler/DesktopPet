@@ -21,6 +21,164 @@ namespace DesktopPet.Windows.Tests;
 public sealed class SettingsAndStatsTests
 {
     [TestMethod]
+    public void HiddenStartupCanEditRoamingAreaWithoutShowingOrAnimatingSprites()
+    {
+        using var fixture = new Fixture("light");
+        fixture.Controller.SaveAndApply("behavior.show_sprites", fixture.Controller.Current with
+        {
+            Behavior = fixture.Controller.Current.Behavior with { ShowSprites = false }
+        });
+        var pet = fixture.Pet();
+        var settings = fixture.HoodSettings(pet, UiStyleCatalog.StickyNotes);
+        try
+        {
+            Assert.AreEqual(IntPtr.Zero, new System.Windows.Interop.WindowInteropHelper(pet).Handle);
+            typeof(SettingsWindow).GetMethod("OnEditAreaClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(settings, [settings, new RoutedEventArgs(Button.ClickEvent)]);
+            var editor = (Window)typeof(HoodOverlayWindow).GetField("_areaEditor", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(pet)!;
+            editor.Opacity = 0;
+            Assert.IsTrue(editor.IsVisible);
+            Assert.AreSame(pet, editor.Owner);
+            Assert.IsTrue(fixture.Session.IsEditingArea);
+            Assert.IsFalse(pet.IsVisible);
+            Assert.IsNull(((Image)pet.FindName("PetImage")).Source);
+            Assert.IsFalse(((System.Windows.Threading.DispatcherTimer)typeof(HoodOverlayWindow)
+                .GetField("_frameTimer", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(pet)!).IsEnabled);
+            Assert.IsFalse(fixture.Store.LoadOrCreate().Behavior.ShowSprites);
+            editor.Close();
+            Assert.IsFalse(fixture.Session.IsEditingArea);
+        }
+        finally { settings.Close(); pet.Close(); }
+    }
+
+    [TestMethod]
+    public void SpriteVisibilitySettingsSaveAndCancelPreserveOtherBehaviorChoices()
+    {
+        using var fixture = new Fixture("light");
+        fixture.Store.Save(fixture.Controller.Current);
+        var pet = fixture.Pet();
+        pet.Opacity = 0;
+        var settings = fixture.HoodSettings(pet, UiStyleCatalog.StickyNotes);
+        try
+        {
+            ((CheckBox)settings.FindName("ShowSpritesCheckBox")).IsChecked = false;
+            Assert.IsTrue(fixture.Controller.Current.Behavior.ShowSprites, "The checkbox takes effect only on Save.");
+            settings.Close();
+            Assert.IsTrue(fixture.Store.LoadOrCreate().Behavior.ShowSprites);
+            settings = fixture.HoodSettings(pet, UiStyleCatalog.StickyNotes);
+            ((CheckBox)settings.FindName("ShowSpritesCheckBox")).IsChecked = false;
+            typeof(SettingsWindow).GetMethod("OnSaveClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(settings, [settings, new RoutedEventArgs(Button.ClickEvent)]);
+            Assert.IsFalse(pet.IsVisible);
+            Assert.IsFalse(fixture.Store.LoadOrCreate().Behavior.ShowSprites);
+            Assert.IsTrue(fixture.Controller.Current.Behavior.IdleAnimations);
+            Assert.IsTrue(fixture.Controller.Current.Behavior.Roaming);
+            Assert.IsTrue(fixture.Controller.Current.Behavior.RandomEvents);
+            settings = fixture.HoodSettings(pet, UiStyleCatalog.StickyNotes);
+            Assert.IsFalse(((CheckBox)settings.FindName("ShowSpritesCheckBox")).IsChecked == true);
+        }
+        finally { settings.Close(); pet.Close(); }
+    }
+
+    [TestMethod]
+    public void PetAndTrayTogglesStopTimerRevealOpenNotesAndCancelPendingHide()
+    {
+        using var fixture = new Fixture("light");
+        fixture.Store.Save(fixture.Controller.Current);
+        var notesPath = fixture.ConfigPath + ".notes.json";
+        var notes = NotesApplication.Start(new JsonNotesStore(notesPath));
+        var openId = notes.CreateNote();
+        var closedId = notes.CreateNote();
+        Assert.IsTrue(notes.TryCloseNote(closedId, out _));
+        notes.SetGroupVisible(false);
+        var pet = fixture.Pet();
+        var app = System.Windows.Application.Current as App ?? new TestApp { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        var fields = new[] { "_session", "_notes", "_petWindow", "_configurationStore", "_trayIconImage", "_effectiveNotesSettings" }
+            .Select(name => typeof(App).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!).ToArray();
+        var originalValues = fields.Select(field => field.GetValue(app)).ToArray();
+        object?[] values = [fixture.Session, notes, pet, fixture.Store, null, fixture.Controller.Current.Notes];
+        for (var index = 0; index < fields.Length; index++) fields[index].SetValue(app, values[index]);
+        var windows = (Dictionary<Guid, NoteWindow>)typeof(App).GetField("_noteWindows", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(app)!;
+        var restore = typeof(App).GetMethod("RestoreOpenNotes", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var toggle = typeof(App).GetMethod("ToggleSprites", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        typeof(HoodOverlayWindow).GetEvent("ToggleSpritesRequested", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetAddMethod(true)!.Invoke(pet, [(Action)(() => toggle.Invoke(app, null))]);
+        typeof(HoodOverlayWindow).GetEvent("SpritesVisibilityChanged", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetAddMethod(true)!.Invoke(pet, [(Action)(() => restore.Invoke(app, [false]))]);
+        var timer = (System.Windows.Threading.DispatcherTimer)typeof(HoodOverlayWindow)
+            .GetField("_frameTimer", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(pet)!;
+        Forms.NotifyIcon? icon = null;
+        try
+        {
+            restore.Invoke(app, [false]);
+            var note = windows[openId];
+            note.Opacity = 0;
+            ShowHidden(pet);
+            Assert.IsTrue(timer.IsEnabled);
+            var coordinator = (NotesVisibilityTransitionCoordinator)typeof(App)
+                .GetField("_visibilityTransitions", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(app)!;
+            var staleHide = coordinator.Request(false);
+            note.BeginGroupVisibilityTransition(false, new Point(96, 96), TimeSpan.FromSeconds(10), () => { });
+            var item = pet.ContextMenu!.Items.OfType<MenuItem>().Single(item => (string)item.Header == "Show Hood sprites");
+            Assert.IsTrue(item.IsChecked);
+            item.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+
+            Assert.AreSame(fixture.Session, fields[0].GetValue(app), "The app fixture must retain its session.");
+            Assert.IsFalse(fixture.Session.Configuration.Behavior.ShowSprites, "The menu must apply the toggle.");
+            Assert.IsFalse(pet.IsVisible);
+            Assert.IsFalse(timer.IsEnabled, "The DispatcherTimer must be stopped, not merely render invisible frames.");
+            Assert.IsFalse(item.IsChecked);
+            Assert.IsFalse(fixture.Store.LoadOrCreate().Behavior.ShowSprites);
+            Assert.IsTrue(note.IsVisible);
+            Assert.IsTrue(notes.GroupVisible);
+            Assert.IsFalse(windows.ContainsKey(closedId), "Closed notes must stay closed.");
+            typeof(App).GetMethod("CompleteVisibilityTransition", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(app, [openId, staleHide]);
+            Assert.IsTrue(note.IsVisible, "A stale hide completion cannot hide notes after sprites are hidden.");
+
+            icon = (Forms.NotifyIcon)typeof(App).GetMethod("CreateTrayIcon", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(app, null)!;
+            var trayToggle = icon.ContextMenuStrip!.Items.OfType<Forms.ToolStripMenuItem>().Single(item => item.Text == "Show Hood sprites");
+            trayToggle.PerformClick();
+            Assert.IsTrue(pet.IsVisible);
+            Assert.IsTrue(timer.IsEnabled);
+            Assert.IsTrue(fixture.Store.LoadOrCreate().Behavior.ShowSprites);
+            Assert.IsTrue(note.IsVisible);
+
+            trayToggle.PerformClick();
+            Assert.IsFalse(timer.IsEnabled);
+            var hiddenPet = fixture.Pet();
+            try
+            {
+                Assert.IsFalse(hiddenPet.IsVisible);
+                Assert.IsNull(((Image)hiddenPet.FindName("PetImage")).Source, "Starting hidden must not render a sprite.");
+                Assert.IsFalse(((System.Windows.Threading.DispatcherTimer)typeof(HoodOverlayWindow)
+                    .GetField("_frameTimer", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(hiddenPet)!).IsEnabled);
+            }
+            finally { hiddenPet.Close(); }
+            notes.SetGroupVisible(false);
+            notes = NotesApplication.Start(new JsonNotesStore(notesPath));
+            fields[1].SetValue(app, notes);
+            restore.Invoke(app, [true]);
+            Assert.IsTrue(note.IsVisible, "Restoration while hidden must reveal notes immediately even with animations enabled.");
+            Assert.IsFalse((bool)typeof(NoteWindow).GetField("_isTransitioning", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(note)!,
+                "No transition toward the hidden pet may remain active.");
+            Assert.IsTrue(notes.TryCloseNote(openId, out _));
+            restore.Invoke(app, [false]);
+            Assert.IsFalse(note.IsVisible, "Individual notes may still be closed.");
+        }
+        finally
+        {
+            icon?.Dispose();
+            (fields[4].GetValue(app) as System.Drawing.Icon)?.Dispose();
+            foreach (var window in windows.Values.ToArray()) window.CloseWithoutMembershipChange();
+            windows.Clear();
+            for (var index = 0; index < fields.Length; index++) fields[index].SetValue(app, originalValues[index]);
+            pet.Close();
+            File.Delete(notesPath);
+        }
+    }
+
+    [TestMethod]
     public void SelectionPreviewsUiStyleWithoutPersistingChanges()
     {
         using var fixture = new Fixture("light");
@@ -1022,6 +1180,11 @@ public sealed class SettingsAndStatsTests
             yield return child;
             foreach (var descendant in Descendants(child)) yield return descendant;
         }
+    }
+
+    private sealed class TestApp : App
+    {
+        protected override void OnStartup(StartupEventArgs e) { }
     }
 
     private sealed class Fixture : IDisposable

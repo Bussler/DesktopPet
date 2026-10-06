@@ -141,6 +141,7 @@ public partial class SettingsWindow : Window
         _loadingSettings = true;
         PetComboBox.SelectedValue = configuration.Pet;
         UiStyleComboBox.SelectedValue = configuration.UiStyle;
+        ShowSpritesCheckBox.IsChecked = configuration.Behavior.ShowSprites;
         RoamingCheckBox.IsChecked = configuration.Behavior.Roaming;
         IdleAnimationsCheckBox.IsChecked = configuration.Behavior.IdleAnimations;
         RandomEventsCheckBox.IsChecked = configuration.Behavior.RandomEvents;
@@ -150,6 +151,8 @@ public partial class SettingsWindow : Window
         MaximumReactionMinutesTextBox.Text = configuration.RandomInterval.MaximumMinutes.ToString(CultureInfo.CurrentCulture);
         _loadingSettings = false;
     }
+
+    internal void RefreshSpriteVisibility() => ShowSpritesCheckBox.IsChecked = _controller.Current.Behavior.ShowSprites;
 
     private void ShowAppearanceError(string message)
     {
@@ -177,6 +180,7 @@ public partial class SettingsWindow : Window
             RandomInterval = new RandomIntervalSettings { MinimumMinutes = minimum, MaximumMinutes = maximum },
             Behavior = previous.Behavior with
             {
+                ShowSprites = ShowSpritesCheckBox.IsChecked == true,
                 Roaming = RoamingCheckBox.IsChecked == true,
                 IdleAnimations = IdleAnimationsCheckBox.IsChecked == true,
                 RandomEvents = RandomEventsCheckBox.IsChecked == true,

@@ -36,6 +36,9 @@ public partial class HoodOverlayWindow : Window
     private readonly WpfMenuItem _sleepMenuItem = new() { IsEnabled = false };
     private readonly WpfMenuItem _sleepActionMenuItem = new();
     private readonly WpfMenuItem _editAreaMenuItem = new();
+    private readonly WpfMenuItem _showSpritesMenuItem = new() { Header = "Show Hood sprites", IsCheckable = true };
+    internal event Action? ToggleSpritesRequested;
+    internal event Action? SpritesVisibilityChanged;
     private RoamingAreaEditorWindow? _areaEditor;
     private System.Windows.Point _mouseDownScreen;
     private System.Windows.Point _lastPointerScreen;
@@ -83,6 +86,7 @@ public partial class HoodOverlayWindow : Window
         Left = session.Position.X;
         Top = session.Position.Y;
         ContextMenu = CreatePetMenu();
+        UpdateNeedLabels();
         ContextMenu.Opened += (_, _) => UpdateNeedLabels();
         Closed += OnOverlayClosed;
         _frameTimer.Tick += OnFrameTimerTick;
@@ -102,7 +106,10 @@ public partial class HoodOverlayWindow : Window
         _lastTick = Stopwatch.GetTimestamp();
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
         UpdateTimerInterval();
-        _frameTimer.Start();
+        if (_session.Configuration.Behavior.ShowSprites)
+        {
+            _frameTimer.Start();
+        }
     }
 
     private void OnClosed(object? sender, EventArgs e)
@@ -122,7 +129,7 @@ public partial class HoodOverlayWindow : Window
     {
         var now = Stopwatch.GetTimestamp();
         var previous = Interlocked.Exchange(ref _lastTick, now);
-        if (Volatile.Read(ref _suspended) != 0)
+        if (Volatile.Read(ref _suspended) != 0 || !_session.Configuration.Behavior.ShowSprites)
         {
             return;
         }
@@ -291,6 +298,12 @@ public partial class HoodOverlayWindow : Window
         menu.Items.Add(notes);
         menu.Items.Add(new WpfSeparator());
         var settings = new WpfMenuItem { Header = "Settings" };
+        _showSpritesMenuItem.Click += (_, _) =>
+        {
+            ToggleSpritesRequested?.Invoke();
+            UpdateNeedLabels();
+        };
+        menu.Items.Add(_showSpritesMenuItem);
         settings.Click += (_, _) => _showSettings();
         menu.Items.Add(settings);
         var quit = new WpfMenuItem { Header = "Quit" };
@@ -310,6 +323,7 @@ public partial class HoodOverlayWindow : Window
 
     private void UpdateNeedLabels()
     {
+        _showSpritesMenuItem.IsChecked = _session.Configuration.Behavior.ShowSprites;
         _hungerMenuItem.Header = FormatNeed("Hunger", _session.Needs.Hunger, "content", "getting hungry", "hungry");
         _boredomMenuItem.Header = FormatNeed("Boredom", _session.Needs.Boredom, "content", "getting restless", "could use something to do");
         _sleepMenuItem.Header = FormatNeed("Sleep", _session.Needs.Sleep, "rested", "winding down", "sleepy");
@@ -346,6 +360,7 @@ public partial class HoodOverlayWindow : Window
             return;
         }
 
+        new WindowInteropHelper(this).EnsureHandle();
         _session.BeginAreaEditing();
         _areaEditor = new RoamingAreaEditorWindow(_session, this);
         _areaEditor.Closed += (_, _) =>
@@ -368,6 +383,11 @@ public partial class HoodOverlayWindow : Window
 
     private void RenderPresentation()
     {
+        if (!_session.Configuration.Behavior.ShowSprites)
+        {
+            return;
+        }
+
         var presentation = _session.Presentation;
         Left = presentation.Position.X;
         Top = presentation.Position.Y;
@@ -410,6 +430,20 @@ public partial class HoodOverlayWindow : Window
     {
         UpdateTimerInterval();
         RenderPresentation();
+        UpdateNeedLabels();
+        if (_session.Configuration.Behavior.ShowSprites)
+        {
+            if (!IsVisible) Show();
+            Interlocked.Exchange(ref _lastTick, Stopwatch.GetTimestamp());
+            if (IsLoaded) _frameTimer.Start();
+        }
+        else
+        {
+            _frameTimer.Stop();
+            _areaEditor?.Close();
+            Hide();
+        }
+        SpritesVisibilityChanged?.Invoke();
     }
 
     internal void ApplyPlacement()

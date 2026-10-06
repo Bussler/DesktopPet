@@ -125,8 +125,10 @@ public partial class App : System.Windows.Application
                 ShowNotesSettings,
                 _effectiveUiStyle);
             _petWindow.Closed += (_, _) => RequestQuit();
+            _petWindow.ToggleSpritesRequested += ToggleSprites;
+            _petWindow.SpritesVisibilityChanged += () => RestoreOpenNotes();
             MainWindow = _petWindow;
-            _petWindow.Show();
+            if (configuration.Behavior.ShowSprites) _petWindow.Show();
             RestoreOpenNotes();
             _trayIcon = CreateTrayIcon();
             SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
@@ -312,6 +314,16 @@ public partial class App : System.Windows.Application
         _trayIconImage = new System.Drawing.Icon(imageStream, Forms.SystemInformation.SmallIconSize);
 
         var menu = new Forms.ContextMenuStrip();
+        var showSprites = new Forms.ToolStripMenuItem("Show Hood sprites");
+        showSprites.Click += (_, _) => ToggleSprites();
+        menu.Opening += (_, _) => showSprites.Checked = _session?.Configuration.Behavior.ShowSprites == true;
+        menu.Items.Add(showSprites);
+        var notes = new Forms.ToolStripMenuItem("Notes");
+        notes.DropDownItems.Add("New note", null, (_, _) => CreateNote());
+        notes.DropDownItems.Add("Notes list", null, (_, _) => ShowNotesList());
+        notes.DropDownItems.Add("Notes settings", null, (_, _) => ShowNotesSettings());
+        menu.Items.Add(notes);
+        menu.Items.Add(new Forms.ToolStripSeparator());
         var settings = new Forms.ToolStripMenuItem("Settings");
         settings.Click += (_, _) => ShowSettings();
         var quit = new Forms.ToolStripMenuItem("Quit");
@@ -333,6 +345,28 @@ public partial class App : System.Windows.Application
         };
         icon.DoubleClick += (_, _) => ShowSettings();
         return icon;
+    }
+
+    private void ToggleSprites()
+    {
+        if (_session is null || _configurationStore is null || _petWindow is null) return;
+        var current = _session.Configuration;
+        try
+        {
+            new HoodConfigurationController(_session, _configurationStore, _startupRegistration).SaveAndApply(
+                "behavior.show_sprites", current with
+                {
+                    Behavior = current.Behavior with { ShowSprites = !current.Behavior.ShowSprites }
+                });
+        }
+        catch (HoodConfigurationException exception)
+        {
+            System.Windows.MessageBox.Show(exception.Message, "Could not change sprite visibility", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        _petWindow.RefreshBehaviorSettings();
+        _settingsWindow?.RefreshSpriteVisibility();
     }
 
     private void ShowSettings()
@@ -612,6 +646,9 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        var spritesVisible = _session?.Configuration.Behavior.ShowSprites != false;
+        if (!spritesVisible && !_notes.GroupVisible) _notes.SetGroupVisible(true);
+
         var openIds = _notes.OpenNoteIds.ToHashSet();
         foreach (var noteId in _noteWindows.Keys.Where(noteId => !openIds.Contains(noteId)).ToArray())
         {
@@ -643,7 +680,7 @@ public partial class App : System.Windows.Application
             window.SetSaveStatus(_notes.LastSaveError);
         }
 
-        var animate = animateGroupTransition && _effectiveNotesSettings.AnimateShowHide;
+        var animate = spritesVisible && animateGroupTransition && _effectiveNotesSettings.AnimateShowHide;
         var transition = _visibilityTransitions.Request(_notes.GroupVisible);
         if (!animate)
         {

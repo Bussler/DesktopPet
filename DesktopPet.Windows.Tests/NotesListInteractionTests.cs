@@ -12,6 +12,63 @@ namespace DesktopPet.Windows.Tests;
 public sealed class NotesListInteractionTests
 {
     [TestMethod]
+    [DataRow("sticky-notes", 0)]
+    [DataRow("sticky-notes", 1)]
+    [DataRow("minimal", 0)]
+    [DataRow("minimal", 1)]
+    [DataRow("soft", 0)]
+    [DataRow("soft", 1)]
+    [DataRow("studio", 0)]
+    [DataRow("studio", 1)]
+    public void ThreeScrollLinesDoNotSkipTheAdjacentNote(string style, int tab)
+    {
+        var notes = Enumerable.Range(0, 12).Select(index => new NoteListItem(Guid.NewGuid(),
+            index % 2 == 0 ? new string('x', 300) : "Short preview", false, $"Note {index}")).ToArray();
+        var trash = notes.Select(note => new TrashedNoteListItem(note.Id, note.Preview, note.Name)).ToArray();
+        var window = new NotesListWindow(_ => notes, _ => trash, _ => { }, () => { }, _ => null, _ => null, () => null,
+            uiStyle: style);
+        try
+        {
+            ShowHidden(window);
+            ((TabControl)window.FindName("Views")).SelectedIndex = tab;
+            var list = (ListBox)window.FindName(tab == 0 ? "ResultsList" : "TrashResultsList");
+            foreach (var height in new[] { 540, 380 })
+            {
+                window.Height = height;
+                window.UpdateLayout();
+                var viewer = Descendants(list).OfType<ScrollViewer>().Single();
+                viewer.ScrollToTop();
+                window.UpdateLayout();
+                var first = (ListBoxItem)list.ItemContainerGenerator.ContainerFromIndex(0);
+                var cardHeight = first.ActualHeight + first.Margin.Top + first.Margin.Bottom;
+                // Model a three-line wheel step without using the user's Windows wheel preference.
+                for (var line = 0; line < 3; line++) viewer.LineDown();
+                window.UpdateLayout();
+
+                Assert.IsTrue(viewer.VerticalOffset > 0, "The test must scroll the actual list.");
+                var maximumOffset = viewer.CanContentScroll && VirtualizingPanel.GetScrollUnit(list) == ScrollUnit.Item ? 1 : cardHeight;
+                Assert.IsTrue(viewer.VerticalOffset <= maximumOffset + 0.01,
+                    $"Three scroll lines skipped notes: offset {viewer.VerticalOffset}, card height {cardHeight}, " +
+                    $"viewport {viewer.ViewportHeight}, extent {viewer.ExtentHeight}, height {height}.");
+                for (var line = 0; line < 3; line++) viewer.LineUp();
+                window.UpdateLayout();
+                Assert.AreEqual(0d, viewer.VerticalOffset, 0.01, "Reversing the scroll step must return to the first note.");
+            }
+        }
+        finally { window.Close(); }
+    }
+
+    private static IEnumerable<DependencyObject> Descendants(DependencyObject parent)
+    {
+        for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, index);
+            yield return child;
+            foreach (var descendant in Descendants(child)) yield return descendant;
+        }
+    }
+
+    [TestMethod]
     [DataRow("light", 540)]
     [DataRow("light", 380)]
     [DataRow("dark", 540)]

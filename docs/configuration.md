@@ -17,6 +17,7 @@ schema_version: 1
 pet: hood
 ui_style: sticky-notes
 behavior:
+  show_sprites: true
   roaming: true
   idle_animations: true
   random_events: true
@@ -54,6 +55,7 @@ notes:
 | `pet` | Pet artwork | `hood`, `pip`, `crumb`, or `puddle`, case-insensitive; defaults to `hood`. Settings previews selections live; Save persists them. |
 | `ui_style` | UI style | `sticky-notes`, `minimal`, `soft`, or `studio`, case-insensitive; defaults to `sticky-notes`. Other identifiers are invalid. Settings previews selections live; Save persists them. |
 | `behavior.roaming`, `idle_animations`, `random_events`, `always_on_top`, `start_with_windows` | Boolean | `true` or `false`; each option is independent. |
+| `behavior.show_sprites` | Boolean | Defaults to `true`, including in older files. `false` hides the pet and pauses animations, roaming, needs, and timers; open notes stay visible. |
 | `needs.hunger_points_per_hour`, `boredom_points_per_hour`, `sleep_points_per_hour` | Need points per awake active hour | Finite and at least `0`. |
 | `needs.feed_gain` | Hunger points per Feed action | Finite and at least `0`. |
 | `needs.movement_relief_per_second` | Boredom points per second of movement | Finite and at least `0`. |

@@ -219,6 +219,7 @@ public sealed class HoodSession
     public bool IsEditingArea => _editingArea;
     public bool IsDragging => _dragging;
     public bool RequiresAnimationFrames =>
+        _configuration.Behavior.ShowSprites &&
         !((_action is PetAction.RunLeft or PetAction.RunRight) && IsRoamingPaused) &&
         (_action != PetAction.Idle || _configuration.Behavior.IdleAnimations);
     public bool QuitRequested => _quitRequested;
@@ -487,7 +488,7 @@ public sealed class HoodSession
             throw new ArgumentOutOfRangeException(nameof(elapsed), "Elapsed active-session time cannot be negative.");
         }
 
-        if (_quitRequested)
+        if (_quitRequested || !_configuration.Behavior.ShowSprites)
         {
             return;
         }

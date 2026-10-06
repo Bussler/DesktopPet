@@ -7,6 +7,19 @@ namespace DesktopPet.Tests;
 public sealed class HoodConfigurationTests
 {
     [TestMethod]
+    public void SpriteVisibilityDefaultsForOlderFilesAndRoundTripsHiddenChoice()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new YamlConfigurationStore(Path.Combine(directory.Path, "config.yaml"));
+        Assert.IsTrue(store.LoadOrCreate().Behavior.ShowSprites);
+        File.WriteAllText(store.Path, Regex.Replace(File.ReadAllText(store.Path), @"(?m)^  show_sprites:.*\r?\n", string.Empty));
+        var legacy = store.LoadOrCreate();
+        Assert.IsTrue(legacy.Behavior.ShowSprites);
+        store.Save(legacy with { Behavior = legacy.Behavior with { ShowSprites = false } });
+        Assert.IsFalse(store.LoadOrCreate().Behavior.ShowSprites);
+    }
+
+    [TestMethod]
     public void LoadOrCreate_WritesDocumentedDefaultsAndReloadsManualEdits()
     {
         using var directory = new TemporaryDirectory();
@@ -482,7 +495,7 @@ public sealed class HoodConfigurationTests
         var controller = new HoodConfigurationController(session, new FailingConfigurationStore());
         var candidate = initial with
         {
-            Behavior = initial.Behavior with { AlwaysOnTop = false },
+            Behavior = initial.Behavior with { AlwaysOnTop = false, ShowSprites = false },
             RandomInterval = new RandomIntervalSettings { MinimumMinutes = 2, MaximumMinutes = 3 }
         };
 

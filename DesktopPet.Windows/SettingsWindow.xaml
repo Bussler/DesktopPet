@@ -54,6 +54,9 @@
 
             <GroupBox Header="Behavior">
                 <StackPanel>
+                    <CheckBox x:Name="ShowSpritesCheckBox" Content="Show Hood sprites" IsChecked="True" />
+                    <TextBlock Margin="0,0,0,8" Text="When hidden, Hood pauses and open notes stay visible."
+                               Foreground="{DynamicResource AppSettingsSecondaryTextBrush}" TextWrapping="Wrap" />
                     <CheckBox x:Name="RoamingCheckBox" Content="Let Hood roam within his area" IsChecked="True" />
                     <CheckBox x:Name="IdleAnimationsCheckBox" Content="Play idle animations" IsChecked="True" />
                     <CheckBox x:Name="RandomEventsCheckBox" Content="Allow occasional reactions" IsChecked="True" Margin="0" />
