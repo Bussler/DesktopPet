@@ -158,6 +158,16 @@ public partial class NoteWindow : Window
                     ApplyInlineMarkerSpacing(paragraph);
             }
         }
+        if (!_appearanceInitialized || previousSettings.TextSize != settings.TextSize || previousSettings.LineSpacing != settings.LineSpacing)
+        {
+            Editor.Document.LineHeight = GetEditorLineHeight();
+            Editor.Document.LineStackingStrategy = GetEditorLineStackingStrategy();
+        }
+        if (!_appearanceInitialized || previousSettings.LineSpacing != settings.LineSpacing)
+        {
+            foreach (var paragraph in GetEditorBlocks(Editor.Document.Blocks).OfType<Paragraph>())
+                paragraph.Margin = new Thickness(paragraph.Margin.Left, paragraph.Margin.Top, paragraph.Margin.Right, 4 * settings.LineSpacing);
+        }
         SaveStatus.Foreground = CreateBrush(darkTheme ? "#FFFFB4AB" : "#FF8B1F1F");
         if (!_appearanceInitialized || previousSettings.AlwaysOnTop != settings.AlwaysOnTop)
         {
@@ -790,7 +800,9 @@ public partial class NoteWindow : Window
         {
             PagePadding = new Thickness(0),
             FontFamily = Editor.FontFamily,
-            FontSize = Editor.FontSize
+            FontSize = Editor.FontSize,
+            LineHeight = GetEditorLineHeight(),
+            LineStackingStrategy = GetEditorLineStackingStrategy()
         };
         AddEditorBlocks(flowDocument.Blocks, document.Paragraphs, allowTables: true);
         Editor.Document = flowDocument;
@@ -807,6 +819,14 @@ public partial class NoteWindow : Window
 
         _updatingEditor = false;
     }
+
+    private double GetEditorLineHeight() => _appearanceSettings.LineSpacing == 2
+        ? double.NaN
+        : Editor.FontSize * (Editor.FontFamily.LineSpacing + (_appearanceSettings.LineSpacing - 2) / 4);
+
+    private LineStackingStrategy GetEditorLineStackingStrategy() => _appearanceSettings.LineSpacing < 2
+        ? LineStackingStrategy.BlockLineHeight
+        : LineStackingStrategy.MaxHeight;
 
     private void AddEditorBlocks(BlockCollection blocks, IReadOnlyList<NoteParagraph> paragraphs, bool allowTables = false)
     {
@@ -941,7 +961,7 @@ public partial class NoteWindow : Window
 
     private Paragraph CreateEditorParagraph(NoteParagraph noteParagraph, int number = 1)
     {
-        var paragraph = new Paragraph { Margin = new Thickness(0, 0, 0, 8) };
+        var paragraph = new Paragraph { Margin = new Thickness(0, 0, 0, 4 * _appearanceSettings.LineSpacing) };
         if (noteParagraph.Kind == NoteBlockKind.Code)
         {
             paragraph.Tag = NoteBlockKind.Code;
@@ -1044,7 +1064,7 @@ public partial class NoteWindow : Window
             number.Width = Math.Max(markerWidth, widest.Width + 6);
             var bearing = label.BuildGeometry(new System.Windows.Point()).Bounds.Left;
             number.Margin = new Thickness(-bearing, 0, bearing, 0);
-            paragraph.Margin = new Thickness(number.Width - markerWidth, 0, 0, 8);
+            paragraph.Margin = new Thickness(number.Width - markerWidth, 0, 0, 4 * _appearanceSettings.LineSpacing);
             paragraph.TextIndent = -number.Width;
         }
 
@@ -1341,6 +1361,8 @@ public partial class NoteWindow : Window
 
     private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 
+    private void OnNewNoteClick(object sender, RoutedEventArgs e) => _createNote();
+
     private void OnHeaderMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (e.ClickCount == 1)
@@ -1354,8 +1376,6 @@ public partial class NoteWindow : Window
     {
         var menu = new System.Windows.Controls.ContextMenu();
         NotesAppearance.Apply(menu, _appearanceSettings.Theme, _uiStyle);
-        var newNote = new System.Windows.Controls.MenuItem { Header = "_New note" };
-        newNote.Click += (_, _) => _createNote();
         var noteColors = new System.Windows.Controls.MenuItem { Header = "Note _color" };
         foreach (var color in NoteColorPalette.Colors)
         {
@@ -1374,7 +1394,6 @@ public partial class NoteWindow : Window
         deleteNote.Click += (_, _) => OnDeleteNoteClick();
         var notesSettings = new System.Windows.Controls.MenuItem { Header = "Notes _settings" };
         notesSettings.Click += (_, _) => _showNotesSettings();
-        menu.Items.Add(newNote);
         menu.Items.Add(noteColors);
         menu.Items.Add(notesList);
         menu.Items.Add(deleteNote);

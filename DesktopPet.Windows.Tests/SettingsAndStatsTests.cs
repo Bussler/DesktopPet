@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Text.Json.Nodes;
@@ -460,9 +461,16 @@ public sealed class SettingsAndStatsTests
     {
         using var fixture = new Fixture("light");
         fixture.Store.LoadOrCreate();
-        var settings = (NotesSettingsWindow)Activator.CreateInstance(typeof(NotesSettingsWindow), BindingFlags.Instance | BindingFlags.NonPublic,
-            null, [fixture.Controller, (Action)(() => throw new InvalidOperationException("simulated appearance failure")),
-                UiStyleCatalog.StickyNotes, fixture.Controller.Current.Notes], null)!;
+        var original = fixture.Controller.Current.Notes;
+        NotesSettingsWindow? settings = null;
+        settings = fixture.Settings(candidate =>
+        {
+            if (fixture.Controller.Current.Notes != original)
+            {
+                settings!.ApplyEffectiveSettings(original);
+                throw new InvalidOperationException("simulated appearance failure");
+            }
+        });
         try
         {
             ((ComboBox)settings.FindName("ThemeComboBox")).SelectedItem = NoteTheme.Dark;
@@ -592,7 +600,7 @@ public sealed class SettingsAndStatsTests
             new NotesConfiguration { Theme = theme }, style);
         var hoodSettings = fixture.HoodSettings(pet, style);
         var notesSettings = (NotesSettingsWindow)Activator.CreateInstance(typeof(NotesSettingsWindow),
-            BindingFlags.Instance | BindingFlags.NonPublic, null, [fixture.Controller, (Action)(() => { }), style], null)!;
+            BindingFlags.Instance | BindingFlags.NonPublic, null, [fixture.Controller, (Action<NotesConfiguration>)(_ => { }), style], null)!;
         var notesList = new NotesListWindow(
             _ => Array.Empty<NoteListItem>(), _ => Array.Empty<TrashedNoteListItem>(), _ => { }, () => { },
             _ => null, _ => null, () => null, theme, uiStyle: style);
@@ -778,15 +786,19 @@ public sealed class SettingsAndStatsTests
     }
 
     [TestMethod]
-    public void TextSizeSaveFailureRestoresThePreviousFieldAndSlider()
+    public void TextSizeAndLineSpacingSaveFailureRestoresThePreviousFieldsAndSliders()
     {
         using var fixture = new Fixture("dark");
         fixture.Store.Save(fixture.Controller.Current);
-        var window = fixture.Settings();
+        var effective = fixture.Controller.Current.Notes;
+        var window = fixture.Settings(settings => effective = settings);
         try
         {
             var input = (TextBox)window.FindName("TextSizeInput");
             input.Text = "24";
+            ((TextBox)window.FindName("LineSpacingInput")).Text = "1";
+            Assert.AreEqual(24, effective.TextSize);
+            Assert.AreEqual(1.0, effective.LineSpacing);
             using (new FileStream(fixture.ConfigPath, FileMode.Open, FileAccess.Read, FileShare.Read))
                 typeof(NotesSettingsWindow).GetMethod("OnSaveClick", BindingFlags.Instance | BindingFlags.NonPublic)!
                     .Invoke(window, [window, new RoutedEventArgs(Button.ClickEvent)]);
@@ -794,6 +806,10 @@ public sealed class SettingsAndStatsTests
             Assert.AreEqual(16, fixture.Store.LoadOrCreate().Notes.TextSize);
             Assert.AreEqual("16", input.Text);
             Assert.AreEqual(16.0, ((Slider)window.FindName("TextSizeSlider")).Value);
+            Assert.AreEqual(2.0, fixture.Controller.Current.Notes.LineSpacing);
+            Assert.AreEqual("2", ((TextBox)window.FindName("LineSpacingInput")).Text);
+            Assert.AreEqual(2.0, ((Slider)window.FindName("LineSpacingSlider")).Value);
+            Assert.AreEqual(fixture.Controller.Current.Notes, effective, "Failed saving must roll back the live preview.");
             Assert.AreEqual(Visibility.Visible, ((TextBlock)window.FindName("ErrorMessage")).Visibility);
         }
         finally { window.Close(); }
@@ -814,6 +830,71 @@ public sealed class SettingsAndStatsTests
             Assert.AreEqual(24.0, slider.Value);
             slider.Value = 20;
             Assert.AreEqual("20", input.Text);
+        }
+        finally { window.Close(); }
+    }
+
+    [TestMethod]
+    [DataRow("en-US", "1", true)]
+    [DataRow("en-US", "1.25", true)]
+    [DataRow("de-DE", "1,25", true)]
+    [DataRow("en-US", "3", true)]
+    [DataRow("en-US", "0.9", false)]
+    [DataRow("en-US", "3.1", false)]
+    [DataRow("en-US", "NaN", false)]
+    [DataRow("en-US", "Infinity", false)]
+    [DataRow("en-US", "abc", false)]
+    [DataRow("en-US", "", false)]
+    public void TypedLineSpacingSavesValidLocalizedValues(string culture, string text, bool valid)
+    {
+        var previousCulture = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo(culture);
+        using var fixture = new Fixture("dark");
+        var window = fixture.Settings();
+        try
+        {
+            var input = (TextBox)window.FindName("LineSpacingInput");
+            input.Text = text;
+            typeof(NotesSettingsWindow).GetMethod("OnSaveClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(window, [window, new RoutedEventArgs(Button.ClickEvent)]);
+            if (valid)
+            {
+                var expected = double.Parse(text, CultureInfo.CurrentCulture);
+                Assert.AreEqual(expected, fixture.Controller.Current.Notes.LineSpacing);
+                Assert.AreEqual(expected, fixture.Store.LoadOrCreate().Notes.LineSpacing);
+                var reopened = fixture.Settings();
+                try { Assert.AreEqual(expected, ((Slider)reopened.FindName("LineSpacingSlider")).Value); }
+                finally { reopened.Close(); }
+            }
+            else
+            {
+                Assert.AreEqual(2.0, fixture.Controller.Current.Notes.LineSpacing);
+                Assert.IsFalse(File.Exists(fixture.ConfigPath), "Invalid input must not be saved.");
+                Assert.AreEqual(Visibility.Visible, ((TextBlock)window.FindName("ErrorMessage")).Visibility);
+                Assert.AreEqual(text, input.Text);
+            }
+        }
+        finally { window.Close(); CultureInfo.CurrentCulture = previousCulture; }
+    }
+
+    [TestMethod]
+    public void LineSpacingSliderAndFieldStayInSyncAndCancelKeepsSavedValue()
+    {
+        using var fixture = new Fixture("dark");
+        var window = fixture.Settings();
+        try
+        {
+            var input = (TextBox)window.FindName("LineSpacingInput");
+            var slider = (Slider)window.FindName("LineSpacingSlider");
+            Assert.AreEqual("2", input.Text);
+            input.Text = 1.25.ToString(CultureInfo.CurrentCulture);
+            Assert.AreEqual(1.25, slider.Value);
+            slider.Value = 2.5;
+            Assert.AreEqual(2.5.ToString(CultureInfo.CurrentCulture), input.Text);
+            typeof(NotesSettingsWindow).GetMethod("OnCancelClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(window, [window, new RoutedEventArgs(Button.ClickEvent)]);
+            Assert.AreEqual(2.0, fixture.Controller.Current.Notes.LineSpacing);
+            Assert.IsFalse(File.Exists(fixture.ConfigPath));
         }
         finally { window.Close(); }
     }
@@ -1188,6 +1269,199 @@ public sealed class SettingsAndStatsTests
         }
     }
 
+    [TestMethod]
+    [DataRow("cancel")]
+    [DataRow("close")]
+    [DataRow("save")]
+    public void NotesSettingsPreviewsEveryChoiceAcrossOpenSurfacesAndRestoresOrSaves(string action)
+    {
+        using var fixture = new Fixture("light");
+        fixture.Store.Save(fixture.Controller.Current);
+        var original = fixture.Controller.Current.Notes;
+        var configBaseline = File.ReadAllText(fixture.ConfigPath);
+        var notesPath = fixture.ConfigPath + ".notes.json";
+        var notes = NotesApplication.Start(new JsonNotesStore(notesPath));
+        var noteData = notes.GetNote(notes.CreateNote());
+        var notesBaseline = File.ReadAllText(notesPath);
+        var savedEdits = 0;
+        var note = new NoteWindow(noteData, (_, _) => { savedEdits++; return null; }, (_, _) => null, (_, _) => null,
+            (_, _) => (null, null), _ => (true, null), () => { }, () => { }, () => { },
+            (_, _) => null, _ => null, () => null, original);
+        var notesList = new NotesListWindow(_ => [], _ => [], _ => { }, () => { }, _ => null, _ => null, () => null, "light");
+        var pet = fixture.Pet();
+        using var tray = new Forms.ContextMenuStrip();
+        tray.Items.Add("Settings");
+        using var icon = new Forms.NotifyIcon { ContextMenuStrip = tray };
+        var app = System.Windows.Application.Current as App ?? new App { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        var fields = new[] { "_session", "_notes", "_petWindow", "_notesSettingsWindow", "_notesListWindow", "_trayIcon", "_effectiveNotesSettings", "_effectiveUiStyle" }
+            .Select(name => typeof(App).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!).ToArray();
+        var previousValues = fields.Select(field => field.GetValue(app)).ToArray();
+        var apply = typeof(App).GetMethod("ApplyNotesSettings", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var settings = fixture.Settings(candidate => apply.Invoke(app, [candidate]));
+        var windows = (Dictionary<Guid, NoteWindow>)typeof(App).GetField("_noteWindows", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(app)!;
+        object[] values = [fixture.Session, notes, pet, settings, notesList, icon, original, UiStyleCatalog.StickyNotes];
+        for (var index = 0; index < fields.Length; index++) fields[index].SetValue(app, values[index]);
+        windows.Add(noteData.Id, note);
+        try
+        {
+            var editor = (RichTextBox)note.FindName("Editor");
+            var document = editor.Document;
+            ((ComboBox)settings.FindName("DefaultColorComboBox")).SelectedItem = NoteColor.Blue;
+            Assert.AreEqual("blue", Effective().DefaultColor);
+            ((ComboBox)settings.FindName("ThemeComboBox")).SelectedItem = NoteTheme.Dark;
+            foreach (var surface in new FrameworkElement[] { settings, notesList, note, pet.ContextMenu! })
+                Assert.AreEqual("#FF202020", ((SolidColorBrush)surface.Resources["NotesSurfaceBrush"]).Color.ToString());
+            var darkTray = tray.BackColor;
+            ((TextBox)settings.FindName("TextSizeInput")).Text = "24";
+            Assert.AreEqual(24.0, document.FontSize);
+            ((Slider)settings.FindName("LineSpacingSlider")).Value = 1;
+            Assert.AreEqual(LineStackingStrategy.BlockLineHeight, document.LineStackingStrategy);
+            ((CheckBox)settings.FindName("AlwaysOnTopCheckBox")).IsChecked = true;
+            Assert.IsTrue(note.Topmost);
+            ((CheckBox)settings.FindName("AnimateShowHideCheckBox")).IsChecked = false;
+            Assert.IsFalse(Effective().AnimateShowHide);
+            Assert.AreEqual(original, fixture.Controller.Current.Notes);
+            Assert.AreEqual(configBaseline, File.ReadAllText(fixture.ConfigPath));
+            Assert.AreEqual(notesBaseline, File.ReadAllText(notesPath));
+            Assert.AreSame(document, editor.Document);
+            Assert.AreEqual(0, savedEdits, "Preview must not create document edits.");
+            StringAssert.Contains(((TextBlock)settings.FindName("AppearanceNoticeText")).Text, "Previewing unsaved");
+
+            typeof(App).GetMethod("ApplyUiStyle", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(app, [UiStyleCatalog.Soft]);
+            var preview = Effective();
+            if (action == "close") settings.Close();
+            else typeof(NotesSettingsWindow).GetMethod(action == "save" ? "OnSaveClick" : "OnCancelClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(settings, [settings, new RoutedEventArgs(Button.ClickEvent)]);
+            var expected = action == "save" ? preview : original;
+            Assert.AreEqual(expected, Effective());
+            Assert.AreEqual(expected, fixture.Store.LoadOrCreate().Notes);
+            Assert.AreEqual(expected.TextSize, document.FontSize);
+            Assert.AreEqual(expected.AlwaysOnTop, note.Topmost);
+            Assert.AreEqual(UiStyleCatalog.Soft, fields.Last().GetValue(app), "Notes rollback must keep the active Hood style.");
+            if (action != "save")
+            {
+                Assert.IsTrue(double.IsNaN(document.LineHeight));
+                Assert.AreEqual(LineStackingStrategy.MaxHeight, document.LineStackingStrategy);
+                Assert.AreNotEqual(darkTray, tray.BackColor);
+                Assert.AreEqual(configBaseline, File.ReadAllText(fixture.ConfigPath));
+            }
+            Assert.AreEqual(notesBaseline, File.ReadAllText(notesPath));
+            Assert.AreEqual(action == "save" ? NoteColor.Blue : NoteColor.Yellow, notes.GetNote(notes.CreateNote()).Color);
+            Assert.AreEqual(noteData.Color, notes.GetNote(noteData.Id).Color);
+
+            NotesConfiguration Effective() => (NotesConfiguration)fields[^2].GetValue(app)!;
+        }
+        finally
+        {
+            settings.Close();
+            windows.Remove(noteData.Id);
+            for (var index = 0; index < fields.Length; index++) fields[index].SetValue(app, previousValues[index]);
+            notesList.Close(); note.CloseWithoutMembershipChange(); pet.Close();
+            File.Delete(notesPath);
+        }
+    }
+
+    [TestMethod]
+    [DataRow("theme")]
+    [DataRow("text-size")]
+    [DataRow("line-spacing")]
+    public void FailedNotesPreviewRestoresControlsAndPreservesConfiguration(string field)
+    {
+        using var fixture = new Fixture("light");
+        fixture.Store.LoadOrCreate();
+        var baseline = File.ReadAllText(fixture.ConfigPath);
+        var settings = fixture.Settings(_ => throw new InvalidOperationException("simulated preview failure"));
+        try
+        {
+            if (field == "theme") ((ComboBox)settings.FindName("ThemeComboBox")).SelectedItem = NoteTheme.Dark;
+            else ((TextBox)settings.FindName(field == "text-size" ? "TextSizeInput" : "LineSpacingInput")).Text = field == "text-size" ? "024" : 1.0.ToString("0.00", CultureInfo.CurrentCulture);
+            Assert.AreEqual(NoteTheme.Light, ((ComboBox)settings.FindName("ThemeComboBox")).SelectedItem);
+            Assert.AreEqual("16", ((TextBox)settings.FindName("TextSizeInput")).Text);
+            Assert.AreEqual("2", ((TextBox)settings.FindName("LineSpacingInput")).Text);
+            Assert.AreEqual(baseline, File.ReadAllText(fixture.ConfigPath));
+            var error = (TextBlock)settings.FindName("ErrorMessage");
+            Assert.AreEqual(Visibility.Visible, error.Visibility);
+            StringAssert.Contains(error.Text, "Could not preview");
+        }
+        finally { settings.Close(); }
+    }
+
+    [TestMethod]
+    public void InvalidNumericInputKeepsTheLastValidNotesPreviewUntilClose()
+    {
+        using var fixture = new Fixture("light");
+        var effective = fixture.Controller.Current.Notes;
+        var settings = fixture.Settings(candidate => effective = candidate);
+        try
+        {
+            var input = (TextBox)settings.FindName("TextSizeInput");
+            input.Text = "24";
+            Assert.AreEqual(24, effective.TextSize);
+            input.Text = "invalid";
+            typeof(NotesSettingsWindow).GetMethod("OnSaveClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(settings, [settings, new RoutedEventArgs(Button.ClickEvent)]);
+            Assert.AreEqual(24, effective.TextSize);
+            Assert.AreEqual(16, fixture.Controller.Current.Notes.TextSize);
+            Assert.IsFalse(File.Exists(fixture.ConfigPath));
+            settings.Close();
+            Assert.AreEqual(fixture.Controller.Current.Notes, effective);
+        }
+        finally { settings.Close(); }
+    }
+
+    [TestMethod]
+    public void FailedNotesPreviewRestoreKeepsWindowOpenForRetry()
+    {
+        using var fixture = new Fixture("light");
+        var original = fixture.Controller.Current.Notes;
+        var effective = original;
+        var failRestore = false;
+        var closed = false;
+        var settings = fixture.Settings(candidate =>
+        {
+            if (failRestore && candidate == original) throw new InvalidOperationException("simulated restore failure");
+            effective = candidate;
+        });
+        settings.Closed += (_, _) => closed = true;
+        try
+        {
+            ((Slider)settings.FindName("TextSizeSlider")).Value = 24;
+            failRestore = true;
+            settings.Close();
+            Assert.IsFalse(closed, "A failed restore must keep the window available to retry.");
+            Assert.AreEqual(24, effective.TextSize);
+            StringAssert.Contains(((TextBlock)settings.FindName("ErrorMessage")).Text, "Could not restore");
+            failRestore = false;
+            settings.Close();
+            Assert.IsTrue(closed);
+            Assert.AreEqual(original, effective);
+            Assert.IsFalse(File.Exists(fixture.ConfigPath));
+        }
+        finally { failRestore = false; settings.Close(); }
+    }
+
+    [TestMethod]
+    public void NotesCancelRestoresTheEffectiveSettingsCapturedWhenOpened()
+    {
+        using var fixture = new Fixture("light");
+        var saved = fixture.Controller.Current.Notes;
+        var original = saved with { TextSize = 20, LineSpacing = 1, Theme = "dark" };
+        var effective = original;
+        var settings = (NotesSettingsWindow)Activator.CreateInstance(typeof(NotesSettingsWindow), BindingFlags.Instance | BindingFlags.NonPublic,
+            null, [fixture.Controller, (Action<NotesConfiguration>)(candidate => effective = candidate), UiStyleCatalog.StickyNotes, original], null)!;
+        try
+        {
+            Assert.AreEqual(original, effective, "Opening settings must not apply the saved fields before editing.");
+            ((Slider)settings.FindName("TextSizeSlider")).Value = 24;
+            Assert.AreEqual(24, effective.TextSize);
+            settings.Close();
+            Assert.AreEqual(original, effective, "Cancel must restore the actual starting appearance, including an unapplied saved setting.");
+            Assert.AreEqual(saved, fixture.Controller.Current.Notes);
+            Assert.IsFalse(File.Exists(fixture.ConfigPath));
+        }
+        finally { settings.Close(); }
+    }
+
     private static void ShowHidden(Window window)
     {
         window.Opacity = 0;
@@ -1233,8 +1507,8 @@ public sealed class SettingsAndStatsTests
             Controller = new HoodConfigurationController(Session, Store);
         }
 
-        public NotesSettingsWindow Settings() => (NotesSettingsWindow)Activator.CreateInstance(typeof(NotesSettingsWindow),
-            BindingFlags.Instance | BindingFlags.NonPublic, null, [Controller, (Action)(() => { })], null)!;
+        public NotesSettingsWindow Settings(Action<NotesConfiguration>? preview = null) => (NotesSettingsWindow)Activator.CreateInstance(typeof(NotesSettingsWindow),
+            BindingFlags.Instance | BindingFlags.NonPublic, null, [Controller, preview ?? (_ => { })], null)!;
 
         public SettingsWindow HoodSettings(HoodOverlayWindow pet, string effectiveStyle) =>
             (SettingsWindow)Activator.CreateInstance(typeof(SettingsWindow), BindingFlags.Instance | BindingFlags.NonPublic,

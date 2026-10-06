@@ -105,6 +105,7 @@ public sealed record NotesConfiguration
 {
     public string DefaultColor { get; init; } = "yellow";
     public int TextSize { get; init; } = 16;
+    public double LineSpacing { get; init; } = 2;
     public string Theme { get; init; } = "system";
     public bool AlwaysOnTop { get; init; }
     public bool AnimateShowHide { get; init; } = true;
@@ -243,6 +244,11 @@ public static class HoodConfigurationValidator
         if (configuration.Notes.TextSize is < 12 or > 32)
         {
             throw new HoodConfigurationException("notes.text_size", "Note text size must be a whole number from 12 through 32 points.");
+        }
+
+        if (!double.IsFinite(configuration.Notes.LineSpacing) || configuration.Notes.LineSpacing is < 1 or > 3)
+        {
+            throw new HoodConfigurationException("notes.line_spacing", "Note line spacing must be a finite number from 1 through 3.");
         }
 
         if (!Enum.TryParse<NoteTheme>(configuration.Notes.Theme, ignoreCase: true, out var noteTheme) || !Enum.IsDefined(noteTheme))

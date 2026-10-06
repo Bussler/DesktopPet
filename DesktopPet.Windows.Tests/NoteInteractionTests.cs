@@ -17,6 +17,142 @@ namespace DesktopPet.Windows.Tests;
 public sealed class NoteInteractionTests
 {
     [TestMethod]
+    public void NewNoteButtonIsInTheHeaderAndInvokesCreation()
+    {
+        var created = 0;
+        var window = new NoteWindow(new HoodNote(), (_, _) => null, (_, _) => null, (_, _) => null,
+            (_, _) => (null, null), _ => (true, null), () => created++, () => { }, () => { },
+            (_, _) => null, _ => null, () => null, new NotesConfiguration());
+        try
+        {
+            var button = (Button)window.FindName("NewNoteButton");
+            Assert.AreEqual(window.FindName("NoteHeader"), ((DockPanel)button.Parent).Parent);
+            Assert.AreEqual("New note", System.Windows.Automation.AutomationProperties.GetName(button));
+            button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.AreEqual(1, created);
+            var menu = ((Button)window.FindName("MenuButton")).ContextMenu!;
+            CollectionAssert.AreEqual(new[] { "Note _color", "_Notes list", "_Delete note", "Notes _settings" },
+                menu.Items.OfType<MenuItem>().Select(item => (string)item.Header).ToArray());
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    [DataRow(NoteBlockKind.Paragraph, false)]
+    [DataRow(NoteBlockKind.Bulleted, false)]
+    [DataRow(NoteBlockKind.Numbered, false)]
+    [DataRow(NoteBlockKind.Checklist, false)]
+    [DataRow(NoteBlockKind.Code, false)]
+    [DataRow(NoteBlockKind.Paragraph, true)]
+    public void LineSpacingChangesRenderedLinesWithoutEditingContent(NoteBlockKind kind, bool tableCell)
+    {
+        var saved = 0;
+        var document = new NotesDocument
+        {
+            Paragraphs = [new() { Kind = kind, Runs = [new NoteTextRun(string.Concat(Enumerable.Repeat("word ", 100)))],
+                Cell = tableCell ? new NoteTableCell(Guid.NewGuid(), 0, 0) : null }]
+        };
+        var window = CreateChecklistWindow(_ => saved++, document: document);
+        try
+        {
+            ShowHidden(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            var flow = editor.Document;
+            var start = FirstParagraph().ContentStart.GetInsertionPosition(LogicalDirection.Forward);
+            editor.Selection.Select(start, start.GetPositionAtOffset(4)!);
+            var selection = editor.Selection.Text;
+            var normalSpacing = MeasureSpacing();
+            Assert.IsTrue(double.IsNaN(flow.LineHeight), "The default must retain automatic font spacing.");
+            window.ApplyAppearance(new NotesConfiguration { Theme = "dark", LineSpacing = 1 }, NoteColor.Yellow);
+            Assert.IsTrue(MeasureSpacing() < normalSpacing, "Values below 2 must bring rendered lines closer together.");
+            Assert.AreEqual(LineStackingStrategy.BlockLineHeight, flow.LineStackingStrategy);
+            Assert.AreEqual(4.0, FirstParagraph().Margin.Bottom);
+            window.ApplyAppearance(new NotesConfiguration { Theme = "dark", LineSpacing = 3 }, NoteColor.Yellow);
+            Assert.IsTrue(MeasureSpacing() > normalSpacing, "Values above 2 must move rendered lines farther apart.");
+            window.ApplyAppearance(new NotesConfiguration { Theme = "dark", LineSpacing = 1, TextSize = 24 }, NoteColor.Yellow);
+            Assert.AreEqual((editor.FontFamily.LineSpacing - 0.25) * 24, flow.LineHeight, 0.001);
+            Assert.AreSame(flow, editor.Document);
+            Assert.AreEqual(selection, editor.Selection.Text);
+            typeof(NoteWindow).GetMethod("SetEditorDocument", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(window, [document, 0, 4]);
+            Assert.AreEqual(flow.LineHeight, editor.Document.LineHeight, "Document rebuilds must keep the chosen spacing.");
+            Assert.AreEqual(flow.LineStackingStrategy, editor.Document.LineStackingStrategy);
+            Assert.AreEqual(4.0, FirstParagraph().Margin.Bottom);
+            window.ApplyAppearance(new NotesConfiguration { Theme = "dark" }, NoteColor.Yellow);
+            Assert.AreEqual(normalSpacing, MeasureSpacing(), 0.1);
+            Assert.AreEqual(LineStackingStrategy.MaxHeight, editor.Document.LineStackingStrategy);
+            Assert.AreEqual(8.0, FirstParagraph().Margin.Bottom);
+            Assert.AreEqual(0, saved, "Appearance changes must not save content edits.");
+
+            double MeasureSpacing()
+            {
+                editor.UpdateLayout();
+                var position = FirstParagraph().ContentStart.GetInsertionPosition(LogicalDirection.Forward);
+                var nextLine = position.GetLineStartPosition(1);
+                Assert.IsNotNull(nextLine, "The sample must wrap into multiple lines.");
+                return nextLine.GetCharacterRect(LogicalDirection.Forward).Top - position.GetCharacterRect(LogicalDirection.Forward).Top;
+            }
+
+            Paragraph FirstParagraph() => editor.Document.Blocks.FirstBlock switch
+            {
+                Paragraph paragraph => paragraph,
+                System.Windows.Documents.List list => (Paragraph)list.ListItems.FirstListItem.Blocks.FirstBlock,
+                Table table => (Paragraph)table.RowGroups[0].Rows[0].Cells[0].Blocks.FirstBlock,
+                _ => throw new InvalidOperationException("Expected text in the sample document.")
+            };
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    [DataRow(12)]
+    [DataRow(16)]
+    [DataRow(32)]
+    public void CompactSpacingAlsoBringsSeparateParagraphsCloserTogether(int size)
+    {
+        var window = CreateChecklistWindow(_ => { }, document: NotesDocument.FromText("First\r\nSecond"));
+        try
+        {
+            window.ApplyAppearance(new NotesConfiguration { TextSize = size }, NoteColor.Yellow);
+            ShowHidden(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            var normal = MeasureParagraphDistance();
+            window.ApplyAppearance(new NotesConfiguration { TextSize = size, LineSpacing = 1 }, NoteColor.Yellow);
+            Assert.IsTrue(MeasureParagraphDistance() < normal - 4, "Compact spacing must reduce both line height and paragraph spacing.");
+
+            double MeasureParagraphDistance()
+            {
+                editor.UpdateLayout();
+                var paragraphs = editor.Document.Blocks.OfType<Paragraph>().ToArray();
+                return paragraphs[1].ContentStart.GetCharacterRect(LogicalDirection.Forward).Top
+                    - paragraphs[0].ContentStart.GetCharacterRect(LogicalDirection.Forward).Top;
+            }
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    public void CompactSpacingPreservesWideNumberedMarkerIndentation()
+    {
+        var text = string.Join("\r\n", Enumerable.Repeat("Numbered item", 20));
+        var window = CreateChecklistWindow(_ => { }, document: NotesDocument.FromText(text).SetListKind(0, text.Length, NoteBlockKind.Numbered));
+        try
+        {
+            window.ApplyAppearance(new NotesConfiguration { TextSize = 32 }, NoteColor.Yellow);
+            var editor = (RichTextBox)window.FindName("Editor");
+            var paragraph = (Paragraph)((System.Windows.Documents.List)editor.Document.Blocks.FirstBlock).ListItems.FirstListItem.Blocks.FirstBlock;
+            var leftMargin = paragraph.Margin.Left;
+            var indent = paragraph.TextIndent;
+            Assert.IsTrue(leftMargin > 0, "The sample needs enough space for a two-digit marker.");
+            window.ApplyAppearance(new NotesConfiguration { TextSize = 32, LineSpacing = 1 }, NoteColor.Yellow);
+            Assert.AreEqual(leftMargin, paragraph.Margin.Left);
+            Assert.AreEqual(indent, paragraph.TextIndent);
+            Assert.AreEqual(4.0, paragraph.Margin.Bottom);
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
     [DataRow("dark", NoteColor.Pink)]
     [DataRow("light", NoteColor.Yellow)]
     public void EditorKeepsNoteColorWhenFocusedAndUsingMenus(string theme, NoteColor color)

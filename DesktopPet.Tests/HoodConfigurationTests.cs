@@ -38,6 +38,7 @@ public sealed class HoodConfigurationTests
         StringAssert.Contains(yaml, "maximum_minutes: 5");
         StringAssert.Contains(yaml, "default_color: yellow");
         StringAssert.Contains(yaml, "text_size: 16");
+        StringAssert.Contains(yaml, "line_spacing: 2");
         StringAssert.Contains(yaml, "theme: system");
         StringAssert.Contains(yaml, "always_on_top: false");
         StringAssert.Contains(yaml, "animate_show_hide: true");
@@ -69,6 +70,22 @@ public sealed class HoodConfigurationTests
         Assert.AreEqual(new NotesConfiguration(), configuration.Notes);
         Assert.AreEqual(37.25, configuration.Needs.HungerPointsPerHour);
         Assert.IsFalse(configuration.Behavior.AlwaysOnTop);
+    }
+
+    [TestMethod]
+    [DataRow(1.0)]
+    [DataRow(1.25)]
+    [DataRow(3.0)]
+    public void LineSpacingDefaultsForOlderFilesAndRoundTrips(double spacing)
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new YamlConfigurationStore(Path.Combine(directory.Path, "config.yaml"));
+        store.LoadOrCreate();
+        File.WriteAllText(store.Path, Regex.Replace(File.ReadAllText(store.Path), @"(?m)^  line_spacing:.*\r?\n", string.Empty));
+        var legacy = store.LoadOrCreate();
+        Assert.AreEqual(2.0, legacy.Notes.LineSpacing);
+        store.Save(legacy with { Notes = legacy.Notes with { LineSpacing = spacing } });
+        Assert.AreEqual(spacing, store.LoadOrCreate().Notes.LineSpacing);
     }
 
     [TestMethod]
@@ -142,6 +159,7 @@ public sealed class HoodConfigurationTests
             {
                 DefaultColor = "blue",
                 TextSize = 24,
+                LineSpacing = 1.75,
                 Theme = "dark",
                 AlwaysOnTop = true,
                 AnimateShowHide = false
@@ -213,6 +231,11 @@ public sealed class HoodConfigurationTests
             (defaults with { Notes = defaults.Notes with { DefaultColor = "orange" } }, "notes.default_color"),
             (defaults with { Notes = defaults.Notes with { TextSize = 11 } }, "notes.text_size"),
             (defaults with { Notes = defaults.Notes with { TextSize = 33 } }, "notes.text_size"),
+            (defaults with { Notes = defaults.Notes with { LineSpacing = 0.99 } }, "notes.line_spacing"),
+            (defaults with { Notes = defaults.Notes with { LineSpacing = 3.01 } }, "notes.line_spacing"),
+            (defaults with { Notes = defaults.Notes with { LineSpacing = double.NaN } }, "notes.line_spacing"),
+            (defaults with { Notes = defaults.Notes with { LineSpacing = double.PositiveInfinity } }, "notes.line_spacing"),
+            (defaults with { Notes = defaults.Notes with { LineSpacing = double.NegativeInfinity } }, "notes.line_spacing"),
             (defaults with { Notes = defaults.Notes with { Theme = "sepia" } }, "notes.theme")
         };
 

@@ -413,7 +413,7 @@ public partial class App : System.Windows.Application
             "config.yaml"));
         _notesSettingsWindow = new NotesSettingsWindow(
             new HoodConfigurationController(_session, store, _startupRegistration),
-            ApplySavedNotesAppearance,
+            ApplyNotesSettings,
             _effectiveUiStyle,
             _effectiveNotesSettings);
         _notesSettingsWindow.Closed += (_, _) => _notesSettingsWindow = null;
@@ -444,15 +444,15 @@ public partial class App : System.Windows.Application
         }
     }
 
-    private void ApplySavedNotesAppearance()
+    private void ApplyNotesSettings(NotesConfiguration settings)
     {
-        if (_session is null || _effectiveNotesSettings == _session.Configuration.Notes)
+        if (_session is null || _effectiveNotesSettings == settings)
         {
             return;
         }
 
         var previousSettings = _effectiveNotesSettings;
-        _effectiveNotesSettings = _session.Configuration.Notes;
+        _effectiveNotesSettings = settings;
         try
         {
             ApplyNotesAppearance();
@@ -467,13 +467,13 @@ public partial class App : System.Windows.Application
             catch (Exception restoreError) when (restoreError is not OutOfMemoryException)
             {
                 throw new AggregateException(
-                    "The Notes settings were saved, but Hood could not refresh the appearance or restore the previous one. Restart Hood to apply the saved settings.",
+                    "Hood could not apply the Notes settings or restore the previous appearance.",
                     applyError,
                     restoreError);
             }
 
             throw new InvalidOperationException(
-                "The Notes settings were saved, but Hood could not apply them. The previous appearance was restored; restart Hood to apply the saved settings.",
+                "Hood could not apply the Notes settings. The previous appearance was restored.",
                 applyError);
         }
     }
