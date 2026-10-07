@@ -73,7 +73,7 @@ public sealed class HoodSessionTests
     }
 
     [TestMethod]
-    public void Advance_RoamingStartsHalfAsOftenWithEightSecondBouts()
+    public void Advance_ContentPetStillRoamsWithEightSecondBouts()
     {
         var defaults = DesktopPet.Core.HoodConfiguration.Defaults;
         var configuration = defaults with
@@ -84,7 +84,7 @@ public sealed class HoodSessionTests
         var session = CreateSession(new SequenceRandomSource(0), new RecordingSessionStore(), configuration);
         var starts = 0;
         var wasMoving = false;
-        for (var second = 0; second < 200; second++)
+        for (var second = 0; second < 800; second++)
         {
             session.Advance(TimeSpan.FromSeconds(1));
             var moving = session.Presentation.Action is DesktopPet.Core.PetAction.RunLeft or DesktopPet.Core.PetAction.RunRight;
@@ -93,15 +93,15 @@ public sealed class HoodSessionTests
                 starts++;
             }
 
-            Assert.AreEqual(second % 40 < 7, moving, "Each eight-second bout must be followed by 32 seconds of rest.");
+            Assert.AreEqual(second % 400 < 7, moving, "At zero boredom, bouts occur at 10% of the old frequency.");
             wasMoving = moving;
         }
 
-        Assert.AreEqual(5, starts, "The previous 20-second cycle started ten bouts in this period.");
+        Assert.AreEqual(2, starts, "A content pet must still roam once per 400 seconds.");
     }
 
     [TestMethod]
-    public void Advance_IdleHoldsTheNeutralPoseBetweenBlinks()
+    public void Advance_IdleRepeatsTwentyPercentMoreOftenWithoutSpeedingTheBlink()
     {
         var defaults = DesktopPet.Core.HoodConfiguration.Defaults;
         var configuration = defaults with
@@ -112,13 +112,50 @@ public sealed class HoodSessionTests
         var idle = ReadDefinition().GetAnimation(DesktopPet.Core.PetAction.Idle);
         var neutral = idle.Frames[session.Presentation.FrameIndex];
 
-        session.Advance(TimeSpan.FromSeconds(9));
-        Assert.AreEqual(neutral, idle.Frames[session.Presentation.FrameIndex]);
-        session.Advance(TimeSpan.FromSeconds(1));
-        Assert.AreNotEqual(neutral, idle.Frames[session.Presentation.FrameIndex]);
-        session.Advance(TimeSpan.FromMilliseconds(880));
-        Assert.AreEqual(neutral, idle.Frames[session.Presentation.FrameIndex]);
-        Assert.AreEqual(DesktopPet.Core.PetAction.Idle, session.Presentation.Action);
+        for (var cycle = 0; cycle < 3; cycle++)
+        {
+            session.Advance(TimeSpan.FromMilliseconds(7760));
+            Assert.AreEqual(neutral, idle.Frames[session.Presentation.FrameIndex]);
+            session.Advance(TimeSpan.FromMilliseconds(80));
+            for (var column = 1; column <= 15; column++)
+            {
+                Assert.AreEqual(new DesktopPet.Core.SpriteFrame(column, 0), idle.Frames[session.Presentation.FrameIndex],
+                    "Each blink pose must retain its original 80ms playback interval.");
+                session.Advance(TimeSpan.FromMilliseconds(80));
+            }
+
+            Assert.AreEqual(neutral, idle.Frames[session.Presentation.FrameIndex]);
+            Assert.AreEqual(DesktopPet.Core.PetAction.Idle, session.Presentation.Action);
+        }
+    }
+
+    [TestMethod]
+    [DataRow(0)]
+    [DataRow(22)]
+    [DataRow(120)]
+    [DataRow(135)]
+    public void Start_PreservesSavedIdleFramesWhileShorteningOnlyTheStillPause(int frame)
+    {
+        var defaults = DesktopPet.Core.HoodConfiguration.Defaults;
+        var configuration = defaults with
+        {
+            Behavior = defaults.Behavior with { Roaming = false, RandomEvents = false }
+        };
+        var store = new RecordingSessionStore();
+        var session = CreateSession(new SequenceRandomSource(0), store, configuration,
+            new DesktopPet.Core.HoodSessionSnapshot
+            {
+                Position = new DesktopPet.Core.PetPosition(864, 816), FrameIndex = frame
+            });
+        Assert.AreEqual(frame, session.Presentation.FrameIndex);
+        session.SaveCurrentState();
+        var resumed = CreateSession(new SequenceRandomSource(0), store, configuration, store.Snapshot);
+        Assert.AreEqual(session.Presentation, resumed.Presentation);
+
+        session.Advance(TimeSpan.FromMilliseconds(80));
+        var idle = ReadDefinition().GetAnimation(DesktopPet.Core.PetAction.Idle);
+        var expected = frame < 120 || frame == 135 ? idle.Frames[0] : idle.Frames[121];
+        Assert.AreEqual(expected, idle.Frames[session.Presentation.FrameIndex]);
     }
 
     [TestMethod]

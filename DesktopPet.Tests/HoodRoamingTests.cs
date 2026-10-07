@@ -77,7 +77,7 @@ public sealed class HoodRoamingTests
     }
 
     [TestMethod]
-    public void Advance_VerticalRoamingKeepsTheEightSecondBoutAndThirtyTwoSecondRest()
+    public void Advance_VerticalRoamingKeepsEightSecondBoutsWithBoredomScaledRest()
     {
         var session = CreateSession(new PetBounds(100, 100, 192, 400), new PetPosition(100, 100));
         session.Advance(TimeSpan.FromSeconds(8));
@@ -85,11 +85,154 @@ public sealed class HoodRoamingTests
         Assert.AreEqual(PetAction.Idle, session.Presentation.Action);
         Assert.AreEqual(16, session.Needs.Boredom, 1e-9);
 
-        session.Advance(TimeSpan.FromSeconds(32));
+        var restSeconds = 40 / (0.1 + 1.1 * 16 / 100) - 8;
+        session.Advance(TimeSpan.FromSeconds(restSeconds));
         Assert.AreEqual(restedPosition, session.Position);
         Assert.AreEqual(16, session.Needs.Boredom, 1e-9);
         session.Advance(TimeSpan.FromSeconds(1));
         Assert.AreNotEqual(restedPosition, session.Position);
+    }
+
+    [TestMethod]
+    [DataRow(0d, 392d)]
+    [DataRow(25d, 98.6666666667d)]
+    [DataRow(50d, 53.5384615385d)]
+    [DataRow(100d, 25.3333333333d)]
+    public void Advance_BoredomScalesBoutFrequencyFromTenToOneHundredTwentyPercent(
+        double boredom, double restSeconds)
+    {
+        var session = CreateSession(new PetBounds(100, 100, 192, 400), new PetPosition(100, 100),
+            boredom: boredom, needs: HoodConfiguration.Defaults.Needs with
+            {
+                HungerPointsPerHour = 0, BoredomPointsPerHour = 0, SleepPointsPerHour = 0,
+                MovementReliefPerSecond = 0
+            });
+
+        session.Advance(TimeSpan.FromSeconds(8));
+        Assert.AreEqual(new PetPosition(100, 244), session.Position);
+        Assert.AreEqual(PetAction.Idle, session.Presentation.Action);
+        var restingPosition = session.Position;
+        session.Advance(TimeSpan.FromSeconds(restSeconds - 0.001));
+        Assert.AreEqual(restingPosition, session.Position);
+        Assert.AreEqual(PetAction.Idle, session.Presentation.Action);
+
+        session.Advance(TimeSpan.FromMilliseconds(2));
+        Assert.AreNotEqual(restingPosition, session.Position);
+        Assert.IsTrue(session.Presentation.Action is PetAction.RunLeft or PetAction.RunRight);
+        Assert.AreEqual(boredom, session.Needs.Boredom);
+    }
+
+    [TestMethod]
+    [DataRow(3600d, 60)]
+    [DataRow(36000d, 36)]
+    public void Advance_RisingBoredomShortensTheCurrentRestIndependentOfTimeChunks(double boredomPerHour, int seconds)
+    {
+        var needs = HoodConfiguration.Defaults.Needs with
+        {
+            HungerPointsPerHour = 0, BoredomPointsPerHour = boredomPerHour,
+            SleepPointsPerHour = 0, MovementReliefPerSecond = 0
+        };
+        var area = new PetBounds(100, 100, 192, 400);
+        var position = new PetPosition(100, 100);
+        var single = CreateSession(area, position, boredom: 0, needs: needs);
+        var sliced = CreateSession(area, position, boredom: 0, needs: needs);
+        single.Advance(TimeSpan.FromSeconds(seconds));
+        for (var step = 0; step < seconds * 10; step++)
+        {
+            sliced.Advance(TimeSpan.FromMilliseconds(100));
+        }
+
+        Assert.IsTrue(single.Presentation.Action is PetAction.RunLeft or PetAction.RunRight,
+            "Increasing boredom must bring the next bout forward during the current rest.");
+        Assert.AreEqual(single.Presentation.Action, sliced.Presentation.Action);
+        Assert.AreEqual(single.Position.Y, sliced.Position.Y, 1e-5);
+        Assert.AreEqual(single.Needs.Boredom, sliced.Needs.Boredom, 1e-5);
+    }
+
+    [TestMethod]
+    [DataRow(16d, 26.557d)]
+    [DataRow(200d, 26.05d)]
+    public void Advance_MovementReliefNearSaturationKeepsTheNextBoutIndependentOfTimeChunks(
+        double boredomPerHour, double restSeconds)
+    {
+        var needs = HoodConfiguration.Defaults.Needs with
+        {
+            HungerPointsPerHour = 0, BoredomPointsPerHour = boredomPerHour, SleepPointsPerHour = 0
+        };
+        var area = new PetBounds(100, 100, 192, 400);
+        var position = new PetPosition(100, 100);
+        var single = CreateSession(area, position, boredom: 100, needs: needs);
+        var sliced = CreateSession(area, position, boredom: 100, needs: needs);
+        single.Advance(TimeSpan.FromSeconds(8));
+        for (var step = 0; step < 80; step++)
+        {
+            sliced.Advance(TimeSpan.FromMilliseconds(100));
+        }
+
+        single.Advance(TimeSpan.FromSeconds(restSeconds));
+        sliced.Advance(TimeSpan.FromSeconds(restSeconds));
+
+        Assert.AreEqual(sliced.Presentation.Action, single.Presentation.Action,
+            "Equivalent elapsed time must start the next roaming bout at the same time.");
+        Assert.IsTrue(single.Presentation.Action is PetAction.RunLeft or PetAction.RunRight);
+        Assert.AreEqual(sliced.Position.Y, single.Position.Y, 1e-5);
+        Assert.AreEqual(sliced.Needs.Boredom, single.Needs.Boredom, 1e-8);
+    }
+
+    [TestMethod]
+    [DataRow(100d, 16d, 96.0355555556d)]
+    [DataRow(99d, 3600d, 100d)]
+    [DataRow(0d, 16d, 0d)]
+    [DataRow(1d, 16d, 0d)]
+    public void Advance_CombinesBoredomGrowthAndActualMovementBeforeClamping(
+        double initialBoredom, double boredomPerHour, double expectedBoredom)
+    {
+        var needs = HoodConfiguration.Defaults.Needs with
+        {
+            HungerPointsPerHour = 0, BoredomPointsPerHour = boredomPerHour, SleepPointsPerHour = 0
+        };
+        var area = new PetBounds(100, 100, 192, 400);
+        var position = new PetPosition(100, 100);
+        var single = CreateSession(area, position, boredom: initialBoredom, needs: needs);
+        var sliced = CreateSession(area, position, boredom: initialBoredom, needs: needs);
+        single.Advance(TimeSpan.FromSeconds(8));
+        for (var step = 0; step < 80; step++)
+        {
+            sliced.Advance(TimeSpan.FromMilliseconds(100));
+        }
+
+        Assert.AreEqual(expectedBoredom, single.Needs.Boredom, 1e-8);
+        Assert.AreEqual(expectedBoredom, sliced.Needs.Boredom, 1e-8);
+        Assert.AreEqual(single.Position.X, sliced.Position.X, 1e-5);
+        Assert.AreEqual(single.Position.Y, sliced.Position.Y, 1e-5);
+        Assert.AreEqual(single.Presentation.Action, sliced.Presentation.Action);
+    }
+
+    [TestMethod]
+    public void Advance_BoredomScaledRestPausesDuringDraggingEditingActionsAndSleep()
+    {
+        var session = CreateSession(new PetBounds(100, 100, 192, 400), new PetPosition(100, 100),
+            boredom: 0);
+        session.Advance(TimeSpan.FromSeconds(8));
+        var position = session.Position;
+        session.BeginDragging();
+        session.Advance(TimeSpan.FromSeconds(400));
+        session.EndDragging();
+        session.BeginAreaEditing();
+        session.Advance(TimeSpan.FromSeconds(400));
+        session.EndAreaEditing();
+        session.React();
+        session.Advance(TimeSpan.FromMilliseconds(1200));
+        session.Sleep();
+        session.Advance(TimeSpan.FromSeconds(1));
+        session.React();
+        session.Advance(TimeSpan.FromMilliseconds(900));
+
+        session.Advance(TimeSpan.FromSeconds(392));
+        Assert.AreEqual(position, session.Position);
+        Assert.AreEqual(PetAction.Idle, session.Presentation.Action);
+        session.Advance(TimeSpan.FromSeconds(1));
+        Assert.AreNotEqual(position, session.Position);
     }
 
     [TestMethod]
@@ -280,7 +423,7 @@ public sealed class HoodRoamingTests
     }
 
     private static HoodSession CreateSession(PetBounds area, PetPosition position,
-        IPetRandomSource? random = null, bool roaming = true)
+        IPetRandomSource? random = null, bool roaming = true, double boredom = 20, NeedSettings? needs = null)
     {
         var assetDirectory = Path.Combine(AppContext.BaseDirectory, "Assets", "Hood");
         var png = File.ReadAllBytes(Path.Combine(assetDirectory, "hood_spritesheet.png"));
@@ -291,12 +434,12 @@ public sealed class HoodRoamingTests
         var configuration = defaults with
         {
             Behavior = defaults.Behavior with { Roaming = roaming, IdleAnimations = false, RandomEvents = false },
-            Needs = defaults.Needs with { HungerPointsPerHour = 0, BoredomPointsPerHour = 0, SleepPointsPerHour = 0 }
+            Needs = needs ?? defaults.Needs with { HungerPointsPerHour = 0, BoredomPointsPerHour = 0, SleepPointsPerHour = 0 }
         };
         return HoodSession.Start(definition,
             [new DisplayInfo("Primary", new PetBounds(0, 0, 1920, 1040), true)],
             random ?? new SequenceRandomSource(0), new NoopSessionStore(), configuration,
-            new HoodSessionSnapshot { Position = position, RoamingArea = area, Needs = new NeedLevels(0, 20, 0) });
+            new HoodSessionSnapshot { Position = position, RoamingArea = area, Needs = new NeedLevels(0, boredom, 0) });
     }
 
     private sealed class SequenceRandomSource(params int[] values) : IPetRandomSource

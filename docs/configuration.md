@@ -10,7 +10,9 @@ Choose **Sticky Notes**, **Minimal**, **Soft**, or **Studio** in Hood Settings t
 
 The configured initial area is adjusted when necessary to contain Hood's full frame, and oversized saved areas shrink to fit the usable display while preserving that minimum footprint. See [placement behavior](placement.md) for details.
 
-With roaming enabled, Hood moves in 8-second bouts followed by 32-second idle rests so the resting animation remains visible. The cadence uses active behavior time and pauses while roaming is blocked by sleep, dragging, editing, or a foreground action.
+With roaming enabled, Hood moves in 8-second bouts at the same travel speed. Boredom smoothly scales the frequency from 10% of the previous 40-second cycle at boredom 0 to 120% at boredom 100: roughly one bout every 400 seconds when content, every 61.5 seconds at boredom 50, or every 33.3 seconds at boredom 100. Increasing boredom shortens the current idle rest, and actual movement still reduces boredom. The first bout can start immediately. The cadence uses active behavior time and pauses while roaming is blocked by sleep, dragging, editing, or another action. These timing changes apply to all four pets.
+
+The default idle animation repeats about 20% more often by shortening its still pause, keeping its moving poses at their original speed. Spontaneous gestures retain their configured interval and playback timing.
 
 ```yaml
 schema_version: 1

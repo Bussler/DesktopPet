@@ -135,17 +135,18 @@ public sealed class HoodSession
     private const double RoamingSpeedUnitsPerSecond = 18;
     private const int RandomSampleResolution = 1_000_000;
     private static readonly TimeSpan RoamingBoutDuration = TimeSpan.FromSeconds(8);
-    private static readonly TimeSpan RoamingRestDuration = TimeSpan.FromSeconds(32);
+    private const double BaselineRoamingCycleSeconds = 40;
     private readonly PetDefinition _definition;
     private readonly IPetRandomSource _random;
     private readonly ISessionStore _store;
+    private readonly int _idleSkippedStillFrames;
     private IReadOnlyCollection<DisplayInfo> _displays;
     private HoodConfiguration _configuration;
     private PetAction _action = PetAction.Idle;
     private int _frameIndex;
     private TimeSpan _frameElapsed;
     private TimeSpan _remainingRoamingBout = RoamingBoutDuration;
-    private TimeSpan _remainingRoamingRest;
+    private TimeSpan? _elapsedRoamingRest;
     private bool _quitRequested;
     private bool _editingArea;
     private bool _dragging;
@@ -162,6 +163,11 @@ public sealed class HoodSession
         HoodSessionSnapshot? restoredSession)
     {
         _definition = definition;
+        var idle = definition.GetAnimation(PetAction.Idle);
+        // Removing one sixth of the cycle makes idle repeat about 20% more often.
+        // Skip only the still pose and retain manifest indices for saved sessions.
+        _idleSkippedStillFrames = Math.Min((int)Math.Round(idle.Frames.Count / 6d),
+            idle.Frames.TakeWhile(frame => frame == idle.Frames[0]).Count() - 1);
         _random = random;
         _store = store;
         _displays = displays;
@@ -515,7 +521,7 @@ public sealed class HoodSession
                 RemainingRandomInterval = SampleRandomInterval();
             }
 
-            if (_action == PetAction.Idle && CanRoam && _remainingRoamingRest == TimeSpan.Zero && TryStartRoaming())
+            if (_action == PetAction.Idle && CanRoam && TimeUntilRoaming() == TimeSpan.Zero && TryStartRoaming())
             {
                 continue;
             }
@@ -524,7 +530,7 @@ public sealed class HoodSession
 
             var step = elapsed;
             var advanceRoamingBout = IsMoving;
-            var advanceRoamingRest = _action == PetAction.Idle && CanRoam && _remainingRoamingRest > TimeSpan.Zero;
+            var advanceRoamingRest = _action == PetAction.Idle && CanRoam && _elapsedRoamingRest is not null;
             var advanceRandomInterval = CanAdvanceRandomInterval;
             if (advanceRandomInterval)
             {
@@ -566,13 +572,13 @@ public sealed class HoodSession
             }
             else if (advanceRoamingRest)
             {
-                step = Min(step, _remainingRoamingRest);
+                step = Min(step, TimeUntilRoaming());
             }
 
-            AdvanceNeeds(step);
             AdvanceNapTimers(step);
             AdvanceAnimation(step);
-            AdvanceMovement(step);
+            var movementSeconds = AdvanceMovement(step);
+            AdvanceNeeds(step, movementSeconds);
             if (advanceRandomInterval)
             {
                 RemainingRandomInterval = step >= RemainingRandomInterval
@@ -588,9 +594,7 @@ public sealed class HoodSession
 
             if (advanceRoamingRest)
             {
-                _remainingRoamingRest = step >= _remainingRoamingRest
-                    ? TimeSpan.Zero
-                    : _remainingRoamingRest - step;
+                _elapsedRoamingRest += step;
             }
 
             if (advanceRoamingBout)
@@ -607,7 +611,7 @@ public sealed class HoodSession
                         _frameElapsed = TimeSpan.Zero;
                     }
 
-                    _remainingRoamingRest = RoamingRestDuration;
+                    _elapsedRoamingRest = TimeSpan.Zero;
                 }
             }
 
@@ -656,7 +660,7 @@ public sealed class HoodSession
 
     private static double AddNeed(double current, double increase) => Math.Min(100, current + increase);
 
-    private void AdvanceNeeds(TimeSpan elapsed)
+    private void AdvanceNeeds(TimeSpan elapsed, double movementSeconds)
     {
         if (Mode == HoodSessionMode.Sleeping)
         {
@@ -666,9 +670,12 @@ public sealed class HoodSession
         }
 
         var hours = elapsed.TotalHours;
+        // Clamp the net change once so saturation does not depend on update size.
+        var boredomChange = _configuration.Needs.BoredomPointsPerHour * hours -
+            _configuration.Needs.MovementReliefPerSecond * movementSeconds;
         Needs = new NeedLevels(
             AddNeed(Needs.Hunger, _configuration.Needs.HungerPointsPerHour * hours),
-            AddNeed(Needs.Boredom, _configuration.Needs.BoredomPointsPerHour * hours),
+            Math.Clamp(Needs.Boredom + boredomChange, 0, 100),
             AddNeed(Needs.Sleep, _configuration.Needs.SleepPointsPerHour * hours));
     }
 
@@ -702,10 +709,12 @@ public sealed class HoodSession
         var frameDuration = TimeSpan.FromMilliseconds(animation.FrameDurationMilliseconds);
         if (animation.Loops)
         {
+            var skippedFrames = _action == PetAction.Idle ? _idleSkippedStillFrames : 0;
+            var frameCount = animation.Frames.Count - skippedFrames;
             var advancedFrames = elapsed.Ticks / frameDuration.Ticks;
             var partialTicks = _frameElapsed.Ticks + elapsed.Ticks % frameDuration.Ticks;
             advancedFrames += partialTicks / frameDuration.Ticks;
-            _frameIndex = (int)((_frameIndex + advancedFrames % animation.Frames.Count) % animation.Frames.Count);
+            _frameIndex = skippedFrames + (int)((Math.Max(0, _frameIndex - skippedFrames) + advancedFrames % frameCount) % frameCount);
             _frameElapsed = TimeSpan.FromTicks(partialTicks % frameDuration.Ticks);
             return;
         }
@@ -810,6 +819,30 @@ public sealed class HoodSession
     private static bool IsForegroundAction(PetAction action) =>
         action is PetAction.Jump or PetAction.Feed or PetAction.Wake;
 
+    private TimeSpan TimeUntilRoaming()
+    {
+        if (_elapsedRoamingRest is not { } rest)
+        {
+            return TimeSpan.Zero;
+        }
+
+        var cycleElapsed = RoamingBoutDuration.TotalSeconds + rest.TotalSeconds;
+        var frequency = 0.1 + 1.1 * Needs.Boredom / 100;
+        var remaining = BaselineRoamingCycleSeconds - cycleElapsed * frequency;
+        if (remaining <= 0)
+        {
+            return TimeSpan.Zero;
+        }
+
+        // Solve (cycleElapsed + t) * (frequency + growth * t) = 40 so rising
+        // boredom shortens the current rest equally for large and small time steps.
+        var growth = _configuration.Needs.BoredomPointsPerHour / 3600 * 0.011;
+        var linear = frequency + cycleElapsed * growth;
+        var seconds = 2 * remaining / (linear + Math.Sqrt(linear * linear + 4 * growth * remaining));
+        seconds = Math.Max(seconds, BaselineRoamingCycleSeconds / 1.2 - cycleElapsed);
+        return TimeSpan.FromTicks(Math.Max(1, (long)Math.Ceiling(seconds * TimeSpan.TicksPerSecond)));
+    }
+
     private bool TryStartRoaming()
     {
         if (!CanRoam)
@@ -826,6 +859,7 @@ public sealed class HoodSession
             travel != 0 ? ChooseDirection(Position.Y, RoamingArea.Y, RoamingArea.Bottom - _definition.DisplayHeight) : 0);
         StartDirectAction(RoamingAction);
         _remainingRoamingBout = RoamingBoutDuration;
+        _elapsedRoamingRest = null;
         return true;
     }
 
@@ -887,11 +921,11 @@ public sealed class HoodSession
         return TimeSpan.FromTicks(Math.Max(1, (long)Math.Ceiling(ticks)));
     }
 
-    private void AdvanceMovement(TimeSpan elapsed)
+    private double AdvanceMovement(TimeSpan elapsed)
     {
         if (!IsMoving)
         {
-            return;
+            return 0;
         }
 
         var travel = RoamingAxisSpeed * elapsed.TotalSeconds;
@@ -902,12 +936,8 @@ public sealed class HoodSession
         var dy = next.Y - Position.Y;
         var distance = Math.Sqrt(dx * dx + dy * dy);
         Position = next;
-        Needs = Needs with
-        {
-            Boredom = Math.Max(0, Needs.Boredom -
-                _configuration.Needs.MovementReliefPerSecond * distance / RoamingSpeedUnitsPerSecond)
-        };
         NormalizeRoamingDirection();
+        return distance / RoamingSpeedUnitsPerSecond;
     }
 
     private TimeSpan SampleRandomInterval()
