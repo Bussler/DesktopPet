@@ -32,7 +32,7 @@ When the editor has focus, Hood supports **Ctrl+B** (bold), **Ctrl+I** (italic),
 
 Press **Ctrl+Enter** to create a new blank, ordinary paragraph below the current element and move there to type. This works inside tables, code blocks, and math source, beside rendered math, and in headings, lists, and ordinary paragraphs. Inside a table it exits the entire table; inside a list it exits the entire list. Selected content stays intact, and existing text below the element stays below the new paragraph. Repeated Ctrl+Enter creates additional blank paragraphs. Normal **Enter** keeps its current behavior, including editing within table cells, code blocks, and math source.
 
-Wrap text in single backticks, such as `` `value` ``, to turn it into inline code with a monospace font and a subtle background. For a larger code block, put three backticks on their own line before and after the code. An optional language name on the opening line, such as ` ```cs `, is accepted; code uses one text color. Completing the closing markers removes the markers, formats the code, and moves the caret into ordinary text below the block, including when pasting. Indentation, tabs, and blank lines are preserved. Incomplete markers stay as text. Inside a formatted code block, **Enter** adds a line and **Ctrl+Enter** creates an ordinary paragraph after the block. Code formatting saves with the note and supports undo and redo.
+Wrap text in single backticks, such as `` `value` ``, to turn it into inline code with a monospace font and a subtle background. For a larger code block, type three backticks on their own line. Hood immediately replaces the opening marker with an empty code block and puts the caret inside it; no closing marker is needed. Pasting a complete block fenced by three backticks still formats it and moves the caret into ordinary text below it. An optional language name on the pasted opening line, such as ` ```cs `, is accepted; code uses one text color. Indentation, tabs, and blank lines are preserved. Incomplete pasted markers stay as text. Inside a formatted code block, **Enter** adds a line and **Ctrl+Enter** creates an ordinary paragraph after the block. Code formatting saves with the note and supports undo and redo.
 
 ## Markdown emphasis and blocks
 
@@ -44,7 +44,7 @@ At the start of a note-body paragraph, use `# ` through `###### ` for heading le
 
 ## Equations
 
-Use `$x^2$` for an inline equation within a sentence. Use `$$\frac{1}{2}$$` for a same-line display equation, or put `$$` on its own line before and after a multiline expression. Prefix a dollar sign with a backslash, as in `\$5`, when it is ordinary text. Incomplete delimiters remain editable literal text.
+Use `$x^2$` for an inline equation within a sentence. Typing `$$` immediately creates an empty display equation and focuses its source editor. Enter the LaTeX source without closing markers; move the caret out or press **Ctrl+Enter** to render it and continue with ordinary text. You can also paste `$$\frac{1}{2}$$` for a display equation, or put `$$` on its own line before and after a pasted multiline expression. Prefix a dollar sign with a backslash, as in `\$5`, when it is ordinary text. Incomplete pasted delimiters remain editable literal text.
 
 Press Enter beside a rendered display equation to create an ordinary paragraph before or after it. Inside a display equation's source editor, Enter adds a source line break.
 

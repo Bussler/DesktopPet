@@ -4,6 +4,71 @@ namespace DesktopPet.Core;
 
 public static class NoteBlockMarkdownFormatting
 {
+    public static NotesDocument OpenTypedBlock(NotesDocument document, (int Start, int Length) input,
+        ref int selectionStart, int selectionLength)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        var textLength = document.GetPlainText().Length;
+        if (input.Start < 0 || input.Length < 0 || input.Start > textLength - input.Length)
+            throw new ArgumentOutOfRangeException(nameof(input));
+        if (selectionStart < 0 || selectionLength < 0 || selectionStart > textLength - selectionLength)
+            throw new ArgumentOutOfRangeException(nameof(selectionStart));
+        if (selectionLength != 0 || input.Length == 0 || input.Start + input.Length != selectionStart)
+            return document;
+
+        var (index, offset) = document.GetParagraphPositionAt(selectionStart);
+        var row = document.Paragraphs[index];
+        if (row.Cell is not null || (row.Kind != NoteBlockKind.Paragraph && !IsHeadingKind(row.Kind))) return document;
+        var text = NormalizeLineBreaks(string.Concat(row.Runs.Select(run => run.Text)));
+        var code = row.Kind == NoteBlockKind.Paragraph && text.Trim() == "```" && offset == text.Length;
+        var markerLength = code ? 3 : 2;
+        var markerStart = code ? text.IndexOf('`') : offset - markerLength;
+        if (markerStart < 0 || (!code && text.Substring(markerStart, markerLength) != "$$") ||
+            HasCodeStyle(row, markerStart, markerLength) || HasLink(row, markerStart, markerLength))
+            return document;
+        if (!code && markerStart > 0 && text[markerStart - 1] == '$') return document;
+        var slashes = 0;
+        for (var back = markerStart - 1; back >= 0 && text[back] == '\\'; back--) slashes++;
+        if (slashes % 2 != 0) return document;
+        var styles = row.Runs.SelectMany(run => Enumerable.Repeat(run.Style, NormalizeLineBreaks(run.Text).Length)).Take(markerStart + markerLength).ToArray();
+        var kinds = row.Runs.SelectMany(run => Enumerable.Repeat(run.Kind, NormalizeLineBreaks(run.Text).Length)).Take(markerStart + markerLength).ToArray();
+        if (kinds.Skip(markerStart).Any(kind => kind != NoteInlineKind.Text) ||
+            NoteCodeFormatting.GetMathSource(text[..markerStart] + new string(' ', markerLength), styles, kinds)[^1])
+            return document;
+        var rowStart = document.GetParagraphRange(index).Start;
+        if (!OverlapsInput(rowStart + markerStart, markerLength, input)) return document;
+
+        // Pasted or restored unfinished source remains literal, including markers in its body.
+        var insideFence = false;
+        var insideMath = false;
+        foreach (var previous in document.Paragraphs.Take(index))
+        {
+            if (previous.Cell is not null || previous.Kind != NoteBlockKind.Paragraph) continue;
+            var previousText = NormalizeLineBreaks(string.Concat(previous.Runs.Select(run => run.Text)));
+            if (HasCodeStyle(previous, 0, previousText.Length)) continue;
+            if (insideFence) { if (IsClosingFence(previousText)) insideFence = false; }
+            else if (insideMath) { if (previousText.Trim() == "$$") insideMath = false; }
+            else if (NoteCodeFormatting.IsOpeningFence(previousText)) insideFence = true;
+            else if (previousText.Trim() == "$$") insideMath = true;
+        }
+        if (insideFence || insideMath) return document;
+
+        if (code)
+        {
+            var result = document.Copy();
+            result.Paragraphs[index].Kind = NoteBlockKind.Code;
+            result.Paragraphs[index].Runs = [];
+            selectionStart = rowStart;
+            return result;
+        }
+
+        var math = NoteDisplayMathFormatting.ReplaceSelection(document, rowStart + markerStart, markerLength, out var blockIndex);
+        math.Paragraphs[blockIndex].Runs = [];
+        if (blockIndex == math.Paragraphs.Count - 1) math.Paragraphs.Add(new NoteParagraph());
+        selectionStart = math.GetParagraphRange(blockIndex).Start;
+        return math;
+    }
+
     public static NotesDocument Apply(NotesDocument document, (int Start, int Length) input,
         ref int selectionStart, ref int selectionLength, bool pasted = false)
     {

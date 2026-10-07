@@ -530,7 +530,11 @@ public partial class NoteWindow : Window
             var original = _markupOriginalText ?? text;
             var typingStyle = GetTypingStyle(document, start);
             _markupOriginalText = null;
-            var formatted = NoteListFormatting.Apply(document, GetInsertedRange(original, text), ref start, ref length);
+            var opened = _blockSyntaxPasteRequested ? document :
+                NoteBlockMarkdownFormatting.OpenTypedBlock(document, GetInsertedRange(original, text), ref start, length);
+            var openedMath = !ReferenceEquals(opened, document) &&
+                opened.Paragraphs[opened.GetParagraphIndexAt(start)].Kind == NoteBlockKind.DisplayMath;
+            var formatted = NoteListFormatting.Apply(opened, GetInsertedRange(original, opened.GetPlainText()), ref start, ref length);
             formatted = NoteCodeFormatting.Apply(formatted, ref start, ref length, GetInsertedRange(original, formatted.GetPlainText()));
             var beforeTable = formatted;
             formatted = NoteTableMarkdown.Apply(formatted, _tablePasteRequested, ref start, ref length);
@@ -595,6 +599,14 @@ public partial class NoteWindow : Window
             SetSaveStatus(_updateDocument(_noteId, formatted));
             _lastAcceptedDocument = formatted.Copy();
             UpdateToolbar();
+            if (openedMath)
+            {
+                var paragraph = GetEditorParagraphs(Editor.Document).ElementAt(paragraphIndex);
+                var button = Flatten(paragraph.Inlines).OfType<InlineUIContainer>()
+                    .Select(container => container.Child).OfType<NoteInlineMathButton>()
+                    .Single(candidate => candidate.IsDisplayMath);
+                BeginInlineMathSource(button);
+            }
         }
         catch (Exception exception) when (exception is InvalidDataException or ArgumentException or InvalidOperationException)
         {

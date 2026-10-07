@@ -17,6 +17,112 @@ namespace DesktopPet.Windows.Tests;
 public sealed class NoteDisplayMathInteractionTests
 {
     [TestMethod]
+    [DataRow("$$", NoteBlockKind.DisplayMath)]
+    [DataRow("```", NoteBlockKind.Code)]
+    public void OpeningBlockShortcutSupportsUndoRedoAndReopening(string marker, NoteBlockKind kind)
+    {
+        var app = NotesApplication.Start(new MemoryNotesStore());
+        var noteId = app.CreateNote();
+        var window = CreateWindow(app, noteId);
+        NoteWindow? reopened = null;
+        try
+        {
+            ShowHidden(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            Assert.IsTrue(editor.Focus());
+            foreach (var character in marker)
+            {
+                Type(editor, character.ToString());
+                Pump(window);
+            }
+            Assert.AreEqual(kind, app.GetNote(noteId).Document.Paragraphs[0].Kind);
+            RestoreHistory(window, undo: true);
+            Pump(window);
+            Assert.AreEqual(marker, app.GetNote(noteId).Document.GetPlainText());
+            Assert.AreEqual(NoteBlockKind.Paragraph, app.GetNote(noteId).Document.Paragraphs[0].Kind);
+            RestoreHistory(window, undo: false);
+            Pump(window);
+            Assert.AreEqual(kind, app.GetNote(noteId).Document.Paragraphs[0].Kind);
+            Assert.AreEqual(string.Empty, Text(app.GetNote(noteId).Document.Paragraphs[0]));
+            reopened = CreateWindow(app, noteId);
+            ShowHidden(reopened);
+            var reopenedEditor = (RichTextBox)reopened.FindName("Editor");
+            Assert.AreEqual(kind, ((Paragraph)reopenedEditor.Document.Blocks.FirstBlock).Tag);
+        }
+        finally
+        {
+            reopened?.CloseWithoutMembershipChange();
+            window.CloseWithoutMembershipChange();
+        }
+    }
+
+    [TestMethod]
+    [DataRow("$$", false)]
+    [DataRow("$$", true)]
+    [DataRow("```", false)]
+    [DataRow("```", true)]
+    public void PastedAndRestoredOpeningMarkersStayLiteral(string marker, bool restored)
+    {
+        var app = NotesApplication.Start(new MemoryNotesStore());
+        var noteId = app.CreateNote();
+        if (restored) app.UpdateDocument(noteId, NotesDocument.FromText(marker));
+        var window = CreateWindow(app, noteId);
+        try
+        {
+            ShowHidden(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            if (!restored) PastePlainText(editor, marker);
+            Pump(window);
+            Assert.AreEqual(marker, app.GetNote(noteId).Document.GetPlainText());
+            Assert.AreEqual(NoteBlockKind.Paragraph, app.GetNote(noteId).Document.Paragraphs.Single().Kind);
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    [DataRow("")]
+    [DataRow("before ")]
+    public void OpeningDoubleDollarImmediatelyCreatesFocusedEditableMath(string prefix)
+    {
+        var app = NotesApplication.Start(new MemoryNotesStore());
+        var noteId = app.CreateNote();
+        var window = CreateWindow(app, noteId);
+        try
+        {
+            ShowHidden(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            Assert.IsTrue(editor.Focus());
+            if (prefix.Length > 0) Type(editor, prefix);
+            Type(editor, "$");
+            Pump(window);
+            Assert.IsFalse(app.GetNote(noteId).Document.Paragraphs.Any(row => row.Kind == NoteBlockKind.DisplayMath));
+            Type(editor, "$");
+            Pump(window);
+
+            var block = app.GetNote(noteId).Document.Paragraphs.Single(row => row.Kind == NoteBlockKind.DisplayMath);
+            Assert.AreEqual(string.Empty, Text(block));
+            Assert.AreEqual(1, DisplayMathSourceSpans(editor).Count());
+            Type(editor, "x^2");
+            Pump(window);
+            Assert.AreEqual("x^2", Text(app.GetNote(noteId).Document.Paragraphs.Single(row => row.Kind == NoteBlockKind.DisplayMath)));
+            Assert.AreEqual(1, DisplayMathSourceSpans(editor).Count());
+            PressEnter(editor, window);
+            Type(editor, "+y");
+            Pump(window);
+            Assert.AreEqual("x^2\r\n+y", NoteTextOffsets.NormalizeLineBreaks(Text(app.GetNote(noteId).Document.Paragraphs.Single(row => row.Kind == NoteBlockKind.DisplayMath))));
+            if (prefix.Length > 0) Assert.AreEqual(prefix, Text(app.GetNote(noteId).Document.Paragraphs[0]));
+            Assert.IsTrue((bool)typeof(NoteWindow).GetMethod("HandleEditorKey", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(window, [Key.Enter, true, false])!);
+            Type(editor, "body");
+            Pump(window);
+            Assert.AreEqual(NoteBlockKind.Paragraph, app.GetNote(noteId).Document.Paragraphs[prefix.Length > 0 ? 2 : 1].Kind);
+            Assert.AreEqual("body", Text(app.GetNote(noteId).Document.Paragraphs[prefix.Length > 0 ? 2 : 1]));
+            Assert.IsFalse(FindFormulaControl(DisplayMathButtons(editor).Single())!.HasError);
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
     public void PastedSameLineAndMultilineDisplayMathUseTheActualRenderer()
     {
         const string text = "before $$\\frac{1}{2}$$ after\r\n" +

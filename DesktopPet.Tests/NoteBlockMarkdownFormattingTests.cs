@@ -6,6 +6,95 @@ namespace DesktopPet.Tests;
 public sealed class NoteBlockMarkdownFormattingTests
 {
     [TestMethod]
+    [DataRow("$$", NoteBlockKind.DisplayMath)]
+    [DataRow("```", NoteBlockKind.Code)]
+    [DataRow("  ```", NoteBlockKind.Code)]
+    public void OpeningMarkerCreatesEmptyBlockAndMapsCaret(string text, NoteBlockKind kind)
+    {
+        var source = NotesDocument.FromText(text);
+        var start = text.Length;
+        var result = NoteBlockMarkdownFormatting.OpenTypedBlock(source, (start - 1, 1), ref start, 0);
+        Assert.AreEqual(kind, result.Paragraphs[0].Kind);
+        Assert.AreEqual(0, result.Paragraphs[0].Runs.Count);
+        Assert.AreEqual(0, start);
+        Assert.AreEqual(text, source.GetPlainText());
+        NotesSnapshotValidator.ValidateDocument(result);
+    }
+
+    [TestMethod]
+    [DataRow(NoteBlockKind.Paragraph)]
+    [DataRow(NoteBlockKind.Heading1)]
+    public void OpeningMathSplitsNeighborTextWithoutLosingStyles(NoteBlockKind kind)
+    {
+        var source = NotesDocument.FromText("before $$ after").SetStyle(9, 6, NoteTextStyle.Bold, true);
+        source.Paragraphs[0].Kind = kind;
+        var start = 9;
+        var result = NoteBlockMarkdownFormatting.OpenTypedBlock(source, (8, 1), ref start, 0);
+        Assert.AreEqual("before \r\n\r\n after", result.GetPlainText());
+        Assert.AreEqual(NoteBlockKind.DisplayMath, result.Paragraphs[1].Kind);
+        Assert.AreEqual(kind, result.Paragraphs[0].Kind);
+        Assert.AreEqual(kind, result.Paragraphs[2].Kind);
+        Assert.AreEqual(NoteTextStyle.Bold, result.Paragraphs[2].Runs.Single().Style);
+        Assert.AreEqual(9, start);
+        NotesSnapshotValidator.ValidateDocument(result);
+    }
+
+    [TestMethod]
+    [DataRow(@"\$$")]
+    [DataRow("$")]
+    [DataRow("``")]
+    [DataRow("$$$")]
+    [DataRow("prefix ```")]
+    [DataRow("$$x$$")]
+    [DataRow("$x $$")]
+    [DataRow("```cs\r\n$$")]
+    [DataRow("$$\r\n```")]
+    [DataRow("$$\r\nx\r\n$$")]
+    [DataRow("```\r\nx\r\n```")]
+    public void OpeningMarkersLeaveIncompleteEscapedAndExistingSourceLiteral(string text)
+    {
+        var source = NotesDocument.FromText(text);
+        var start = text.Length;
+        Assert.AreSame(source, NoteBlockMarkdownFormatting.OpenTypedBlock(source, (start - 1, 1), ref start, 0));
+        Assert.AreEqual(text.Length, start);
+    }
+
+    [TestMethod]
+    [DataRow("$$", NoteBlockKind.Code)]
+    [DataRow("```", NoteBlockKind.DisplayMath)]
+    [DataRow("$$", NoteBlockKind.Bulleted)]
+    [DataRow("```", NoteBlockKind.Heading1)]
+    public void OpeningMarkersRespectNonParagraphContexts(string text, NoteBlockKind kind)
+    {
+        var source = NotesDocument.FromText(text);
+        source.Paragraphs[0].Kind = kind;
+        var start = text.Length;
+        Assert.AreSame(source, NoteBlockMarkdownFormatting.OpenTypedBlock(source, (start - 1, 1), ref start, 0));
+    }
+
+    [TestMethod]
+    public void OpeningMarkersRespectCellsInlineCodeAndSemanticRuns()
+    {
+        var sources = new[]
+        {
+            NotesDocument.FromText("$$").SetStyle(0, 2, NoteTextStyle.Code, true),
+            new NotesDocument { Paragraphs = [new NoteParagraph { Cell = new NoteTableCell(Guid.NewGuid(), 0, 0), Runs = [new NoteTextRun("$$")] }] },
+            new NotesDocument { Paragraphs = [new NoteParagraph { Runs = [new NoteTextRun("$$", Kind: NoteInlineKind.InlineMath)] }] },
+            new NotesDocument { Paragraphs = [new NoteParagraph { Runs = [new NoteTextRun("$$", Kind: NoteInlineKind.Link, LinkDestination: "https://example.com")] }] }
+        };
+        foreach (var source in sources)
+        {
+            var start = 2;
+            Assert.AreSame(source, NoteBlockMarkdownFormatting.OpenTypedBlock(source, (1, 1), ref start, 0));
+        }
+        var literal = NotesDocument.FromText("$$");
+        var caret = 2;
+        Assert.AreSame(literal, NoteBlockMarkdownFormatting.OpenTypedBlock(literal, (2, 0), ref caret, 0));
+        caret = 1;
+        Assert.AreSame(literal, NoteBlockMarkdownFormatting.OpenTypedBlock(literal, (1, 1), ref caret, 1));
+    }
+
+    [TestMethod]
     [DataRow("# Title", NoteBlockKind.Heading1)]
     [DataRow("## Title", NoteBlockKind.Heading2)]
     [DataRow("### Title", NoteBlockKind.Heading3)]

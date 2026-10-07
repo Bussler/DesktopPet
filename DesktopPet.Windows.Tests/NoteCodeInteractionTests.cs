@@ -14,6 +14,43 @@ namespace DesktopPet.Windows.Tests;
 public sealed class NoteCodeInteractionTests
 {
     [TestMethod]
+    public void OpeningBackticksImmediatelyCreateFocusedEditableCode()
+    {
+        NotesDocument? saved = null;
+        var window = CreateWindow(new NotesDocument(), document => saved = document);
+        try
+        {
+            ShowHidden(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            Assert.IsTrue(editor.Focus());
+            for (var index = 0; index < 3; index++)
+            {
+                Type(editor, "`");
+                Pump(window);
+                if (index < 2) Assert.AreEqual(NoteBlockKind.Paragraph, saved!.Paragraphs.Single().Kind);
+            }
+            Assert.AreEqual(NoteBlockKind.Code, saved!.Paragraphs.Single().Kind);
+            Assert.AreEqual(string.Empty, saved.GetPlainText());
+            Assert.AreEqual(NoteBlockKind.Code, editor.CaretPosition.Paragraph!.Tag);
+            Type(editor, "var x = 1;");
+            Pump(window);
+            editor.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(editor), 0, Key.Enter)
+                { RoutedEvent = Keyboard.PreviewKeyDownEvent });
+            Pump(window);
+            Type(editor, "$$literal$$");
+            Pump(window);
+            Assert.AreEqual("var x = 1;\r\n$$literal$$", saved.GetPlainText());
+            Assert.AreEqual(NoteBlockKind.Code, saved.Paragraphs.Single().Kind);
+            ExitCode(window);
+            Type(editor, "after");
+            Pump(window);
+            Assert.AreEqual(NoteBlockKind.Paragraph, saved.Paragraphs[1].Kind);
+            Assert.AreEqual("after", string.Concat(saved.Paragraphs[1].Runs.Select(run => run.Text)));
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
     public void EnterReplacesSelectedCodeWithALineBreakInTheSameBlock()
     {
         var source = new NotesDocument
