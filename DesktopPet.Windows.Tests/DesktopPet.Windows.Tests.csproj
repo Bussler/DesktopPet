@@ -10,5 +10,6 @@
     <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
     <ProjectReference Include="..\DesktopPet.Windows\DesktopPet.Windows.csproj" />
     <None Include="..\tools\Test-AlternatePetSprites.ps1" Link="tools\Test-AlternatePetSprites.ps1" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\tools\Build-AndPublish.ps1;..\tools\Test.ps1" Link="tools\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

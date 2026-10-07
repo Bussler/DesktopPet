@@ -76,7 +76,7 @@ Open PowerShell in the repository root and run:
 .\tools\Build-AndPublish.ps1
 ```
 
-The script restores locked dependencies, checks the walking sprites, runs Release tests, builds the solution, and publishes a self-contained Windows app. It stops if a step fails. By default, it selects `%USERPROFILE%\.dotnet\dotnet.exe` when present, otherwise `dotnet` from your PATH.
+The script restores locked app dependencies, builds and publishes a self-contained Windows app, and adds the release documentation. It stops if a step fails. By default, it selects `%USERPROFILE%\.dotnet\dotnet.exe` when present, otherwise `dotnet` from your PATH. It does not run tests or build test projects.
 
 Output goes to a new `artifacts\hood-build-yyyyMMdd-HHmmss` folder:
 
@@ -88,7 +88,13 @@ app/
 docs/
 ```
 
-The script prints the executable path when it finishes. Test results remain in `DesktopPet.Tests\TestResults` in the source checkout.
+The script prints the executable path when it finishes. Run validation separately before distributing a release:
+
+```powershell
+.\tools\Test.ps1
+```
+
+This restores locked solution dependencies, checks sprite transparency and walking animations, and builds and runs all Release tests. Test results remain in `DesktopPet.Tests\TestResults` in the source checkout. It accepts the same `-DotnetExe` override and produces no release package.
 
 To choose an output folder, run:
 

@@ -27,7 +27,7 @@ For example, doubling artwork resolution again while preserving Hood's size mean
 
 Runtime switching requires matching logical display dimensions and each action's frame count, duration, loop flag, and motion bounds. A different grid or frame coordinate layout is supported when those playback values remain the same. If custom sequences change these values, restore the matching manifests before switching pets; the app reports incompatible assets before saving the choice.
 
-In a source checkout, edit the selected pet's `hood_spritesheet.png` and `hood.animations.json` under `Assets`, then run `tools\Build-AndPublish.ps1`. Editing only a published build does not update the source assets.
+In a source checkout, edit the selected pet's `hood_spritesheet.png` and `hood.animations.json` under `Assets`, run `tools\Test.ps1` to validate, then run `tools\Build-AndPublish.ps1` to package. Editing only a published build does not update the source assets.
 
 `Assets\Hood\tools\Generate-HoodSpritesheet.ps1` packs the retained v3 source PNGs and the v4 run parts into the current grid. Run it in PowerShell 7 on Windows only when maintaining these sources; it overwrites the runtime PNG, manifest, and preview. The run parts contain a footless right-facing body followed by one isolated leg/foot; the script assembles the stride and mirrors it for leftward motion. Custom runtime sheets can be edited directly without running it. Jump artwork supplies the poses only; the application supplies vertical lift outside the cell, constrained to the monitor's usable space.
 
