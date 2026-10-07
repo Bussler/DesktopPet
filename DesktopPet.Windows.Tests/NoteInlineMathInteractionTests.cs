@@ -325,7 +325,7 @@ public sealed class NoteInlineMathInteractionTests
     }
 
     [TestMethod]
-    public void MathClipboardPasteIntoCodeLeavesNativePlainTextPasteAvailable()
+    public void MathClipboardPasteIntoCodePreservesLiteralSourceInOneBlock()
     {
         var sourceApp = NotesApplication.Start(new MemoryNotesStore());
         var sourceId = sourceApp.CreateNote();
@@ -356,8 +356,20 @@ public sealed class NoteInlineMathInteractionTests
             var paste = new DataObjectPastingEventArgs(data, false, DataFormats.UnicodeText);
             targetEditor.RaiseEvent(paste);
 
-            Assert.IsFalse(paste.CommandCancelled);
+            Assert.IsTrue(paste.CommandCancelled);
+            Pump(target);
+            var pasted = targetApp.GetNote(targetId).Document;
+            Assert.AreEqual("code$x$", pasted.GetPlainText());
+            Assert.AreEqual(NoteBlockKind.Code, pasted.Paragraphs.Single().Kind);
+            Assert.IsTrue(pasted.Paragraphs.Single().Runs.All(run => run.Kind == NoteInlineKind.Text));
+            Assert.AreEqual(0, MathContainers(targetEditor).Count());
+            RestoreHistory(target, undo: true);
+            Pump(target);
             Assert.AreEqual("code", targetApp.GetNote(targetId).Document.GetPlainText());
+            RestoreHistory(target, undo: false);
+            Pump(target);
+            Assert.AreEqual("code$x$", targetApp.GetNote(targetId).Document.GetPlainText());
+            Assert.AreEqual(NoteBlockKind.Code, targetApp.GetNote(targetId).Document.Paragraphs.Single().Kind);
         }
         finally
         {

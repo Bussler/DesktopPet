@@ -57,19 +57,41 @@ public partial class NoteWindow
     private void OnListPaste(object sender, DataObjectPastingEventArgs e)
     {
         if (e.IsDragDrop) return;
-        var listPayload = e.DataObject.GetData(ListClipboardFormat) as string;
-        var semanticPayload = e.DataObject.GetData(SemanticClipboardFormat) as string;
-        var payload = listPayload ?? semanticPayload;
-        if (payload is null) return;
         try
         {
+            var document = ReadEditorDocument();
+            var (start, length) = GetSelectionOffsets(document);
+            var (index, offset) = document.GetParagraphPositionAt(start);
+            var range = document.GetParagraphRange(index);
+            if (document.Paragraphs[index].Kind == NoteBlockKind.Code && start + length <= range.Start + range.Length &&
+                e.DataObject.GetData(System.Windows.DataFormats.UnicodeText) is string text)
+            {
+                // Paste newlines as literal code within this paragraph, rather than native paragraph breaks.
+                text = NormalizeLineBreaks(text);
+                var row = document.Paragraphs[index];
+                var runs = SliceRuns(row, 0, offset);
+                runs.Add(new NoteTextRun(text));
+                runs.AddRange(SliceRuns(row, offset + length, range.Length));
+                row.Runs = runs;
+                NotesSnapshotValidator.ValidateDocument(document);
+                e.CancelCommand();
+                var scrollPosition = CaptureEditorScrollPosition();
+                Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(() =>
+                {
+                    CommitEditorDocument(document, start + text.Length);
+                    RestoreEditorScrollPosition(scrollPosition);
+                }));
+                return;
+            }
+            var listPayload = e.DataObject.GetData(ListClipboardFormat) as string;
+            var semanticPayload = e.DataObject.GetData(SemanticClipboardFormat) as string;
+            var payload = listPayload ?? semanticPayload;
+            if (payload is null) return;
             var selected = JsonSerializer.Deserialize<NotesDocument>(payload);
             if (selected is null) return;
             NotesSnapshotValidator.ValidateDocument(selected);
             if (selected.Paragraphs.Any(row => row.Cell is not null)) return;
             var pastedLength = selected.GetPlainText().Length;
-            var document = ReadEditorDocument();
-            var (start, length) = GetSelectionOffsets(document);
             if (listPayload is null && !CanPasteSemanticContent(document, start, length, selected))
             {
                 e.FormatToApply = System.Windows.DataFormats.UnicodeText;

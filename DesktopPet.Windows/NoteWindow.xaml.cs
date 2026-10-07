@@ -177,6 +177,9 @@ public partial class NoteWindow : Window
         {
             Editor.Document.LineHeight = GetEditorLineHeight();
             Editor.Document.LineStackingStrategy = GetEditorLineStackingStrategy();
+            foreach (var paragraph in GetEditorParagraphs(Editor.Document))
+                if (paragraph.Tag is NoteBlockKind kind && GetHeadingLevel(kind) > 0)
+                    paragraph.LineHeight = GetEditorLineHeight(paragraph.FontSize);
         }
         if (!_appearanceInitialized || previousSettings.LineSpacing != settings.LineSpacing)
         {
@@ -1086,9 +1089,9 @@ public partial class NoteWindow : Window
         _updatingEditor = false;
     }
 
-    private double GetEditorLineHeight() => _appearanceSettings.LineSpacing == 2
+    private double GetEditorLineHeight(double? fontSize = null) => _appearanceSettings.LineSpacing == 2
         ? double.NaN
-        : Editor.FontSize * (Editor.FontFamily.LineSpacing + (_appearanceSettings.LineSpacing - 2) / 4);
+        : (fontSize ?? Editor.FontSize) * (Editor.FontFamily.LineSpacing + (_appearanceSettings.LineSpacing - 2) / 4);
 
     private LineStackingStrategy GetEditorLineStackingStrategy() => _appearanceSettings.LineSpacing < 2
         ? LineStackingStrategy.BlockLineHeight
@@ -1237,6 +1240,9 @@ public partial class NoteWindow : Window
         {
             paragraph.Tag = noteParagraph.Kind;
             paragraph.FontSize = GetHeadingFontSize(noteParagraph.Kind);
+            // Fixed body-text line heights can push larger heading glyphs above the viewport.
+            paragraph.LineStackingStrategy = LineStackingStrategy.MaxHeight;
+            paragraph.LineHeight = GetEditorLineHeight(paragraph.FontSize);
         }
         else if (noteParagraph.Kind == NoteBlockKind.Divider)
         {

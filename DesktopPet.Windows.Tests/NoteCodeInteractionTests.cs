@@ -412,6 +412,167 @@ public sealed class NoteCodeInteractionTests
         finally { window.CloseWithoutMembershipChange(); }
     }
 
+    [TestMethod]
+    [DataRow(false, false)]
+    [DataRow(true, false)]
+    [DataRow(false, true)]
+    public void MultilinePasteStaysInsideOneCodeBlockAndPreservesAllText(bool replaceSelection, bool minimized)
+    {
+        var text = minimized ? "a\r\n\r\nb" : "GeneratorDroneGymEnv.reset() reconfigures the child env with a freshly generated GymConfig on every reset (python/rads/gym/generator.py:71-80, 61-69). That fresh config has in_evaluation=False, eval_scenarios=None — so the eval env_config you pass (rllib_builders.py:169-183) is silently wiped. Consequences for generator runs (your experiment.yaml):\r\n\r\n  The configured eval scenarios (evaluation.scenarios: bns_iamd_scenario_distances.yaml) are never actually loaded — eval episodes run generated scenarios.\r\n\r\n  Reset info never contains scenario_path, so RAdsMetricsCallback._scenario_group falls back to eval_unknown_scenario for all eval metrics.";
+        var source = new NotesDocument
+        {
+            Paragraphs = [new NoteParagraph { Kind = NoteBlockKind.Code, Runs = [new NoteTextRun("prefix replace suffix")] },
+                new NoteParagraph { Runs = [new NoteTextRun("neighbor")] }]
+        };
+        NotesDocument? saved = null;
+        var window = CreateWindow(source, document => saved = document);
+        try
+        {
+            ShowHidden(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            var paragraph = (Paragraph)editor.Document.Blocks.FirstBlock;
+            var run = paragraph.Inlines.OfType<Run>().Single();
+            var start = run.ContentStart.GetPositionAtOffset(7)!;
+            editor.Selection.Select(start, replaceSelection ? run.ContentStart.GetPositionAtOffset(14)! : start);
+            NoteClipboardTestInput.PastePlainText(editor, text);
+            Assert.IsNotNull(saved);
+            Assert.AreEqual(2, saved.Paragraphs.Count, "Blank lines in pasted code must not create separate boxes.");
+            var expected = "prefix " + text + (replaceSelection ? " suffix" : "replace suffix");
+            Assert.AreEqual(expected + "\r\nneighbor", saved.GetPlainText());
+            Assert.AreEqual(NoteBlockKind.Code, saved.Paragraphs[0].Kind);
+            Assert.AreEqual(NoteBlockKind.Paragraph, saved.Paragraphs[1].Kind);
+            Type(editor, "typed");
+            Pump(window);
+            Assert.AreEqual("prefix " + text + "typed" + (replaceSelection ? " suffix" : "replace suffix") + "\r\nneighbor", saved.GetPlainText());
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    [DataRow("\r\n", "UnicodeText")]
+    [DataRow("\n", "Rich Text Format")]
+    [DataRow("\r", "Hood.Notes.List.v1")]
+    [DataRow("\r\n", "Hood.Notes.Semantic.v1")]
+    public void PasteIntoEmptyCodeKeepsWhitespaceAndMarkupLiteral(string newline, string format)
+    {
+        const string normalized = " \r\n\r\n# heading\r\n- item\r\n`literal` $$x$$ https://example.com\r\n| a | b |\r\n|---|---|\r\n";
+        var text = normalized.Replace("\r\n", newline, StringComparison.Ordinal);
+        var source = new NotesDocument { Paragraphs = [new NoteParagraph { Kind = NoteBlockKind.Code }] };
+        NotesDocument? saved = null;
+        var window = CreateWindow(source, document => saved = document);
+        try
+        {
+            ShowHidden(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            Assert.IsTrue(editor.Focus());
+            var data = new DataObject(DataFormats.UnicodeText, text);
+            data.SetData(DataFormats.Rtf, "{\\rtf1 different rich text}");
+            var payload = System.Text.Json.JsonSerializer.Serialize(NotesDocument.FromText(text));
+            data.SetData("Hood.Notes.List.v1", payload);
+            data.SetData("Hood.Notes.Semantic.v1", payload);
+            var paste = new DataObjectPastingEventArgs(data, false, format);
+            editor.RaiseEvent(paste);
+            Assert.IsTrue(paste.CommandCancelled, "Code paste must consume plain text before rich clipboard formats can split it.");
+            Pump(window);
+            Assert.IsNotNull(saved);
+            Assert.AreEqual(normalized, saved.GetPlainText());
+            Assert.AreEqual(NoteBlockKind.Code, saved.Paragraphs.Single().Kind);
+            Assert.IsTrue(saved.Paragraphs.Single().Runs.All(run => run.Kind == NoteInlineKind.Text && run.Style == NoteTextStyle.None));
+            Assert.AreEqual(1, editor.Document.Blocks.Count);
+            Assert.AreEqual(string.Empty, ((TextBlock)window.FindName("SaveStatus")).Text);
+            // Reopening persisted content must retain one editable box, including the final blank line.
+            typeof(NoteWindow).GetMethod("SetEditorDocument", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(window, [saved, normalized.Length, 0]);
+            Type(editor, "after");
+            Pump(window);
+            Assert.AreEqual(normalized + "after", saved.GetPlainText());
+            Assert.AreEqual(NoteBlockKind.Code, saved.Paragraphs.Single().Kind);
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    public void OversizedPasteIntoCodeLeavesContentAndSelectionUntouched()
+    {
+        var source = new NotesDocument
+        {
+            Paragraphs = [new NoteParagraph { Kind = NoteBlockKind.Code, Runs = [new NoteTextRun("accepted")] }]
+        };
+        NotesDocument? saved = null;
+        var window = CreateWindow(source, document => saved = document);
+        try
+        {
+            ShowHidden(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            var paragraph = (Paragraph)editor.Document.Blocks.FirstBlock;
+            var run = paragraph.Inlines.OfType<Run>().Single();
+            editor.Selection.Select(run.ContentStart, run.ContentEnd);
+            NoteClipboardTestInput.PastePlainText(editor, new string('x', NotesSnapshotValidator.MaximumTextCharacters + 1));
+            Assert.IsNull(saved, "An oversized paste must not save a partial or invalid note.");
+            Assert.AreSame(paragraph, editor.Document.Blocks.FirstBlock);
+            Assert.AreEqual("accepted", run.Text);
+            Assert.AreEqual("accepted", editor.Selection.Text);
+            Assert.IsFalse(string.IsNullOrWhiteSpace(((TextBlock)window.FindName("SaveStatus")).Text));
+            Type(editor, "valid");
+            Pump(window);
+            Assert.IsNotNull(saved);
+            Assert.AreEqual("valid", saved.GetPlainText());
+            Assert.AreEqual(NoteBlockKind.Code, saved.Paragraphs.Single().Kind);
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    [DataRow(false, "X")]
+    [DataRow(true, "X")]
+    [DataRow(false, "X\r\nY")]
+    public void PasteIntoVisibleCodePreservesScrolledViewport(bool replaceSelection, string text)
+    {
+        var source = new NotesDocument
+        {
+            Paragraphs = Enumerable.Range(0, 50).Select(index => new NoteParagraph
+            {
+                Kind = index == 25 ? NoteBlockKind.Code : NoteBlockKind.Paragraph,
+                Runs = [new NoteTextRun(index == 25 ? "CODE" : $"line {index}")]
+            }).ToList()
+        };
+        NotesDocument? saved = null;
+        var window = CreateWindow(source, document => saved = document);
+        try
+        {
+            ShowHidden(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            Assert.IsTrue(editor.Focus());
+            var run = editor.Document.Blocks.OfType<Paragraph>().ElementAt(25).Inlines.OfType<Run>().Single();
+            editor.Selection.Select(replaceSelection ? run.ContentStart.GetPositionAtOffset(1)! : run.ContentEnd,
+                replaceSelection ? run.ContentStart.GetPositionAtOffset(3)! : run.ContentEnd);
+            Pump(window);
+            var viewer = (ScrollViewer)editor.Template.FindName("PART_ContentHost", editor);
+            var caret = editor.CaretPosition.GetCharacterRect(LogicalDirection.Forward);
+            viewer.ScrollToVerticalOffset(viewer.VerticalOffset + caret.Top - viewer.ViewportHeight / 2);
+            Pump(window);
+            var offset = viewer.VerticalOffset;
+            caret = editor.CaretPosition.GetCharacterRect(LogicalDirection.Forward);
+            Assert.IsTrue(offset > 0 && caret.Top >= 0 && caret.Bottom <= viewer.ViewportHeight,
+                "The reproduction must paste at a visible caret in a scrolled note.");
+
+            NoteClipboardTestInput.PastePlainText(editor, text);
+            Pump(window);
+
+            Assert.AreEqual(offset, viewer.VerticalOffset, 0.01, "Code paste must preserve the existing viewport.");
+            var pastedCaret = editor.CaretPosition.GetCharacterRect(LogicalDirection.Forward);
+            if (!text.Contains('\n')) Assert.AreEqual(caret.Top, pastedCaret.Top, 0.01);
+            Assert.IsTrue(pastedCaret.Top >= 0 && pastedCaret.Bottom <= viewer.ViewportHeight);
+            Assert.IsTrue(editor.Selection.IsEmpty);
+            Assert.IsNotNull(saved);
+            source.Paragraphs[25].Runs = [new NoteTextRun(replaceSelection ? "C" + text + "E" : "CODE" + text)];
+            Assert.AreEqual(source.GetPlainText(), saved.GetPlainText());
+            Assert.AreEqual(50, saved.Paragraphs.Count);
+            Assert.AreEqual(NoteBlockKind.Code, saved.Paragraphs[25].Kind);
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
     private static void ExitCode(NoteWindow window) => Assert.IsTrue((bool)typeof(NoteWindow)
         .GetMethod("HandleEditorKey", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [Key.Enter, true, false])!);
 

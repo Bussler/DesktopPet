@@ -187,6 +187,7 @@ public sealed class NoteBlockMarkdownInteractionTests
         }
         finally { window.CloseWithoutMembershipChange(); }
     }
+
     [TestMethod]
     public void DeletingElsewherePreservesANewEmptyHeading()
     {
@@ -212,6 +213,61 @@ public sealed class NoteBlockMarkdownInteractionTests
             Pump(window);
             Assert.AreEqual(NoteBlockKind.Heading1, app.GetNote(noteId).Document.Paragraphs[0].Kind);
             Assert.AreEqual(NoteBlockKind.Paragraph, app.GetNote(noteId).Document.Paragraphs[1].Kind);
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    [DataRow(NoteBlockKind.Heading1, 16, false)]
+    [DataRow(NoteBlockKind.Heading2, 16, false)]
+    [DataRow(NoteBlockKind.Heading3, 16, false)]
+    [DataRow(NoteBlockKind.Heading4, 16, false)]
+    [DataRow(NoteBlockKind.Heading5, 16, false)]
+    [DataRow(NoteBlockKind.Heading6, 16, false)]
+    [DataRow(NoteBlockKind.Heading1, 32, false)]
+    [DataRow(NoteBlockKind.Heading1, 16, true)]
+    [DataRow(NoteBlockKind.Heading1, 32, true)]
+    public void FirstLineHeadingStaysInsideEditorAtEverySpacing(NoteBlockKind kind, int textSize, bool typed)
+    {
+        var app = NotesApplication.Start(new MemoryNotesStore());
+        var noteId = app.CreateNote();
+        if (!typed)
+            app.UpdateDocument(noteId, new NotesDocument
+            {
+                Paragraphs = [new NoteParagraph { Kind = kind, Runs = [new NoteTextRun("Heading")] }]
+            });
+        var window = CreateWindow(app, noteId);
+        try
+        {
+            window.ApplyAppearance(new NotesConfiguration { TextSize = textSize, LineSpacing = 1 }, NoteColor.Yellow);
+            ShowHidden(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            if (typed)
+            {
+                Assert.IsTrue(editor.Focus());
+                Type(editor, "# Heading");
+                Pump(window);
+            }
+            foreach (var spacing in new[] { 1d, 2d, 3d, 1d })
+            {
+                window.ApplyAppearance(new NotesConfiguration { TextSize = textSize, LineSpacing = spacing }, NoteColor.Yellow);
+                AssertHeadingBounds();
+                typeof(NoteWindow).GetMethod("SetEditorDocument", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(window, [app.GetNote(noteId).Document, 0, 0]);
+                AssertHeadingBounds();
+            }
+            window.ApplyAppearance(new NotesConfiguration { TextSize = textSize == 16 ? 32 : 16, LineSpacing = 1 }, NoteColor.Yellow);
+            AssertHeadingBounds();
+            Assert.AreEqual("Heading", app.GetNote(noteId).Document.GetPlainText());
+            Assert.AreEqual(kind, app.GetNote(noteId).Document.Paragraphs.Single().Kind);
+
+            void AssertHeadingBounds()
+            {
+                editor.UpdateLayout();
+                var run = editor.Document.Blocks.OfType<Paragraph>().Single().Inlines.OfType<Run>().Single();
+                var bounds = run.ContentStart.GetCharacterRect(LogicalDirection.Forward);
+                Assert.IsTrue(bounds.Top >= 0, $"The first heading must not extend above the editor: {bounds}");
+            }
         }
         finally { window.CloseWithoutMembershipChange(); }
     }
