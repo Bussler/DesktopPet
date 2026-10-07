@@ -34,7 +34,6 @@ public partial class NotesSettingsWindow : Window
         InitializeComponent();
         ApplyEffectiveSettings(_effectiveSettings, _uiStyle);
         DefaultColorComboBox.ItemsSource = NoteColorPalette.Colors;
-        ThemeComboBox.ItemsSource = Enum.GetValues<NoteTheme>();
         LoadSettings(controller.Current.Notes);
     }
 
@@ -57,11 +56,11 @@ public partial class NotesSettingsWindow : Window
 
     private void UpdateEffectiveSettingsNotice()
     {
-        var pending = _controller.Current.Notes != _effectiveSettings;
+        var pending = _controller.Current.Notes with { Theme = _effectiveSettings.Theme } != _effectiveSettings;
         AppearanceNoticeText.Visibility = pending ? Visibility.Visible : Visibility.Collapsed;
         if (pending)
         {
-            AppearanceNoticeText.Text = !_saved && _effectiveSettings != _originalSettings
+            AppearanceNoticeText.Text = !_saved && _effectiveSettings != (_originalSettings with { Theme = _effectiveSettings.Theme })
                 ? "Previewing unsaved settings. Save to keep them; Cancel or close to restore the previous settings."
                 : "Some saved Notes settings are not active in this session. Restart Hood to apply them.";
         }
@@ -71,7 +70,6 @@ public partial class NotesSettingsWindow : Window
     {
         _loadingSettings = true;
         DefaultColorComboBox.SelectedItem = NoteColorPalette.Parse(settings.DefaultColor);
-        ThemeComboBox.SelectedItem = Enum.Parse<NoteTheme>(settings.Theme, ignoreCase: true);
         TextSizeSlider.Value = settings.TextSize;
         TextSizeInput.Text = settings.TextSize.ToString();
         LineSpacingSlider.Value = settings.LineSpacing;
@@ -122,9 +120,9 @@ public partial class NotesSettingsWindow : Window
             }
             return false;
         }
-        if (DefaultColorComboBox.SelectedItem is not NoteColor color || ThemeComboBox.SelectedItem is not NoteTheme theme)
+        if (DefaultColorComboBox.SelectedItem is not NoteColor color)
         {
-            if (showErrors) ShowError("Select a supported default color and theme.");
+            if (showErrors) ShowError("Select a supported default color.");
             return false;
         }
 
@@ -133,7 +131,6 @@ public partial class NotesSettingsWindow : Window
             DefaultColor = color.ToString().ToLowerInvariant(),
             TextSize = textSize,
             LineSpacing = lineSpacing,
-            Theme = theme.ToString().ToLowerInvariant(),
             AlwaysOnTop = AlwaysOnTopCheckBox.IsChecked == true,
             AnimateShowHide = AnimateShowHideCheckBox.IsChecked == true
         };
@@ -142,6 +139,8 @@ public partial class NotesSettingsWindow : Window
 
     private void PreviewSettings(NotesConfiguration settings)
     {
+        // Brightness belongs to Hood Settings, including any active unsaved preview.
+        settings = settings with { Theme = _effectiveSettings.Theme };
         if (settings == _effectiveSettings) return;
         _applySettings(settings);
         ApplyEffectiveSettings(settings);
@@ -203,8 +202,9 @@ public partial class NotesSettingsWindow : Window
 
         try
         {
-            _applySettings(settings);
-            ApplyEffectiveSettings(settings);
+            var activeSettings = settings with { Theme = _effectiveSettings.Theme };
+            _applySettings(activeSettings);
+            ApplyEffectiveSettings(activeSettings);
             Close();
         }
         catch (Exception exception) when (exception is not OutOfMemoryException)

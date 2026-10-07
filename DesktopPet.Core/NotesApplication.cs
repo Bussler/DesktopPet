@@ -26,7 +26,9 @@ public sealed record HoodNote
 
 public sealed class NotesSnapshot
 {
-    public int SchemaVersion { get; set; } = 3;
+    public const int CurrentSchemaVersion = 7;
+
+    public int SchemaVersion { get; set; } = CurrentSchemaVersion;
     public List<HoodNote> Notes { get; set; } = [];
     public List<HoodNote> Trash { get; set; } = [];
     public List<Guid> OpenNoteIds { get; set; } = [];
@@ -64,9 +66,9 @@ public static class NotesSnapshotValidator
     public static void Validate(NotesSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        if (snapshot.SchemaVersion != 3)
+        if (snapshot.SchemaVersion != NotesSnapshot.CurrentSchemaVersion)
         {
-            throw new InvalidDataException("The notes data must use schema version 3.");
+            throw new InvalidDataException($"The notes data must use schema version {NotesSnapshot.CurrentSchemaVersion}.");
         }
 
         if (snapshot.Notes is null || snapshot.Trash is null || snapshot.OpenNoteIds is null || snapshot.Notes.Count + snapshot.Trash.Count > MaximumNotes)
@@ -148,28 +150,63 @@ public static class NotesSnapshotValidator
             throw new InvalidDataException("Each note must contain a valid document with at least one paragraph.");
         }
 
+        var linkDestinationCharacters = 0;
         foreach (var paragraph in document.Paragraphs)
         {
-                if (paragraph is null || !Enum.IsDefined(paragraph.Kind) || paragraph.Runs is null ||
-                    (paragraph.IsChecked && paragraph.Kind != NoteBlockKind.Checklist))
+            if (paragraph is null || !Enum.IsDefined(paragraph.Kind) || paragraph.Runs is null ||
+                (paragraph.IsChecked && paragraph.Kind != NoteBlockKind.Checklist))
             {
                 throw new InvalidDataException("Each note paragraph must use a supported block kind and contain valid text runs.");
+            }
+            if (paragraph.Cell is not null && paragraph.Kind is NoteBlockKind.Heading1 or NoteBlockKind.Heading2 or
+                NoteBlockKind.Heading3 or NoteBlockKind.Heading4 or NoteBlockKind.Heading5 or NoteBlockKind.Heading6 or
+                NoteBlockKind.Divider or NoteBlockKind.DisplayMath)
+            {
+                throw new InvalidDataException("Headings, dividers, and display equations can only appear in the note body.");
+            }
+            if (paragraph.Kind == NoteBlockKind.Divider && paragraph.Runs.Any(run => run?.Text is { Length: > 0 }))
+            {
+                throw new InvalidDataException("A divider cannot contain text.");
+            }
+            if (paragraph.Kind is NoteBlockKind.Code or NoteBlockKind.Divider &&
+                paragraph.Runs.Any(run => run?.Kind is NoteInlineKind.InlineMath or NoteInlineKind.Link))
+            {
+                throw new InvalidDataException("Inline equations and links can only appear in editable text paragraphs.");
+            }
+            if (paragraph.Kind == NoteBlockKind.DisplayMath &&
+                (paragraph.Runs.Any(run => run?.Kind is NoteInlineKind.InlineMath or NoteInlineKind.Link) ||
+                 paragraph.Runs.Any(run => run?.Style.HasFlag(NoteTextStyle.Code) == true)))
+            {
+                throw new InvalidDataException("Display equation source cannot be inline math, links, or code-formatted text.");
+            }
+            if (paragraph.Kind == NoteBlockKind.DisplayMath && paragraph.IsChecked)
+            {
+                throw new InvalidDataException("Display equations cannot have checklist completion state.");
             }
 
             foreach (var run in paragraph.Runs)
             {
-                if (run is null || run.Text is null || ((int)run.Style & ~31) != 0)
+                if (run is null || run.Text is null || ((int)run.Style & ~31) != 0 || !Enum.IsDefined(run.Kind))
                 {
                     throw new InvalidDataException("Each text run must contain readable text and supported inline styles.");
                 }
-
+                if (run.Kind == NoteInlineKind.Link)
+                {
+                    if (run.LinkDestination is null || !NoteLinkFormatting.IsValidDestination(run.LinkDestination))
+                        throw new InvalidDataException("Each link run must contain an absolute HTTP or HTTPS destination.");
+                    linkDestinationCharacters += run.LinkDestination.Length;
+                }
+                else if (run.LinkDestination is not null)
+                {
+                    throw new InvalidDataException("Only link runs can contain a link destination.");
+                }
             }
         }
 
         NoteTables.Validate(document);
-        if (document.GetPlainText().Length > MaximumTextCharacters)
+        if (document.GetPlainText().Length + linkDestinationCharacters > MaximumTextCharacters)
         {
-            throw new InvalidDataException($"Each note must contain no more than {MaximumTextCharacters:N0} characters.");
+            throw new InvalidDataException($"Each note and its saved link destinations must contain no more than {MaximumTextCharacters:N0} characters.");
         }
     }
 }

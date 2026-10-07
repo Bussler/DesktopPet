@@ -113,6 +113,7 @@ These guides are available in both the source checkout and the published build:
 | Guide | More information |
 | --- | --- |
 | [Notes](docs/notes.md) | Creating and naming notes, formatting shortcuts, search, bulk actions, Trash, and save recovery. |
+| [Third-party notices](docs/third-party-notices.md) | Licenses and notices for the bundled renderer, fonts, and runtime. |
 | [Configuration](docs/configuration.md) | Settings, YAML defaults and ranges, reaction timing, and Windows startup. |
 | [UI styles](docs/ui-styles.md) | Appearance styles, light/dark/system brightness, and note colors. |
 | [Placement](docs/placement.md) | Dragging, resizing the roaming area, display scaling, and monitor changes. |

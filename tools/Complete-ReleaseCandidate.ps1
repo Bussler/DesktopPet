@@ -24,5 +24,6 @@ foreach ($guide in $appGuides) {
     Copy-Item -LiteralPath (Join-Path $repositoryRoot "docs\$guide") -Destination $destination -Force
 }
 Copy-Item -LiteralPath (Join-Path $repositoryRoot 'README.md') -Destination $candidateRoot -Force
+Copy-Item -LiteralPath (Join-Path $repositoryRoot 'THIRD_PARTY_NOTICES.md') -Destination (Join-Path $docsDirectory 'third-party-notices.md') -Force
 
 Write-Output "App, README, and documentation are in $candidateRoot"

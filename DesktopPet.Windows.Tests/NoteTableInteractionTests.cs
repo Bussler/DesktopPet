@@ -19,6 +19,42 @@ public sealed class NoteTableInteractionTests
     private const string Markdown = "| Name | Status | Action Points |\r\n| --- | :---: | ---: |\r\n| Alice | Open | • Call<br>• Email |";
 
     [TestMethod]
+    [DataRow("caret")]
+    [DataRow("cell")]
+    [DataRow("table")]
+    public void CtrlEnterAfterPastedTablePreservesSelectionAndCreatesEditableBodyParagraph(string selection)
+    {
+        NotesDocument? saved = null;
+        var window = Create(NotesDocument.FromText(""), document => saved = document);
+        try
+        {
+            ShowHidden(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            Paste(editor, Markdown);
+            Pump(window);
+            var before = saved!.GetPlainText();
+            var table = editor.Document.Blocks.OfType<Table>().Single();
+            var paragraph = (Paragraph)table.RowGroups[0].Rows[0].Cells[0].Blocks.FirstBlock;
+            if (selection == "caret") editor.CaretPosition = paragraph.ContentStart;
+            else editor.Selection.Select(selection == "table" ? table.ContentStart : paragraph.ContentStart,
+                selection == "table" ? table.ContentEnd : paragraph.ContentEnd);
+            Handle(window, Key.Enter, true, false);
+            Assert.IsNull(CellAt(editor.CaretPosition));
+            Assert.AreEqual(NoteBlockKind.Paragraph, saved.Paragraphs.Last().Kind);
+            Assert.AreEqual(before + "\r\n", saved.GetPlainText());
+            Type(editor, "below");
+            Pump(window);
+            Assert.AreEqual(before + "\r\nbelow", saved.GetPlainText());
+            Assert.IsNull(saved.Paragraphs.Last().Cell);
+            Handle(window, Key.Enter, true, false);
+            Type(editor, "second");
+            Pump(window);
+            Assert.AreEqual(before + "\r\nbelow\r\nsecond", saved.GetPlainText());
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
     [DataRow("column")]
     [DataRow("row")]
     [DataRow("nested")]
@@ -172,13 +208,14 @@ public sealed class NoteTableInteractionTests
         {
             var editor = (RichTextBox)window.FindName("Editor");
             var items = editor.ContextMenu.Items.OfType<MenuItem>().ToArray();
-            CollectionAssert.AreEqual(new[] { "Cu_t", "_Copy", "_Paste", "Create _table" }, items.Select(item => (string)item.Header).ToArray());
+            CollectionAssert.AreEqual(new[] { "Cu_t", "_Copy", "_Paste", "Create _table", "Create math block" }, items.Select(item => (string)item.Header).ToArray());
             Assert.AreSame(ApplicationCommands.Cut, items[0].Command);
             Assert.AreSame(ApplicationCommands.Copy, items[1].Command);
             Assert.AreSame(ApplicationCommands.Paste, items[2].Command);
             Assert.IsTrue(items.Take(3).All(item => item.CommandTarget == editor));
             var header = ((System.Windows.Controls.Button)window.FindName("MenuButton")).ContextMenu;
             Assert.IsFalse(header.Items.OfType<MenuItem>().Any(item => (string)item.Header == "Create _table"));
+            Assert.IsFalse(header.Items.OfType<MenuItem>().Any(item => (string)item.Header == "Create math block"));
         }
         finally { window.CloseWithoutMembershipChange(); }
     }
@@ -267,7 +304,7 @@ public sealed class NoteTableInteractionTests
             Assert.AreEqual(2, list.ListItems.Count);
             Assert.AreEqual(TextAlignment.Right, cell.TextAlignment);
             CollectionAssert.AreEqual(new[] { "Insert row above", "Insert row below", "Insert column left", "Insert column right",
-                "Delete row", "Delete column", "Copy table as Markdown", "Create _table" },
+                "Delete row", "Delete column", "Copy table as Markdown", "Create _table", "Create math block" },
                 cell.ContextMenu.Items.OfType<MenuItem>().Select(item => (string)item.Header).ToArray());
             Assert.IsNotNull(table.RowGroups[0].Rows[0].Cells[0].Background);
             Assert.IsNull(table.RowGroups[0].Rows[1].Cells[0].ReadLocalValue(TextElement.BackgroundProperty) as System.Windows.Media.Brush);
@@ -454,6 +491,136 @@ public sealed class NoteTableInteractionTests
     }
 
     [TestMethod]
+    public void TypingEmphasisMathAndLinkTogetherKeepsThemInTheSameTableCell()
+    {
+        NotesDocument? saved = null;
+        var tableId = Guid.NewGuid();
+        var window = Create(new NotesDocument
+        {
+            Paragraphs = [new NoteParagraph { Cell = new NoteTableCell(tableId, 0, 0) }]
+        }, document => saved = document);
+        try
+        {
+            ShowHidden(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            var cell = editor.Document.Blocks.OfType<Table>().Single().RowGroups[0].Rows[0].Cells[0];
+            editor.CaretPosition = cell.ContentStart;
+            editor.Selection.Text = "**bold** $x^2$ [label](https://example.com/a_(b)?q=x)";
+            Pump(window);
+
+            Assert.IsNotNull(saved);
+            Assert.AreEqual("bold $x^2$ label", saved.GetPlainText());
+            Assert.AreEqual(NoteTextStyle.Bold, saved.Paragraphs.Single().Runs[0].Style);
+            Assert.AreEqual(NoteInlineKind.InlineMath,
+                saved.Paragraphs.Single().Runs.Single(run => run.Kind == NoteInlineKind.InlineMath).Kind);
+            Assert.AreEqual("$x^2$", saved.Paragraphs.Single().Runs.Single(run => run.Kind == NoteInlineKind.InlineMath).Text);
+            var link = saved.Paragraphs.Single().Runs.Single(run => run.Kind == NoteInlineKind.Link);
+            Assert.AreEqual("label", link.Text);
+            Assert.AreEqual("https://example.com/a_(b)?q=x", link.LinkDestination);
+            Assert.AreEqual(tableId, saved.Paragraphs.Single().Cell!.TableId);
+            Assert.AreEqual(1, editor.Document.Blocks.OfType<Table>().Single().RowGroups[0].Rows[0].Cells.Count);
+            NotesSnapshotValidator.ValidateDocument(saved);
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    public void CopyingTableAsMarkdownAndPastingItKeepsMixedSemanticCellContent()
+    {
+        var tableDocument = MixedTable();
+        var sourceTableId = tableDocument.Paragraphs[0].Cell!.TableId;
+        var markdown = NoteTableMarkdown.Write(tableDocument, sourceTableId);
+        IDataObject? copiedData = null;
+        var copyWindow = Create(MixedEditorDocument(tableDocument), _ => { }, copyToClipboard: data => copiedData = data);
+        NotesDocument? saved = null;
+        var pasteWindow = Create(NotesDocument.FromText(""), document => saved = document);
+        try
+        {
+            ShowHidden(copyWindow);
+            var copyEditor = (RichTextBox)copyWindow.FindName("Editor");
+            Assert.IsTrue(copyEditor.Focus());
+            var sourceTable = copyEditor.Document.Blocks.OfType<Table>().Single();
+            copyEditor.Selection.Select(sourceTable.ContentStart, sourceTable.ContentEnd);
+            ApplicationCommands.Copy.Execute(null, copyEditor);
+            Pump(copyWindow);
+            Assert.IsNotNull(copiedData);
+            Assert.AreEqual(markdown, copiedData.GetData(DataFormats.UnicodeText));
+            Assert.AreEqual(markdown, copiedData.GetData(DataFormats.Text));
+
+            ShowHidden(pasteWindow);
+            var pasteEditor = (RichTextBox)pasteWindow.FindName("Editor");
+            Assert.IsTrue(pasteEditor.Focus());
+            NoteClipboardTestInput.Paste(pasteEditor, copiedData);
+            Pump(pasteWindow);
+
+            Assert.IsNotNull(saved);
+            Assert.AreEqual(tableDocument.GetPlainText(), saved.GetPlainText());
+            Assert.AreNotEqual(sourceTableId, saved.Paragraphs[0].Cell!.TableId);
+            Assert.AreEqual(tableDocument.Paragraphs.Count, saved.Paragraphs.Count);
+            for (var index = 0; index < tableDocument.Paragraphs.Count; index++)
+            {
+                var original = tableDocument.Paragraphs[index];
+                var pasted = saved.Paragraphs[index];
+                Assert.AreEqual(original.Kind, pasted.Kind);
+                Assert.AreEqual(original.IsChecked, pasted.IsChecked);
+                Assert.AreEqual(original.Cell!.Row, pasted.Cell!.Row);
+                Assert.AreEqual(original.Cell.Column, pasted.Cell.Column);
+                Assert.AreEqual(original.Cell.Alignment, pasted.Cell.Alignment);
+                CollectionAssert.AreEqual(ExpandRuns(original), ExpandRuns(pasted));
+            }
+            NotesSnapshotValidator.ValidateDocument(saved);
+
+            var checklist = ((System.Windows.Documents.List)
+                editorTable().RowGroups[0].Rows[1].Cells[1].Blocks.FirstBlock);
+            var checklistParagraph = (Paragraph)checklist.ListItems.FirstListItem.Blocks.FirstBlock;
+            var checkBox = checklistParagraph.Inlines.OfType<InlineUIContainer>()
+                .Select(container => container.Child).OfType<CheckBox>().Single();
+            typeof(ToggleButton).GetMethod("OnClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(checkBox, null);
+            Pump(pasteWindow);
+            var updatedItem = saved.Paragraphs.Single(row => row.Cell?.Row == 1 && row.Cell.Column == 1);
+            Assert.IsFalse(updatedItem.IsChecked);
+            CollectionAssert.AreEqual(tableDocument.Paragraphs.Single(row => row.Cell?.Row == 1 && row.Cell.Column == 1)
+                .Runs.ToArray(), updatedItem.Runs.ToArray());
+
+            Table editorTable() => pasteEditor.Document.Blocks.OfType<Table>().Single();
+        }
+        finally
+        {
+            copyWindow.CloseWithoutMembershipChange();
+            pasteWindow.CloseWithoutMembershipChange();
+        }
+    }
+
+    [TestMethod]
+    public void PastingMarkdownCopyWithoutSemanticClipboardPreservesLiteralMarkers()
+    {
+        var source = MixedTable();
+        var markdown = NoteTableMarkdown.Write(source, source.Paragraphs[0].Cell!.TableId);
+        NotesDocument? saved = null;
+        var window = Create(NotesDocument.FromText(""), document => saved = document);
+        try
+        {
+            ShowHidden(window);
+            Paste((RichTextBox)window.FindName("Editor"), markdown);
+            Pump(window);
+            Assert.IsNotNull(saved);
+            Assert.AreEqual(source.GetPlainText(), saved.GetPlainText());
+            Assert.AreEqual(NoteTextStyle.Bold | NoteTextStyle.Italic, saved.Paragraphs[2].Runs[0].Style);
+            Assert.AreEqual(NoteInlineKind.InlineMath, saved.Paragraphs[2].Runs.Single(run => run.Kind == NoteInlineKind.InlineMath).Kind);
+            Assert.AreEqual("$|x|$", saved.Paragraphs[2].Runs.Single(run => run.Kind == NoteInlineKind.InlineMath).Text);
+            Assert.AreEqual("link", saved.Paragraphs[2].Runs.Single(run => run.Kind == NoteInlineKind.Link).Text);
+            Assert.IsTrue(saved.Paragraphs[2].Runs.Any(run =>
+                run.Text.Contains("**literal** $source$ [text](https://literal.example)", StringComparison.Ordinal)));
+            Assert.IsTrue(saved.Paragraphs[3].IsChecked);
+            Assert.AreEqual(NoteBlockKind.Checklist, saved.Paragraphs[3].Kind);
+            Assert.IsFalse(saved.Paragraphs.Skip(2).SelectMany(row => row.Runs)
+                .Any(run => run.Kind == NoteInlineKind.Link && run.LinkDestination == "https://literal.example"));
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
     public void UndoAfterAddingTheFinalRowKeepsTheCaretInsideTheRestoredDocument()
     {
         var app = NotesApplication.Start(new MemoryNotesStore());
@@ -514,16 +681,81 @@ public sealed class NoteTableInteractionTests
         finally { window.CloseWithoutMembershipChange(); }
     }
 
-    private static NoteWindow Create(NotesDocument document, Action<NotesDocument> save, string theme = "dark") => new(
+    private static NoteWindow Create(NotesDocument document, Action<NotesDocument> save, string theme = "dark",
+        Action<IDataObject>? copyToClipboard = null) => new(
         new HoodNote { Document = document }, (_, updated) => { NotesSnapshotValidator.ValidateDocument(updated); save(updated.Copy()); return null; },
         (_, _) => null, (_, _) => null, (_, _) => (null, null), _ => (true, null),
-        () => { }, () => { }, () => { }, (_, _) => null, _ => null, () => null, new NotesConfiguration { Theme = theme });
+        () => { }, () => { }, () => { }, (_, _) => null, _ => null, () => null, new NotesConfiguration { Theme = theme },
+        copyToClipboard: copyToClipboard);
 
     private static NotesDocument Parse()
     {
         var start = Markdown.Length;
         var length = 0;
         return NoteTableMarkdown.Apply(NotesDocument.FromText(Markdown), true, ref start, ref length);
+    }
+    private static NotesDocument MixedTable()
+    {
+        var tableId = Guid.NewGuid();
+        var destination = "https://example.com/a_(b)?q=x&value=y#part";
+        var document = new NotesDocument
+        {
+            Paragraphs = [
+                new NoteParagraph { Cell = new(tableId, 0, 0), Runs = [new NoteTextRun("Tasks")] },
+                new NoteParagraph { Cell = new(tableId, 0, 1), Runs = [new NoteTextRun("Notes")] },
+                new NoteParagraph
+                {
+                    Cell = new(tableId, 1, 0), Kind = NoteBlockKind.Bulleted,
+                    Runs = [
+                        new NoteTextRun("styled", NoteTextStyle.Bold | NoteTextStyle.Italic),
+                        new NoteTextRun(" "),
+                        new NoteTextRun("$|x|$", NoteTextStyle.None, NoteInlineKind.InlineMath),
+                        new NoteTextRun(" "),
+                        new NoteTextRun("link", NoteTextStyle.Underline, NoteInlineKind.Link, destination),
+                        new NoteTextRun("\ncontinued with **literal** $source$ [text](https://literal.example) \\| " + (char)92 + (char)92)
+                    ]
+                },
+                new NoteParagraph
+                {
+                    Cell = new(tableId, 1, 1), Kind = NoteBlockKind.Checklist, IsChecked = true,
+                    Runs = [
+                        new NoteTextRun("checked ", NoteTextStyle.Strikethrough),
+                        new NoteTextRun("$q$", NoteTextStyle.None, NoteInlineKind.InlineMath),
+                        new NoteTextRun(" link", NoteTextStyle.Bold, NoteInlineKind.Link, destination),
+                        new NoteTextRun("\nsecond line")
+                    ]
+                }
+            ]
+        };
+        NotesSnapshotValidator.ValidateDocument(document);
+        return document;
+    }
+    private static NotesDocument MixedEditorDocument(NotesDocument table)
+    {
+        var document = new NotesDocument
+        {
+            Paragraphs = [
+                new NoteParagraph
+                {
+                    Kind = NoteBlockKind.Heading2,
+                    Runs = [
+                        new NoteTextRun("Editor heading ", NoteTextStyle.Bold),
+                        new NoteTextRun("$h_1$", NoteTextStyle.None, NoteInlineKind.InlineMath),
+                        new NoteTextRun(" "),
+                        new NoteTextRun("source", NoteTextStyle.Italic, NoteInlineKind.Link, "https://example.com/heading")
+                    ]
+                },
+                new NoteParagraph { Kind = NoteBlockKind.Bulleted, Runs = [new NoteTextRun("editor bullet")] },
+                new NoteParagraph { Kind = NoteBlockKind.Numbered, Runs = [new NoteTextRun("editor number")] },
+                new NoteParagraph { Kind = NoteBlockKind.Checklist, IsChecked = true, Runs = [new NoteTextRun("editor check")] },
+                new NoteParagraph { Kind = NoteBlockKind.Code, Runs = [new NoteTextRun("**literal** $source$")] },
+                new NoteParagraph { Kind = NoteBlockKind.Divider },
+                new NoteParagraph { Kind = NoteBlockKind.DisplayMath, Runs = [new NoteTextRun("$$" + (char)92 + "sum_i i$$")] }
+            ]
+        };
+        document.Paragraphs.AddRange(table.Paragraphs);
+        NotesSnapshotValidator.ValidateDocument(document);
+        return document;
     }
     private static void Paste(RichTextBox editor, string text)
     {
@@ -536,6 +768,9 @@ public sealed class NoteTableInteractionTests
             if (parent is TableCell cell) return cell;
         return null;
     }
+    private static (char Character, NoteTextStyle Style, NoteInlineKind Kind, string? Destination)[] ExpandRuns(NoteParagraph paragraph) =>
+        paragraph.Runs.SelectMany(run => run.Text.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n')
+            .Select(character => (character, run.Style, run.Kind, run.LinkDestination))).ToArray();
     private static void Press(RichTextBox editor, Key key) => editor.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice,
         PresentationSource.FromVisual(editor), 0, key) { RoutedEvent = Keyboard.PreviewKeyDownEvent });
     private static void ClickCreateTable(NoteWindow window)
@@ -554,7 +789,7 @@ public sealed class NoteTableInteractionTests
         Assert.IsFalse(menu.IsOpen);
     }
     private static void Handle(NoteWindow window, Key key, bool control, bool shift) =>
-        Assert.IsTrue((bool)typeof(NoteWindow).GetMethod("HandleTableKey", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [key, control, shift])!);
+        Assert.IsTrue((bool)typeof(NoteWindow).GetMethod("HandleEditorKey", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [key, control, shift])!);
     private static void Type(RichTextBox editor, string text) => TextCompositionManager.StartComposition(new TextComposition(InputManager.Current, editor, text));
     private static void ShowHidden(Window window)
     {

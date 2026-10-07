@@ -73,6 +73,7 @@ internal static class NotesAppearance
         SetBrush("NotesTableBrush", Mix(tint, surfaceTone, dark ? .35 : .75));
         SetBrush("NotesTableHeaderBrush", Mix(tint, edgeTone, dark ? .14 : .18));
         SetBrush("NotesContentBorderBrush", Mix(tint, edgeTone, dark ? .70 : .64));
+        SetBrush("NotesLinkBrush", Mix(palette.Accent, tint, dark ? .12 : .08));
         var padding = style switch { UiStyleCatalog.Minimal => 4, UiStyleCatalog.Soft => 8, _ => 6 };
         surface.Resources["NotesTableCellPadding"] = new Thickness(padding);
         surface.Resources["NotesCodePadding"] = new Thickness(padding + 2);

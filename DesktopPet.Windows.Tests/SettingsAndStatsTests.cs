@@ -473,12 +473,12 @@ public sealed class SettingsAndStatsTests
         });
         try
         {
-            ((ComboBox)settings.FindName("ThemeComboBox")).SelectedItem = NoteTheme.Dark;
+            ((Slider)settings.FindName("TextSizeSlider")).Value = 24;
             typeof(NotesSettingsWindow).GetMethod("OnSaveClick", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(settings, [settings, new RoutedEventArgs(Button.ClickEvent)]);
 
-            Assert.AreEqual("dark", fixture.Store.LoadOrCreate().Notes.Theme);
-            Assert.AreEqual("dark", fixture.Controller.Current.Notes.Theme);
+            Assert.AreEqual(24, fixture.Store.LoadOrCreate().Notes.TextSize);
+            Assert.AreEqual(24, fixture.Controller.Current.Notes.TextSize);
             Assert.AreEqual(Visibility.Visible, ((TextBlock)settings.FindName("AppearanceNoticeText")).Visibility);
             var error = (TextBlock)settings.FindName("ErrorMessage");
             Assert.AreEqual(Visibility.Visible, error.Visibility);
@@ -1208,7 +1208,10 @@ public sealed class SettingsAndStatsTests
     }
 
     [TestMethod]
-    public void AppPreviewsAndRestoresStyleAcrossOpenNotesSettingsListsMenusAndTray()
+    [DataRow("cancel")]
+    [DataRow("close")]
+    [DataRow("save")]
+    public void HoodSettingsPreviewsStyleAndThemeAcrossOpenNotesSettingsListsMenusAndTray(string action)
     {
         using var fixture = new Fixture("light");
         fixture.Store.LoadOrCreate();
@@ -1231,8 +1234,10 @@ public sealed class SettingsAndStatsTests
             .Select(name => typeof(App).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!).ToArray();
         var originalValues = fields.Select(field => field.GetValue(app)).ToArray();
         var apply = typeof(App).GetMethod("ApplyUiStyle", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var applyTheme = typeof(App).GetMethod("ApplyTheme", BindingFlags.Instance | BindingFlags.NonPublic)!;
         var settings = (SettingsWindow)Activator.CreateInstance(typeof(SettingsWindow), BindingFlags.Instance | BindingFlags.NonPublic,
-            null, [fixture.Controller, pet, UiStyleCatalog.StickyNotes, (Action<string>)(style => apply.Invoke(app, [style]))], null)!;
+            null, [fixture.Controller, pet, UiStyleCatalog.StickyNotes, (Action<string>)(style => apply.Invoke(app, [style])),
+                "light", (Action<string>)(theme => applyTheme.Invoke(app, [theme]))], null)!;
         var windows = (Dictionary<Guid, NoteWindow>)typeof(App).GetField("_noteWindows", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(app)!;
         object[] values = [fixture.Session, notes, pet, settings, notesSettings, notesList, icon, fixture.Controller.Current.Notes, UiStyleCatalog.StickyNotes];
         for (var index = 0; index < fields.Length; index++) fields[index].SetValue(app, values[index]);
@@ -1248,13 +1253,30 @@ public sealed class SettingsAndStatsTests
                 Assert.AreEqual(configurationBaseline, File.ReadAllText(fixture.ConfigPath));
                 Assert.AreEqual(notesBaseline, File.ReadAllText(notesPath), "Live styling must not rewrite note data.");
             }
-            var previewTrayColor = tray.BackColor;
-            settings.Close();
+            Assert.IsNull(notesSettings.FindName("ThemeComboBox"), "Brightness is selected in Hood Settings.");
+            CollectionAssert.AreEquivalent(Enum.GetValues<NoteTheme>(), ((ComboBox)settings.FindName("ThemeComboBox")).Items.Cast<NoteTheme>().ToArray());
+            ((ComboBox)settings.FindName("ThemeComboBox")).SelectedItem = NoteTheme.Dark;
             foreach (var surface in new FrameworkElement[] { settings, notesSettings, notesList, note, pet.ContextMenu! })
-                Assert.AreEqual("#FF446DA5", ((SolidColorBrush)surface.Resources["AppAccentBrush"]).Color.ToString());
-            Assert.AreNotEqual(previewTrayColor, tray.BackColor, "Closing without Save must also restore the tray.");
-            Assert.AreEqual(DrawingColor.FromArgb(255, 249, 249, 249), tray.BackColor);
+                Assert.AreEqual("#FFBBA5FF", ((SolidColorBrush)surface.Resources["AppAccentBrush"]).Color.ToString());
             Assert.AreEqual(configurationBaseline, File.ReadAllText(fixture.ConfigPath));
+            var previewTrayColor = tray.BackColor;
+            if (action == "close") settings.Close();
+            else typeof(SettingsWindow).GetMethod(action == "save" ? "OnSaveClick" : "OnCancelClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(settings, [settings, new RoutedEventArgs(Button.ClickEvent)]);
+            foreach (var surface in new FrameworkElement[] { settings, notesSettings, notesList, note, pet.ContextMenu! })
+                Assert.AreEqual(action == "save" ? "#FFBBA5FF" : "#FF446DA5", ((SolidColorBrush)surface.Resources["AppAccentBrush"]).Color.ToString());
+            if (action == "save")
+            {
+                Assert.AreEqual(previewTrayColor, tray.BackColor);
+                Assert.AreEqual("dark", fixture.Store.LoadOrCreate().Notes.Theme);
+                Assert.AreEqual(UiStyleCatalog.Studio, fixture.Store.LoadOrCreate().UiStyle);
+            }
+            else
+            {
+                Assert.AreNotEqual(previewTrayColor, tray.BackColor, "Closing without Save must also restore the tray.");
+                Assert.AreEqual(DrawingColor.FromArgb(255, 249, 249, 249), tray.BackColor);
+                Assert.AreEqual(configurationBaseline, File.ReadAllText(fixture.ConfigPath));
+            }
             Assert.AreEqual(notesBaseline, File.ReadAllText(notesPath));
             Assert.AreEqual(noteData.Color, notes.GetNote(noteData.Id).Color);
             Assert.AreEqual(noteData.Document.GetPlainText(), notes.GetNote(noteData.Id).Document.GetPlainText());
@@ -1308,10 +1330,8 @@ public sealed class SettingsAndStatsTests
             var document = editor.Document;
             ((ComboBox)settings.FindName("DefaultColorComboBox")).SelectedItem = NoteColor.Blue;
             Assert.AreEqual("blue", Effective().DefaultColor);
-            ((ComboBox)settings.FindName("ThemeComboBox")).SelectedItem = NoteTheme.Dark;
             foreach (var surface in new FrameworkElement[] { settings, notesList, note, pet.ContextMenu! })
-                Assert.AreEqual("#FF202020", ((SolidColorBrush)surface.Resources["NotesSurfaceBrush"]).Color.ToString());
-            var darkTray = tray.BackColor;
+                Assert.AreEqual("#FFF7F7F7", ((SolidColorBrush)surface.Resources["NotesSurfaceBrush"]).Color.ToString());
             ((TextBox)settings.FindName("TextSizeInput")).Text = "24";
             Assert.AreEqual(24.0, document.FontSize);
             ((Slider)settings.FindName("LineSpacingSlider")).Value = 1;
@@ -1342,7 +1362,6 @@ public sealed class SettingsAndStatsTests
             {
                 Assert.IsTrue(double.IsNaN(document.LineHeight));
                 Assert.AreEqual(LineStackingStrategy.MaxHeight, document.LineStackingStrategy);
-                Assert.AreNotEqual(darkTray, tray.BackColor);
                 Assert.AreEqual(configBaseline, File.ReadAllText(fixture.ConfigPath));
             }
             Assert.AreEqual(notesBaseline, File.ReadAllText(notesPath));
@@ -1362,7 +1381,6 @@ public sealed class SettingsAndStatsTests
     }
 
     [TestMethod]
-    [DataRow("theme")]
     [DataRow("text-size")]
     [DataRow("line-spacing")]
     public void FailedNotesPreviewRestoresControlsAndPreservesConfiguration(string field)
@@ -1373,9 +1391,7 @@ public sealed class SettingsAndStatsTests
         var settings = fixture.Settings(_ => throw new InvalidOperationException("simulated preview failure"));
         try
         {
-            if (field == "theme") ((ComboBox)settings.FindName("ThemeComboBox")).SelectedItem = NoteTheme.Dark;
-            else ((TextBox)settings.FindName(field == "text-size" ? "TextSizeInput" : "LineSpacingInput")).Text = field == "text-size" ? "024" : 1.0.ToString("0.00", CultureInfo.CurrentCulture);
-            Assert.AreEqual(NoteTheme.Light, ((ComboBox)settings.FindName("ThemeComboBox")).SelectedItem);
+            ((TextBox)settings.FindName(field == "text-size" ? "TextSizeInput" : "LineSpacingInput")).Text = field == "text-size" ? "024" : 1.0.ToString("0.00", CultureInfo.CurrentCulture);
             Assert.AreEqual("16", ((TextBox)settings.FindName("TextSizeInput")).Text);
             Assert.AreEqual("2", ((TextBox)settings.FindName("LineSpacingInput")).Text);
             Assert.AreEqual(baseline, File.ReadAllText(fixture.ConfigPath));
@@ -1460,6 +1476,84 @@ public sealed class SettingsAndStatsTests
             Assert.IsFalse(File.Exists(fixture.ConfigPath));
         }
         finally { settings.Close(); }
+    }
+
+    [TestMethod]
+    [DataRow("preview")]
+    [DataRow("save")]
+    public void FailedHoodThemeChangeRestoresTheThemeAndPreservesSavedSettings(string failure)
+    {
+        using var fixture = new Fixture("light");
+        fixture.Store.Save(fixture.Controller.Current);
+        var baseline = File.ReadAllText(fixture.ConfigPath);
+        var pet = fixture.Pet();
+        var effective = "light";
+        var settings = (SettingsWindow)Activator.CreateInstance(typeof(SettingsWindow), BindingFlags.Instance | BindingFlags.NonPublic,
+            null, [fixture.Controller, pet, UiStyleCatalog.StickyNotes, (Action<string>)(_ => { }), "light", (Action<string>)(theme =>
+            {
+                if (failure == "preview" && theme == "dark") throw new InvalidOperationException("simulated preview failure");
+                effective = theme;
+            })], null)!;
+        try
+        {
+            var selector = (ComboBox)settings.FindName("ThemeComboBox");
+            selector.SelectedItem = NoteTheme.Dark;
+            if (failure == "save")
+            {
+                Assert.AreEqual("dark", effective);
+                using var locked = new FileStream(fixture.ConfigPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                typeof(SettingsWindow).GetMethod("OnSaveClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(settings, [settings, new RoutedEventArgs(Button.ClickEvent)]);
+            }
+            Assert.AreEqual("light", effective);
+            Assert.AreEqual(NoteTheme.Light, selector.SelectedItem);
+            Assert.AreEqual("light", fixture.Controller.Current.Notes.Theme);
+            Assert.AreEqual(baseline, File.ReadAllText(fixture.ConfigPath));
+            Assert.AreEqual(Visibility.Visible, ((TextBlock)settings.FindName("AppearanceErrorText")).Visibility);
+        }
+        finally { settings.Close(); pet.Close(); }
+    }
+
+    [TestMethod]
+    [DataRow(false, false)]
+    [DataRow(false, true)]
+    [DataRow(true, false)]
+    [DataRow(true, true)]
+    public void HoodThemeAndNotesSettingsCanSaveOrCancelIndependently(bool saveNotes, bool saveHood)
+    {
+        using var fixture = new Fixture("light");
+        fixture.Store.Save(fixture.Controller.Current);
+        var effective = fixture.Controller.Current.Notes;
+        var pet = fixture.Pet();
+        SettingsWindow? hood = null;
+        var notes = fixture.Settings(candidate => { effective = candidate; hood?.ApplyTheme(candidate.Theme); });
+        hood = (SettingsWindow)Activator.CreateInstance(typeof(SettingsWindow), BindingFlags.Instance | BindingFlags.NonPublic,
+            null, [fixture.Controller, pet, UiStyleCatalog.StickyNotes, (Action<string>)(_ => { }), "light", (Action<string>)(theme =>
+            {
+                effective = effective with { Theme = theme };
+                notes.ApplyEffectiveSettings(effective);
+            })], null)!;
+        try
+        {
+            ((Slider)notes.FindName("TextSizeSlider")).Value = 24;
+            ((ComboBox)hood.FindName("ThemeComboBox")).SelectedItem = NoteTheme.Dark;
+            Assert.AreEqual(24, effective.TextSize);
+            Assert.AreEqual("dark", effective.Theme);
+            if (saveNotes)
+                typeof(NotesSettingsWindow).GetMethod("OnSaveClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(notes, [notes, new RoutedEventArgs(Button.ClickEvent)]);
+            else notes.Close();
+            Assert.AreEqual("dark", effective.Theme, "Notes must preserve Hood's active theme preview.");
+            Assert.AreEqual("light", fixture.Store.LoadOrCreate().Notes.Theme, "Saving Notes must not save Hood's unsaved preview.");
+            if (saveHood)
+                typeof(SettingsWindow).GetMethod("OnSaveClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(hood, [hood, new RoutedEventArgs(Button.ClickEvent)]);
+            else hood.Close();
+            Assert.AreEqual(saveHood ? "dark" : "light", effective.Theme);
+            Assert.AreEqual(saveNotes ? 24 : 16, effective.TextSize);
+            Assert.AreEqual(effective, fixture.Store.LoadOrCreate().Notes);
+        }
+        finally { notes.Close(); hood.Close(); pet.Close(); }
     }
 
     private static void ShowHidden(Window window)

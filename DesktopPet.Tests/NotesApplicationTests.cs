@@ -59,6 +59,99 @@ public sealed class NotesApplicationTests
     }
 
     [TestMethod]
+    public void MixedDocumentsKeepSemanticsAcrossHistoryRealStoreSearchAndTrash()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new JsonNotesStore(Path.Combine(directory.Path, "notes.json"));
+        var app = NotesApplication.Start(store);
+        var noteId = app.CreateNote();
+        var otherId = app.CreateNote();
+        var document = CreateMixedDocument();
+        var bounds = new NoteBounds(420, 230, 480, 360);
+        app.UpdateDocument(noteId, document);
+        app.UpdateName(noteId, "Mixed plan");
+        app.UpdateColor(noteId, NoteColor.Lavender);
+        app.UpdateBounds(noteId, bounds);
+        app.UpdateDocument(otherId, NotesDocument.FromText("Independent note"));
+        Assert.IsTrue(app.TryCloseNote(otherId, out var closeError), closeError);
+
+        Assert.IsTrue(app.Undo(noteId));
+        Assert.AreEqual(string.Empty, app.GetNote(noteId).Text);
+        Assert.IsTrue(app.Redo(noteId));
+        Assert.AreEqual(JsonSerializer.Serialize(document), JsonSerializer.Serialize(app.GetNote(noteId).Document));
+
+        var overLimit = document.Copy();
+        var currentLength = document.GetPlainText().Length +
+            document.Paragraphs.SelectMany(row => row.Runs)
+                .Where(run => run.Kind == NoteInlineKind.Link).Sum(run => run.LinkDestination!.Length);
+        overLimit.Paragraphs.Add(new NoteParagraph
+        {
+            Runs = [
+                new NoteTextRun(new string('x', NotesSnapshotValidator.MaximumTextCharacters - currentLength - 1)),
+                new NoteTextRun("x", NoteTextStyle.None, NoteInlineKind.Link, "https://example.com")
+            ]
+        });
+        Assert.IsTrue(overLimit.GetPlainText().Length <= NotesSnapshotValidator.MaximumTextCharacters);
+        Assert.Throws<InvalidDataException>(() => app.UpdateDocument(noteId, overLimit));
+        Assert.AreEqual(JsonSerializer.Serialize(document), JsonSerializer.Serialize(app.GetNote(noteId).Document));
+
+        app.SetGroupVisible(false);
+        var restarted = NotesApplication.Start(new JsonNotesStore(store.StorePath));
+        Assert.AreEqual(2, restarted.Notes.Count);
+        CollectionAssert.AreEqual(new[] { noteId }, restarted.OpenNoteIds.ToArray());
+        Assert.IsFalse(restarted.GroupVisible);
+        var search = restarted.Search("QueryLabel").Single();
+        Assert.AreEqual(noteId, search.Id);
+        Assert.IsTrue(search.Preview.Contains("Mixed plan", StringComparison.Ordinal));
+        Assert.IsTrue(search.Preview.Contains("$x_1$", StringComparison.Ordinal));
+        Assert.AreEqual(NoteColor.Lavender, restarted.GetNote(noteId).Color);
+        Assert.AreEqual(bounds, restarted.GetNote(noteId).Bounds);
+        Assert.AreEqual(JsonSerializer.Serialize(document), JsonSerializer.Serialize(restarted.GetNote(noteId).Document));
+
+        Assert.IsTrue(restarted.TryMoveToTrash(noteId, out var trashError), trashError);
+        var trashed = NotesApplication.Start(new JsonNotesStore(store.StorePath));
+        var trashedNote = trashed.Trash.Single();
+        Assert.AreEqual(noteId, trashedNote.Id);
+        Assert.AreEqual(JsonSerializer.Serialize(document), JsonSerializer.Serialize(trashedNote.Document));
+        Assert.AreEqual(NoteColor.Lavender, trashedNote.Color);
+        Assert.AreEqual(bounds, trashedNote.Bounds);
+        Assert.AreEqual(noteId, trashed.SearchTrash("QueryLabel").Single().Id);
+        Assert.AreEqual(0, trashed.Search("QueryLabel").Count);
+
+        Assert.IsTrue(trashed.TryRestoreFromTrash(noteId, out var restoreError), restoreError);
+        var restored = NotesApplication.Start(new JsonNotesStore(store.StorePath));
+        Assert.AreEqual(JsonSerializer.Serialize(document), JsonSerializer.Serialize(restored.GetNote(noteId).Document));
+        Assert.AreEqual("Mixed plan", restored.GetNote(noteId).Name);
+        Assert.AreEqual(NoteColor.Lavender, restored.GetNote(noteId).Color);
+        Assert.AreEqual(bounds, restored.GetNote(noteId).Bounds);
+        CollectionAssert.AreEqual(Array.Empty<Guid>(), restored.OpenNoteIds.ToArray());
+        Assert.IsFalse(restored.GroupVisible);
+    }
+
+    [TestMethod]
+    public void FailedMixedDocumentSaveKeepsAcceptedAndEditableContentForRetry()
+    {
+        var store = new SwitchableNotesStore();
+        var app = NotesApplication.Start(store);
+        var noteId = app.CreateNote();
+        var accepted = NotesDocument.FromText("previous saved content");
+        app.UpdateDocument(noteId, accepted);
+        store.ShouldFail = true;
+
+        var mixed = CreateMixedDocument();
+        app.UpdateDocument(noteId, mixed);
+
+        Assert.IsTrue(app.HasUnsavedChanges);
+        Assert.AreEqual(JsonSerializer.Serialize(accepted), JsonSerializer.Serialize(store.Load()!.Notes.Single().Document));
+        Assert.AreEqual(JsonSerializer.Serialize(mixed), JsonSerializer.Serialize(app.GetNote(noteId).Document));
+        store.ShouldFail = false;
+        Assert.IsTrue(app.Flush());
+        var reloaded = NotesApplication.Start(store);
+        Assert.AreEqual(JsonSerializer.Serialize(mixed), JsonSerializer.Serialize(reloaded.GetNote(noteId).Document));
+        Assert.IsFalse(reloaded.HasUnsavedChanges);
+    }
+
+    [TestMethod]
     public void CodeFormattingSurvivesUndoRedoSaveRestartAndSearch()
     {
         using var directory = new TemporaryDirectory();
@@ -194,7 +287,7 @@ public sealed class NotesApplicationTests
         File.WriteAllText(path, $$"""
             {
               "schemaVersion": 3,
-              "notes": [{ "id": "{{id}}", "document": { "paragraphs": [{ "runs": [{ "text": "Existing text" }] }] } }],
+              "notes": [{ "id": "{{id}}", "document": { "paragraphs": [{ "runs": [{ "text": "## existing $x$ https://example.com" }] }] } }],
               "openNoteIds": ["{{id}}"],
               "groupVisible": true,
               "firstActivationCompleted": true
@@ -206,7 +299,8 @@ public sealed class NotesApplicationTests
 
         var restored = NotesApplication.Start(new JsonNotesStore(path));
         Assert.AreEqual("Existing note renamed", restored.GetNote(id).Name);
-        Assert.AreEqual("Existing text", restored.GetNote(id).Text);
+        Assert.AreEqual("## existing $x$ https://example.com", restored.GetNote(id).Text);
+        Assert.AreEqual(NoteBlockKind.Paragraph, restored.GetNote(id).Document.Paragraphs.Single().Kind);
         Assert.IsTrue(restored.GroupVisible);
         Assert.AreEqual(id, restored.OpenNoteIds.Single());
     }
@@ -486,7 +580,7 @@ public sealed class NotesApplicationTests
 
         foreach (var damaged in new[]
         {
-            valid.Replace("\"schemaVersion\": 3", "\"schemaVersion\": 99", StringComparison.Ordinal),
+            valid.Replace($"\"schemaVersion\": {NotesSnapshot.CurrentSchemaVersion}", "\"schemaVersion\": 99", StringComparison.Ordinal),
             valid.Replace("\"width\": 320", "\"width\": 0", StringComparison.Ordinal),
             valid.Replace("\"kind\": \"paragraph\"", "\"kind\": \"unsupported\"", StringComparison.Ordinal)
         })
@@ -670,7 +764,7 @@ public sealed class NotesApplicationTests
         var store = new JsonNotesStore(path);
         var migrated = store.Load()!;
 
-        Assert.AreEqual(3, migrated.SchemaVersion);
+        Assert.AreEqual(NotesSnapshot.CurrentSchemaVersion, migrated.SchemaVersion);
         Assert.AreEqual(noteId, migrated.Notes.Single().Id);
         Assert.AreEqual(NoteColor.Yellow, migrated.Notes.Single().Color);
         Assert.AreEqual("first line\r\nsecond line", migrated.Notes.Single().Text);
@@ -680,7 +774,87 @@ public sealed class NotesApplicationTests
         store.Save(migrated);
         var restored = store.Load()!;
         Assert.AreEqual("first line\r\nsecond line", restored.Notes.Single().Text);
-        Assert.AreEqual(3, restored.SchemaVersion);
+        Assert.AreEqual(NotesSnapshot.CurrentSchemaVersion, restored.SchemaVersion);
+    }
+
+    [TestMethod]
+    public void JsonNotesStore_MigratesVersionFourWithoutReinterpretingLiteralMath()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "notes.json");
+        var noteId = Guid.NewGuid();
+        const string literal = "## old $x$ https://example.com";
+        File.WriteAllText(path, $$"""
+            {
+              "schemaVersion": 4,
+              "notes": [{
+                "id": "{{noteId}}",
+                "name": "Legacy",
+                "document": {
+                  "paragraphs": [{
+                    "kind": "heading2",
+                    "runs": [{ "text": "{{literal}}", "style": "none" }]
+                  }]
+                }
+              }],
+              "openNoteIds": ["{{noteId}}"],
+              "groupVisible": true,
+              "firstActivationCompleted": true
+            }
+            """);
+
+        var app = NotesApplication.Start(new JsonNotesStore(path));
+        var restored = app.GetNote(noteId).Document.Paragraphs.Single().Runs.Single();
+
+        Assert.AreEqual(NotesSnapshot.CurrentSchemaVersion, new JsonNotesStore(path).Load()!.SchemaVersion);
+        Assert.AreEqual(literal, restored.Text);
+        Assert.AreEqual(NoteInlineKind.Text, restored.Kind);
+        Assert.AreEqual(NoteBlockKind.Heading2, app.GetNote(noteId).Document.Paragraphs.Single().Kind);
+    }
+
+    [TestMethod]
+    public void InlineMathSourceSurvivesHistoryRestartCloseTrashAndRestore()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "notes.json");
+        var store = new JsonNotesStore(path);
+        var app = NotesApplication.Start(store);
+        var noteId = app.CreateNote();
+        var document = new NotesDocument
+        {
+            Paragraphs =
+            [
+                new NoteParagraph { Runs = [new NoteTextRun("$x^2$", NoteTextStyle.None, NoteInlineKind.InlineMath)] },
+                new NoteParagraph { Runs = [new NoteTextRun("$\\unknowncommand$", NoteTextStyle.None, NoteInlineKind.InlineMath)] },
+                new NoteParagraph { Runs = [new NoteTextRun("$unfinished")] }
+            ]
+        };
+        app.UpdateDocument(noteId, document);
+
+        Assert.IsTrue(app.Undo(noteId));
+        Assert.AreEqual(string.Empty, app.GetNote(noteId).Text);
+        Assert.IsTrue(app.Redo(noteId));
+        Assert.AreEqual(document.GetPlainText(), app.GetNote(noteId).Text);
+        Assert.IsTrue(app.TryCloseNote(noteId, out var closeError), closeError);
+
+        var reopened = NotesApplication.Start(new JsonNotesStore(path));
+        Assert.IsFalse(reopened.OpenNoteIds.Contains(noteId));
+        reopened.OpenNote(noteId);
+        Assert.AreEqual("$x^2$", reopened.GetNote(noteId).Document.Paragraphs[0].Runs.Single().Text);
+
+        Assert.IsTrue(reopened.TryMoveToTrash(noteId, out var trashError), trashError);
+        var trashed = NotesApplication.Start(new JsonNotesStore(path));
+        Assert.AreEqual(document.GetPlainText(), trashed.Trash.Single().Text);
+        Assert.IsTrue(trashed.TryRestoreFromTrash(noteId, out var restoreError), restoreError);
+
+        var restored = NotesApplication.Start(new JsonNotesStore(path)).GetNote(noteId).Document;
+        Assert.AreEqual(document.GetPlainText(), restored.GetPlainText());
+        Assert.AreEqual(NoteInlineKind.InlineMath, restored.Paragraphs[0].Runs.Single().Kind);
+        Assert.AreEqual("$\\unknowncommand$", restored.Paragraphs[1].Runs.Single().Text);
+        Assert.AreEqual(NoteInlineKind.InlineMath, restored.Paragraphs[1].Runs.Single().Kind);
+        Assert.AreEqual("$unfinished", restored.Paragraphs[2].Runs.Single().Text);
+        Assert.AreEqual(NoteInlineKind.Text, restored.Paragraphs[2].Runs.Single().Kind);
+        NotesSnapshotValidator.ValidateDocument(restored);
     }
 
     [TestMethod]
@@ -705,7 +879,7 @@ public sealed class NotesApplicationTests
 
         var loaded = NotesApplication.Start(new JsonNotesStore(path));
 
-        Assert.AreEqual(3, new JsonNotesStore(path).Load()!.SchemaVersion);
+        Assert.AreEqual(NotesSnapshot.CurrentSchemaVersion, new JsonNotesStore(path).Load()!.SchemaVersion);
         Assert.AreEqual("old note", loaded.GetNote(noteId).Text);
         Assert.AreEqual(NoteColor.Yellow, loaded.GetNote(noteId).Color);
     }
@@ -1194,6 +1368,77 @@ public sealed class NotesApplicationTests
         Assert.IsTrue(restored.FirstActivationCompleted);
         Assert.AreEqual(petState, File.ReadAllText(petStatePath));
         Assert.AreEqual(configuration, File.ReadAllText(configurationPath));
+    }
+
+    private static NotesDocument CreateMixedDocument()
+    {
+        const string destination = "https://example.com/a_(b)?q=x&value=y#part";
+        var table = NoteTableTests.Parse();
+        table.Paragraphs[3].Runs =
+        [
+            new NoteTextRun("Table ", NoteTextStyle.Bold),
+            new NoteTextRun("$\\frac{a}{b}$", NoteTextStyle.None, NoteInlineKind.InlineMath)
+        ];
+        table.Paragraphs[4].Runs =
+        [
+            new NoteTextRun("QueryLabel", NoteTextStyle.Italic, NoteInlineKind.Link, destination)
+        ];
+
+        var document = new NotesDocument
+        {
+            Paragraphs =
+            [
+                new NoteParagraph
+                {
+                    Kind = NoteBlockKind.Heading2,
+                    Runs = [
+                        new NoteTextRun("Mixed plan ", NoteTextStyle.Bold),
+                        new NoteTextRun("$x_1$", NoteTextStyle.None, NoteInlineKind.InlineMath),
+                        new NoteTextRun(" "),
+                        new NoteTextRun("QueryLabel", NoteTextStyle.Underline, NoteInlineKind.Link, destination)
+                    ]
+                },
+                new NoteParagraph
+                {
+                    Kind = NoteBlockKind.Bulleted,
+                    Runs = [
+                        new NoteTextRun("bullet ", NoteTextStyle.Italic),
+                        new NoteTextRun("$y$ ", NoteTextStyle.None, NoteInlineKind.InlineMath),
+                        new NoteTextRun("details", NoteTextStyle.None, NoteInlineKind.Link, destination)
+                    ]
+                },
+                new NoteParagraph
+                {
+                    Kind = NoteBlockKind.Numbered,
+                    Runs = [new NoteTextRun("numbered **literal** and " + (char)96 + "literal" + (char)96)]
+                },
+                new NoteParagraph
+                {
+                    Kind = NoteBlockKind.Checklist, IsChecked = true,
+                    Runs = [
+                        new NoteTextRun("checked ", NoteTextStyle.Strikethrough),
+                        new NoteTextRun("$z$", NoteTextStyle.None, NoteInlineKind.InlineMath),
+                        new NoteTextRun(" link", NoteTextStyle.Bold, NoteInlineKind.Link, destination),
+                        new NoteTextRun("\nsoft break with literal [label](https://old.example) " +
+                            (char)92 + "| " + (char)92 + (char)92)
+                    ]
+                },
+                new NoteParagraph
+                {
+                    Kind = NoteBlockKind.Code,
+                    Runs = [new NoteTextRun("code **literal** $math$ [link](https://old.example)", NoteTextStyle.Code)]
+                },
+                new NoteParagraph { Kind = NoteBlockKind.Divider },
+                new NoteParagraph
+                {
+                    Kind = NoteBlockKind.DisplayMath,
+                    Runs = [new NoteTextRun("$$" + Environment.NewLine + (char)92 + "sum_{i=1}^{n} i$$")]
+                }
+            ]
+        };
+        document.Paragraphs.AddRange(table.Paragraphs);
+        NotesSnapshotValidator.ValidateDocument(document);
+        return document;
     }
 
     private sealed class TemporaryDirectory : IDisposable

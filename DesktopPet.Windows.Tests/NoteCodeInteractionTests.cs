@@ -308,9 +308,9 @@ public sealed class NoteCodeInteractionTests
             ExitCode(window);
             Type(editor, "after");
             Pump(window);
-            Assert.AreEqual(NoteBlockKind.Paragraph, saved.Paragraphs.Last().Kind);
-            Assert.AreEqual(NoteTextStyle.None, saved.Paragraphs.Last().Runs.Single().Style);
-            Assert.AreEqual("  first\r\n\tsecond `literal`\r\n  third\r\nafter", saved.GetPlainText());
+            Assert.AreEqual(NoteBlockKind.Paragraph, saved.Paragraphs[1].Kind);
+            Assert.AreEqual(NoteTextStyle.None, saved.Paragraphs[1].Runs.Single().Style);
+            Assert.AreEqual("  first\r\n\tsecond `literal`\r\n  third\r\nafter\r\n", saved.GetPlainText());
         }
         finally { window.CloseWithoutMembershipChange(); }
     }
@@ -348,7 +348,7 @@ public sealed class NoteCodeInteractionTests
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public void ExitReopenedCodeReusesOrdinaryParagraphAndFollowingTypingIsPlain(bool existingParagraph)
+    public void ExitReopenedCodeCreatesOrdinaryParagraphAndFollowingTypingIsPlain(bool existingParagraph)
     {
         var source = new NotesDocument
         {
@@ -365,18 +365,18 @@ public sealed class NoteCodeInteractionTests
             editor.CaretPosition = ((Paragraph)editor.Document.Blocks.FirstBlock).ContentEnd;
             ExitCode(window);
             Assert.IsNotNull(saved);
-            Assert.AreEqual(2, saved.Paragraphs.Count);
-            Assert.AreSame(editor.Document.Blocks.LastBlock, editor.CaretPosition.Paragraph);
+            Assert.AreEqual(existingParagraph ? 3 : 2, saved.Paragraphs.Count);
+            Assert.AreSame(editor.Document.Blocks.ElementAt(1), editor.CaretPosition.Paragraph);
             Type(editor, "after");
             Pump(window);
-            Assert.AreEqual("code\r\nafter", saved.GetPlainText());
-            Assert.AreEqual(NoteTextStyle.None, saved.Paragraphs.Last().Runs.Single().Style);
+            Assert.AreEqual("code\r\nafter" + (existingParagraph ? "\r\n" : ""), saved.GetPlainText());
+            Assert.AreEqual(NoteTextStyle.None, saved.Paragraphs[1].Runs.Single().Style);
         }
         finally { window.CloseWithoutMembershipChange(); }
     }
 
     private static void ExitCode(NoteWindow window) => Assert.IsTrue((bool)typeof(NoteWindow)
-        .GetMethod("ContinueCodeAtCaret", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [true])!);
+        .GetMethod("HandleEditorKey", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [Key.Enter, true, false])!);
 
     private static NoteWindow CreateWindow(NotesDocument document, Action<NotesDocument> save, string theme = "dark") => new(
         new HoodNote { Document = document },

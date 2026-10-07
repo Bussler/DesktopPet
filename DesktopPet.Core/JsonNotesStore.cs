@@ -71,18 +71,18 @@ public sealed class JsonNotesStore : INotesStore
                 throw new InvalidDataException("Saved notes must be a JSON object with an integer schemaVersion.");
             }
 
-            if (version is not (1 or 2 or 3))
+            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or NotesSnapshot.CurrentSchemaVersion))
             {
-                throw new InvalidDataException($"Saved notes schema version {version} is unsupported; version 3 is required.");
+                throw new InvalidDataException($"Saved notes schema version {version} is unsupported; version {NotesSnapshot.CurrentSchemaVersion} is required.");
             }
 
             var snapshot = version switch
             {
                 1 => MigrateVersionOne(json),
-                2 => MigrateVersionTwo(json),
-                3 => JsonSerializer.Deserialize<NotesSnapshot>(json, JsonOptions)
+                2 or 3 or 4 or 5 or 6 => MigrateSnapshot(json, version),
+                NotesSnapshot.CurrentSchemaVersion => JsonSerializer.Deserialize<NotesSnapshot>(json, JsonOptions)
                     ?? throw new InvalidDataException("The saved notes file is empty."),
-                _ => throw new InvalidDataException($"Saved notes schema version {version} is unsupported; version 3 is required.")
+                _ => throw new InvalidDataException($"Saved notes schema version {version} is unsupported; version {NotesSnapshot.CurrentSchemaVersion} is required.")
             };
             NotesSnapshotValidator.Validate(snapshot);
             return snapshot;
@@ -160,7 +160,7 @@ public sealed class JsonNotesStore : INotesStore
 
         return new NotesSnapshot
         {
-            SchemaVersion = 3,
+            SchemaVersion = NotesSnapshot.CurrentSchemaVersion,
             Notes = legacy.Notes.Select(note => new HoodNote
             {
                 Id = note.Id,
@@ -173,12 +173,12 @@ public sealed class JsonNotesStore : INotesStore
         };
     }
 
-    private static NotesSnapshot MigrateVersionTwo(string json)
+    private static NotesSnapshot MigrateSnapshot(string json, int version)
     {
-        var legacy = JsonSerializer.Deserialize<NotesSnapshot>(json, JsonOptions)
-            ?? throw new InvalidDataException("The version 2 saved notes file is empty.");
-        legacy.SchemaVersion = 3;
-        return legacy;
+        var snapshot = JsonSerializer.Deserialize<NotesSnapshot>(json, JsonOptions)
+            ?? throw new InvalidDataException($"The version {version} saved notes file is empty.");
+        snapshot.SchemaVersion = NotesSnapshot.CurrentSchemaVersion;
+        return snapshot;
     }
 
     private sealed class NotesSnapshotV1

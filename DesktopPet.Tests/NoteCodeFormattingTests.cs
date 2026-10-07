@@ -91,6 +91,32 @@ public sealed class NoteCodeFormattingTests
     }
 
     [TestMethod]
+    public void InlineAndDisplayMathSourceIsProtectedFromInlineCodeConversion()
+    {
+        const char marker = '\x60';
+        var sourceText = "$" + marker + "literal" + marker + "$ and " + marker + "ordinary" + marker;
+        var source = NotesDocument.FromText(sourceText);
+        var start = sourceText.Length;
+        var length = 0;
+
+        var result = NoteCodeFormatting.Apply(source, ref start, ref length);
+
+        Assert.AreEqual("$" + marker + "literal" + marker + "$ and ordinary", result.GetPlainText());
+        Assert.AreEqual(NoteTextStyle.None, result.Paragraphs[0].Runs
+            .Single(run => run.Text.Contains("literal", StringComparison.Ordinal)).Style);
+        Assert.AreEqual(NoteTextStyle.Code, result.Paragraphs[0].Runs.Single(run => run.Text == "ordinary").Style);
+
+        var displayText = "$$\r\n" + marker + "literal" + marker + "\r\n$$\r\n" +
+                          marker + "ordinary" + marker;
+        var display = NotesDocument.FromText(displayText);
+        start = display.GetPlainText().Length;
+        result = NoteCodeFormatting.Apply(display, ref start, ref length);
+        Assert.AreEqual("$$\r\n" + marker + "literal" + marker + "\r\n$$\r\nordinary", result.GetPlainText());
+        Assert.AreEqual(NoteTextStyle.None, result.Paragraphs[1].Runs.Single().Style);
+        Assert.AreEqual(NoteTextStyle.Code, result.Paragraphs[^1].Runs.Single().Style);
+    }
+
+    [TestMethod]
     public void CaretInsideFenceOrInlineMarkersStaysWithinTheConvertedDocument()
     {
         foreach (var text in new[] { "a `code` z", "before\r\n```\r\none\r\ntwo\r\n```\r\nafter", "```\r\n```" })

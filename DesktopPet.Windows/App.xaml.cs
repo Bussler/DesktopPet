@@ -387,7 +387,8 @@ public partial class App : System.Windows.Application
             "HoodDesktopPet",
             "config.yaml"));
         _settingsWindow = new SettingsWindow(
-            new HoodConfigurationController(_session, store, _startupRegistration), _petWindow, _effectiveUiStyle, ApplyUiStyle);
+            new HoodConfigurationController(_session, store, _startupRegistration), _petWindow, _effectiveUiStyle, ApplyUiStyle,
+            _effectiveNotesSettings.Theme, ApplyTheme);
         _settingsWindow.ApplyTheme(_effectiveNotesSettings.Theme, _effectiveUiStyle);
         _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         _settingsWindow.Show();
@@ -443,6 +444,8 @@ public partial class App : System.Windows.Application
             window.ApplyAppearance(settings, _notes.GetNote(noteId).Color, _effectiveUiStyle);
         }
     }
+
+    private void ApplyTheme(string theme) => ApplyNotesSettings(_effectiveNotesSettings with { Theme = theme });
 
     private void ApplyNotesSettings(NotesConfiguration settings)
     {

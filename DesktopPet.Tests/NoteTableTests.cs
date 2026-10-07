@@ -147,6 +147,39 @@ public sealed class NoteTableTests
     }
 
     [TestMethod]
+    public void MarkdownRoundTripPreservesMathLinksStylesAndLiteralMarkers()
+    {
+        const string destination = "https://example.com/a_(b)?q=x&value=y#part";
+        var source = Parse("| Head |\r\n| --- |\r\n| content |");
+        var body = source.Paragraphs[1];
+        body.Runs = [
+            new NoteTextRun("styled", NoteTextStyle.Bold),
+            new NoteTextRun(" "),
+            new NoteTextRun("$x^2$", NoteTextStyle.None, NoteInlineKind.InlineMath),
+            new NoteTextRun(" "),
+            new NoteTextRun("Link", NoteTextStyle.Italic, NoteInlineKind.Link, destination),
+            new NoteTextRun("\nliteral **bold** $math$ [link](https://old.example) https://old.example")
+        ];
+        var tableId = body.Cell!.TableId;
+
+        var markdown = NoteTableMarkdown.Write(source, tableId);
+        var restored = Parse(markdown);
+
+        Assert.AreEqual(source.GetPlainText(), restored.GetPlainText());
+        Assert.AreEqual(NoteTextStyle.Bold, restored.Paragraphs[1].Runs[0].Style);
+        Assert.AreEqual(NoteInlineKind.InlineMath, restored.Paragraphs[1].Runs.Single(run => run.Kind == NoteInlineKind.InlineMath).Kind);
+        Assert.AreEqual("$x^2$", restored.Paragraphs[1].Runs.Single(run => run.Kind == NoteInlineKind.InlineMath).Text);
+        var link = restored.Paragraphs[1].Runs.Single(run => run.Kind == NoteInlineKind.Link);
+        Assert.AreEqual("Link", link.Text);
+        Assert.AreEqual(destination, link.LinkDestination);
+        Assert.IsTrue(restored.Paragraphs[1].Runs.Any(run => run.Text.Contains("**bold**", StringComparison.Ordinal) &&
+            run.Kind == NoteInlineKind.Text));
+        Assert.IsFalse(restored.Paragraphs.SelectMany(row => row.Runs).Any(run => run.Kind == NoteInlineKind.Link &&
+            run.LinkDestination == "https://old.example"));
+        NotesSnapshotValidator.ValidateDocument(restored);
+    }
+
+    [TestMethod]
     public void EscapedTrailingPipesAndMeaningfulWhitespaceSurviveMarkdown()
     {
         var document = Parse("A | B\r\n--- | ---\r\nleft | right\\|");

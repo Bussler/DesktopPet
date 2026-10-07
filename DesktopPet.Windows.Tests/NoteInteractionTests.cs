@@ -17,6 +17,45 @@ namespace DesktopPet.Windows.Tests;
 public sealed class NoteInteractionTests
 {
     [TestMethod]
+    public void InactiveNoteKeepsItsTitleAndEditorBoundsWhileControlsStayHidden()
+    {
+        var window = CreateChecklistWindow(_ => { });
+        var other = new Window();
+        try
+        {
+            ShowHidden(window);
+            var title = (TextBox)window.FindName("NoteTitle");
+            var toolbar = (StackPanel)window.FindName("FormattingToolbar");
+            var editor = (RichTextBox)window.FindName("Editor");
+            var buttons = new[] { "NewNoteButton", "MenuButton", "CloseButton" }
+                .Select(name => (Button)window.FindName(name)).ToArray();
+            Assert.IsTrue(window.IsActive);
+            Assert.IsTrue(title.IsVisible);
+            Assert.IsTrue(buttons.All(button => button.IsVisible));
+            Assert.IsTrue(toolbar.IsVisible);
+            var editorBounds = editor.TransformToAncestor(window).TransformBounds(new Rect(editor.RenderSize));
+
+            ShowHidden(other);
+            Assert.IsFalse(window.IsActive);
+            Assert.IsTrue(title.IsVisible, "The note name must remain visible when another window has focus.");
+            Assert.IsTrue(buttons.All(button => !button.IsVisible));
+            Assert.AreEqual(Visibility.Hidden, toolbar.Visibility);
+            window.UpdateLayout();
+            Assert.AreEqual(editorBounds, editor.TransformToAncestor(window).TransformBounds(new Rect(editor.RenderSize)));
+
+            var menu = buttons[1].ContextMenu!;
+            menu.PlacementTarget = buttons[1];
+            menu.IsOpen = true;
+            Pump(window);
+            Assert.IsTrue(title.IsVisible);
+            Assert.IsTrue(buttons.All(button => button.IsVisible));
+            Assert.AreEqual(Visibility.Visible, toolbar.Visibility);
+            menu.IsOpen = false;
+        }
+        finally { other.Close(); window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
     public void NewNoteButtonIsInTheHeaderAndInvokesCreation()
     {
         var created = 0;
@@ -26,7 +65,7 @@ public sealed class NoteInteractionTests
         try
         {
             var button = (Button)window.FindName("NewNoteButton");
-            Assert.AreEqual(window.FindName("NoteHeader"), ((DockPanel)button.Parent).Parent);
+            Assert.AreEqual(window.FindName("NoteHeader"), ((FrameworkElement)((DockPanel)button.Parent).Parent).Parent);
             Assert.AreEqual("New note", System.Windows.Automation.AutomationProperties.GetName(button));
             button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Assert.AreEqual(1, created);
@@ -459,6 +498,58 @@ public sealed class NoteInteractionTests
             Assert.AreEqual(kind == NoteBlockKind.Checklist, saved.Paragraphs[0].IsChecked);
             Assert.AreEqual(destination.Paragraphs[0].Cell, saved.Paragraphs[0].Cell);
             Assert.IsTrue(saved.Paragraphs[0].Runs.All(item => item.Style == NoteTextStyle.Bold));
+            NotesSnapshotValidator.ValidateDocument(saved);
+        }
+        finally { source.CloseWithoutMembershipChange(); target.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    public void CheckedListClipboardKeepsMixedInlineSemanticsAndToggleState()
+    {
+        const string destination = "https://example.com/a_(b)?q=x&value=y#part";
+        var sourceDocument = new NotesDocument
+        {
+            Paragraphs = [new NoteParagraph
+            {
+                Kind = NoteBlockKind.Checklist,
+                IsChecked = true,
+                Runs = [
+                    new NoteTextRun("styled", NoteTextStyle.Bold),
+                    new NoteTextRun(" "),
+                    new NoteTextRun("$x^2$", NoteTextStyle.None, NoteInlineKind.InlineMath),
+                    new NoteTextRun(" "),
+                    new NoteTextRun("label", NoteTextStyle.Italic, NoteInlineKind.Link, destination),
+                    new NoteTextRun(" **literal** $source$ [link](https://old.example)")
+                ]
+            }]
+        };
+        NotesSnapshotValidator.ValidateDocument(sourceDocument);
+        NotesDocument? saved = null;
+        var source = CreateChecklistWindow(_ => { }, document: sourceDocument);
+        var target = CreateChecklistWindow(result => saved = result, document: NotesDocument.FromText("replace me"));
+        try
+        {
+            var sourceEditor = (RichTextBox)source.FindName("Editor");
+            var sourceParagraph = (Paragraph)((System.Windows.Documents.List)sourceEditor.Document.Blocks.FirstBlock)
+                .ListItems.FirstListItem.Blocks.FirstBlock;
+            sourceEditor.Selection.Select(sourceParagraph.ContentStart, sourceParagraph.ContentEnd);
+            var data = CopySelection(sourceEditor);
+
+            var targetEditor = (RichTextBox)target.FindName("Editor");
+            targetEditor.SelectAll();
+            PasteSelection(targetEditor, data);
+            Assert.IsNotNull(saved);
+            Assert.AreEqual(sourceDocument.GetPlainText(), saved.GetPlainText());
+            Assert.AreEqual(NoteBlockKind.Checklist, saved.Paragraphs.Single().Kind);
+            Assert.IsTrue(saved.Paragraphs.Single().IsChecked);
+            CollectionAssert.AreEqual(sourceDocument.Paragraphs[0].Runs.ToArray(), saved.Paragraphs[0].Runs.ToArray());
+            Assert.IsFalse(saved.Paragraphs[0].Runs.Any(run =>
+                run.Kind == NoteInlineKind.Link && run.LinkDestination == "https://old.example"));
+
+            Click(ChecklistCheckbox(target));
+            Assert.IsNotNull(saved);
+            Assert.IsFalse(saved.Paragraphs.Single().IsChecked);
+            CollectionAssert.AreEqual(sourceDocument.Paragraphs[0].Runs.ToArray(), saved.Paragraphs[0].Runs.ToArray());
             NotesSnapshotValidator.ValidateDocument(saved);
         }
         finally { source.CloseWithoutMembershipChange(); target.CloseWithoutMembershipChange(); }
@@ -1093,7 +1184,8 @@ public sealed class NoteInteractionTests
 
     private static CheckBox ChecklistCheckbox(NoteWindow window) => (CheckBox)((Paragraph)
         ((System.Windows.Documents.List)((RichTextBox)window.FindName("Editor")).Document.Blocks.FirstBlock)
-        .ListItems.FirstListItem.Blocks.FirstBlock).Inlines.OfType<InlineUIContainer>().Single().Child;
+        .ListItems.FirstListItem.Blocks.FirstBlock).Inlines.OfType<InlineUIContainer>()
+        .Select(container => container.Child).OfType<CheckBox>().Single();
 
     // Invoke WPF's actual click/toggle path without sending mouse input to the desktop.
     private static void Click(ToggleButton button) => typeof(ToggleButton)

@@ -6,7 +6,8 @@
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
-    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <!-- WPF starts before WinForms initialization; DPI awareness belongs in the manifest. -->
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>..\Assets\Hood\hood.ico</ApplicationIcon>
   </PropertyGroup>
@@ -15,5 +16,9 @@
     <ProjectReference Include="..\DesktopPet.Core\DesktopPet.Core.csproj" />
     <EmbeddedResource Include="..\Assets\Hood\hood.ico" LogicalName="DesktopPet.Hood.ico" />
     <Content Include="..\Assets\**\hood_spritesheet.png;..\Assets\**\hood.animations.json" Link="Assets\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WpfMath" />
   </ItemGroup>
 </Project>

@@ -13,7 +13,9 @@ public partial class SettingsWindow : Window
     private readonly HoodConfigurationController _controller;
     private readonly HoodOverlayWindow _petWindow;
     private readonly Action<string> _applyUiStyle;
+    private readonly Action<string> _applyTheme;
     private readonly string _originalUiStyle;
+    private readonly string _originalTheme;
     private readonly string _originalPet;
     private readonly LoadedHoodAssets _originalAssets;
     private string _effectiveUiStyle;
@@ -28,20 +30,29 @@ public partial class SettingsWindow : Window
     }
 
     internal SettingsWindow(HoodConfigurationController controller, HoodOverlayWindow petWindow, string effectiveUiStyle)
-        : this(controller, petWindow, effectiveUiStyle, style => petWindow.ApplyAppearance(controller.Current.Notes.Theme, style))
+        : this(controller, petWindow, effectiveUiStyle, null, controller.Current.Notes.Theme, null)
     {
     }
 
     internal SettingsWindow(HoodConfigurationController controller, HoodOverlayWindow petWindow, string effectiveUiStyle, Action<string> applyUiStyle)
+        : this(controller, petWindow, effectiveUiStyle, applyUiStyle, controller.Current.Notes.Theme, null)
+    {
+    }
+
+    internal SettingsWindow(HoodConfigurationController controller, HoodOverlayWindow petWindow, string effectiveUiStyle,
+        Action<string>? applyUiStyle, string effectiveTheme, Action<string>? applyTheme)
     {
         _controller = controller;
         _petWindow = petWindow;
         _originalUiStyle = _effectiveUiStyle = UiStyleCatalog.Canonicalize(effectiveUiStyle);
+        _originalTheme = _theme = effectiveTheme;
         _originalPet = _previewPet = controller.Current.Pet;
         _originalAssets = petWindow.CurrentAssets;
-        _applyUiStyle = applyUiStyle;
+        _applyUiStyle = applyUiStyle ?? (style => petWindow.ApplyAppearance(_theme, style));
+        _applyTheme = applyTheme ?? (theme => petWindow.ApplyAppearance(theme, _effectiveUiStyle));
         InitializeComponent();
-        ApplyTheme(controller.Current.Notes.Theme, _effectiveUiStyle);
+        ThemeComboBox.ItemsSource = Enum.GetValues<NoteTheme>();
+        ApplyTheme(_theme, _effectiveUiStyle);
         LoadSettings(controller.Current);
     }
 
@@ -53,7 +64,33 @@ public partial class SettingsWindow : Window
         }
 
         _theme = theme;
+        var loading = _loadingSettings;
+        _loadingSettings = true;
+        ThemeComboBox.SelectedItem = Enum.Parse<NoteTheme>(theme, ignoreCase: true);
+        _loadingSettings = loading;
         NotesAppearance.Apply(this, theme, _effectiveUiStyle);
+    }
+
+    private void OnThemeSelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (_loadingSettings || ThemeComboBox.SelectedItem is not NoteTheme theme) return;
+        try
+        {
+            PreviewTheme(theme.ToString().ToLowerInvariant());
+            AppearanceErrorText.Visibility = Visibility.Collapsed;
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            ApplyTheme(_theme);
+            ShowAppearanceError($"Could not preview this theme. Settings were not saved. {exception.Message}");
+        }
+    }
+
+    private void PreviewTheme(string theme)
+    {
+        if (theme == _theme) return;
+        _applyTheme(theme);
+        ApplyTheme(theme);
     }
 
     private void OnUiStyleSelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
@@ -119,6 +156,7 @@ public partial class SettingsWindow : Window
         }
         _previewPet = _originalPet;
         PreviewUiStyle(_originalUiStyle);
+        PreviewTheme(_originalTheme);
     }
 
     protected override void OnClosing(CancelEventArgs e)
@@ -141,6 +179,7 @@ public partial class SettingsWindow : Window
         _loadingSettings = true;
         PetComboBox.SelectedValue = configuration.Pet;
         UiStyleComboBox.SelectedValue = configuration.UiStyle;
+        ThemeComboBox.SelectedItem = Enum.Parse<NoteTheme>(_theme, ignoreCase: true);
         ShowSpritesCheckBox.IsChecked = configuration.Behavior.ShowSprites;
         RoamingCheckBox.IsChecked = configuration.Behavior.Roaming;
         IdleAnimationsCheckBox.IsChecked = configuration.Behavior.IdleAnimations;
@@ -177,6 +216,7 @@ public partial class SettingsWindow : Window
         {
             Pet = PetComboBox.SelectedValue as string ?? PetCatalog.Hood,
             UiStyle = UiStyleComboBox.SelectedValue as string ?? UiStyleCatalog.StickyNotes,
+            Notes = previous.Notes with { Theme = ((NoteTheme)ThemeComboBox.SelectedItem).ToString().ToLowerInvariant() },
             RandomInterval = new RandomIntervalSettings { MinimumMinutes = minimum, MaximumMinutes = maximum },
             Behavior = previous.Behavior with
             {
@@ -193,6 +233,7 @@ public partial class SettingsWindow : Window
         {
             PreviewPet(candidate.Pet);
             PreviewUiStyle(candidate.UiStyle);
+            PreviewTheme(candidate.Notes.Theme);
             _petWindow.ApplyAlwaysOnTop(candidate.Behavior.AlwaysOnTop);
             _controller.SaveAndApply(BehaviorSetting, candidate);
             _saved = true;

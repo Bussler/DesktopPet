@@ -13,6 +13,7 @@ namespace DesktopPet.Windows;
 public partial class NoteWindow
 {
     private bool _tablePasteRequested;
+    private bool _blockSyntaxPasteRequested;
 
     private void CreateTableAtCaret()
     {
@@ -34,7 +35,7 @@ public partial class NoteWindow
                 else document.Paragraphs.RemoveAt(index);
             }
             document.Paragraphs.Insert(index, new NoteParagraph { Cell = new NoteTableCell(Guid.NewGuid(), 0, 0) });
-            CommitTableEdit(document, document.GetParagraphRange(index).Start);
+            CommitEditorDocument(document, document.GetParagraphRange(index).Start);
         }
         catch (Exception exception) when (exception is InvalidDataException or ArgumentException or InvalidOperationException)
         {
@@ -45,7 +46,12 @@ public partial class NoteWindow
     private void InitializeTableEditing()
     {
         Editor.ContextMenu = CreateEditorMenu();
-        Editor.SizeChanged += (_, _) => UpdateTableWidths();
+        Editor.SizeChanged += (_, _) =>
+        {
+            UpdateTableWidths();
+            RefreshInlineMathAppearance();
+        };
+        DataObject.AddPastingHandler(Editor, OnBlockSyntaxPaste);
         DataObject.AddPastingHandler(Editor, OnTablePaste);
         CommandManager.AddPreviewExecutedHandler(Editor, OnTableCopy);
     }
@@ -59,6 +65,7 @@ public partial class NoteWindow
         menu.Items.Add(new System.Windows.Controls.MenuItem { Header = "_Paste", Command = ApplicationCommands.Paste, CommandTarget = Editor });
         menu.Items.Add(new Separator());
         menu.Items.Add(CreateTableMenuItem());
+        menu.Items.Add(CreateDisplayMathMenuItem());
         return menu;
     }
 
@@ -67,6 +74,14 @@ public partial class NoteWindow
         var item = new System.Windows.Controls.MenuItem { Header = "Create _table" };
         item.Click += (_, _) => CreateTableAtCaret();
         return item;
+    }
+
+    private void OnBlockSyntaxPaste(object sender, DataObjectPastingEventArgs e)
+    {
+        _blockSyntaxPasteRequested = false;
+        if (e.IsDragDrop || e.DataObject.GetData(ListClipboardFormat) is string) return;
+        if (e.DataObject.GetData(DataFormats.UnicodeText) is string)
+            _blockSyntaxPasteRequested = true;
     }
 
     private void OnTablePaste(object sender, DataObjectPastingEventArgs e)
@@ -152,6 +167,7 @@ public partial class NoteWindow
         menu.Items.Add(copy);
         menu.Items.Add(new Separator());
         menu.Items.Add(CreateTableMenuItem());
+        menu.Items.Add(CreateDisplayMathMenuItem());
         return menu;
 
         void Add(string label, NoteTableChange change, bool after)
@@ -181,7 +197,7 @@ public partial class NoteWindow
                 (change is NoteTableChange.InsertRow or NoteTableChange.DeleteRow ? row.Cell.Row == index : row.Cell.Column == index));
             if (target < 0) target = updated.Paragraphs.FindIndex(row => row.Cell?.TableId == id);
             if (target < 0) target = Math.Min(document.Paragraphs.FindIndex(row => row.Cell?.TableId == id), updated.Paragraphs.Count - 1);
-            CommitTableEdit(updated, updated.GetParagraphRange(Math.Max(0, target)).Start);
+            CommitEditorDocument(updated, updated.GetParagraphRange(Math.Max(0, target)).Start);
         }
         catch (Exception exception) when (exception is InvalidDataException or ArgumentException or InvalidOperationException)
         {
@@ -189,7 +205,7 @@ public partial class NoteWindow
         }
     }
 
-    private void CommitTableEdit(NotesDocument document, int caret)
+    private void CommitEditorDocument(NotesDocument document, int caret)
     {
         NotesSnapshotValidator.ValidateDocument(document);
         SetEditorDocument(document, caret, 0);
@@ -216,7 +232,7 @@ public partial class NoteWindow
                 {
                     document = NoteTables.Change(document, cell.TableId, NoteTableChange.InsertRow, cell.Row + 1);
                     var target = document.Paragraphs.FindIndex(row => row.Cell?.TableId == cell.TableId && row.Cell.Row == cell.Row + 1);
-                    CommitTableEdit(document, document.GetParagraphRange(target).Start);
+                    CommitEditorDocument(document, document.GetParagraphRange(target).Start);
                 }
                 else if (next >= 0)
                 {
@@ -228,22 +244,11 @@ public partial class NoteWindow
                 return true;
             }
             if (key != Key.Enter || shift || length != 0) return false;
-            if (control)
-            {
-                var last = document.Paragraphs.FindLastIndex(row => row.Cell?.TableId == cell.TableId);
-                if (last + 1 == document.Paragraphs.Count || document.Paragraphs[last + 1].Cell is not null ||
-                    document.Paragraphs[last + 1].Kind != NoteBlockKind.Paragraph)
-                    document.Paragraphs.Insert(last + 1, new NoteParagraph());
-                CommitTableEdit(document, document.GetParagraphRange(last + 1).Start);
-            }
-            else
-            {
-                var (paragraphStart, paragraphLength) = document.GetParagraphRange(paragraphIndex);
-                var source = document.Paragraphs[paragraphIndex];
-                var emptyList = paragraphLength == 0 && source.Kind is NoteBlockKind.Bulleted or NoteBlockKind.Numbered or NoteBlockKind.Checklist;
-                var updated = emptyList ? document.EndEmptyListItem(paragraphIndex) : document.SplitParagraph(paragraphIndex, start - paragraphStart);
-                CommitTableEdit(updated, emptyList ? start : start + 2);
-            }
+            var (paragraphStart, paragraphLength) = document.GetParagraphRange(paragraphIndex);
+            var source = document.Paragraphs[paragraphIndex];
+            var emptyList = paragraphLength == 0 && source.Kind is NoteBlockKind.Bulleted or NoteBlockKind.Numbered or NoteBlockKind.Checklist;
+            var updated = emptyList ? document.EndEmptyListItem(paragraphIndex) : document.SplitParagraph(paragraphIndex, start - paragraphStart);
+            CommitEditorDocument(updated, emptyList ? start : start + 2);
             return true;
         }
         catch (Exception exception) when (exception is InvalidDataException or ArgumentException or InvalidOperationException)
@@ -294,7 +299,15 @@ public partial class NoteWindow
 
     private void CopyTable(Guid id)
     {
-        try { System.Windows.Clipboard.SetText(NoteTableMarkdown.Write(ReadEditorDocument(), id)); }
+        try
+        {
+            var document = ReadEditorDocument();
+            var markdown = NoteTableMarkdown.Write(document, id);
+            var data = new DataObject();
+            data.SetData(DataFormats.UnicodeText, markdown);
+            data.SetData(DataFormats.Text, markdown);
+            _copyToClipboard(data);
+        }
         catch (ExternalException)
         {
             System.Windows.MessageBox.Show(this, "The clipboard is busy. Try copying the table again.", "Copy table", MessageBoxButton.OK, MessageBoxImage.Information);

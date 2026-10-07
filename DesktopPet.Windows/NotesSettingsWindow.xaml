@@ -40,8 +40,6 @@
         <Border Style="{StaticResource AppSettingsPanel}" Margin="0,0,0,16">
             <StackPanel>
                 <TextBlock Text="Appearance" FontSize="{DynamicResource AppSectionHeadingFontSize}" FontWeight="{DynamicResource AppSectionHeadingFontWeight}" Foreground="{DynamicResource AppSettingsTextBrush}" Margin="0,0,0,12" />
-                <Label Target="{Binding ElementName=ThemeComboBox}" Content="_Theme" />
-                <ComboBox x:Name="ThemeComboBox" AutomationProperties.Name="Notes theme" SelectionChanged="OnSettingsSelectionChanged" />
                 <DockPanel Margin="0,0,0,4" LastChildFill="False">
                     <Label DockPanel.Dock="Left" Target="{Binding ElementName=TextSizeInput}" Content="Text size" Padding="0" VerticalAlignment="Center" />
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">

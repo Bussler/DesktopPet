@@ -6,7 +6,7 @@ The file uses YAML schema version 1. Unknown or duplicate keys are errors. All n
 
 Choose **Hood**, **Pip**, **Crumb**, or **Puddle** under **Appearance > Pet** in Hood Settings. The sprite previews immediately while the current action, needs, nap, and position continue. **Save** writes the choice to this file; **Cancel** or closing Settings restores the previous pet and UI style. All four pets have the same behavior. The saved choice loads at the next launch; older configurations without `pet` keep Hood. Missing or incompatible replacement assets prevent a preview and leave the previous choice in effect.
 
-Choose **Sticky Notes**, **Minimal**, **Soft**, or **Studio** in Hood Settings to preview the style across open surfaces immediately. **Save** keeps it; **Cancel** or closing Settings restores the style from before the menu opened. Previews do not rewrite configuration or note data. A failed preview or save reports an error and preserves the previous saved configuration. Notes Settings keeps the single app-wide Light/Dark/System brightness choice, separate from the style.
+Choose **Sticky Notes**, **Minimal**, **Soft**, or **Studio** in Hood Settings to preview the style across open surfaces immediately. The app-wide **System / Light / Dark** brightness selector sits beside it under Appearance. **Save** keeps these choices; **Cancel** or closing Settings restores the previous style and brightness. Previews do not rewrite configuration or note data. A failed preview or save reports an error and preserves the previous saved configuration.
 
 The configured initial area is adjusted when necessary to contain Hood's full frame, and oversized saved areas shrink to fit the usable display while preserving that minimum footprint. See [placement behavior](placement.md) for details.
 
@@ -69,7 +69,7 @@ notes:
 | `notes.default_color` | Color name | `yellow`, `blue`, `green`, `pink`, or `lavender`. Defaults to `yellow`; affects new notes only. |
 | `notes.text_size` | Points | Whole number from `12` through `32`. Defaults to `16`. |
 | `notes.line_spacing` | Spacing level | Finite number from `1` through `3`. Defaults to `2`, preserving normal font spacing. Lower values bring lines and paragraphs closer together; higher values spread them out. Applies to all notes and scales with text size. |
-| `notes.theme` | Brightness | `system`, `light`, or `dark`. Defaults to `system` and applies to all Hood UI surfaces regardless of selected style. System follows the Windows app theme and falls back to light if Windows does not expose it. |
+| `notes.theme` | Brightness | `system`, `light`, or `dark`. Selected in Hood Settings under Appearance. Defaults to `system` and applies to all Hood UI surfaces regardless of selected style. System follows the Windows app theme and falls back to light if Windows does not expose it. |
 | `notes.always_on_top` | Boolean | `true` or `false`; defaults to `false` and is independent of Hood's always-on-top option. |
 | `notes.animate_show_hide` | Boolean | `true` or `false`; defaults to `true`. `false` applies group visibility changes immediately. |
 

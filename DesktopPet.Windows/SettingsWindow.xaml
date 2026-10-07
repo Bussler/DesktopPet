@@ -44,6 +44,8 @@
                         <ComboBoxItem Content="Soft" Tag="soft" />
                         <ComboBoxItem Content="Studio" Tag="studio" />
                     </ComboBox>
+                    <Label Target="{Binding ElementName=ThemeComboBox}" Content="_Theme" />
+                    <ComboBox x:Name="ThemeComboBox" AutomationProperties.Name="App theme" SelectionChanged="OnThemeSelectionChanged" />
                     <TextBlock Margin="0,6,0,0" Text="Save keeps appearance changes. Cancel or closing Settings restores the previous appearance."
                                Foreground="{DynamicResource AppSettingsSecondaryTextBrush}"
                                TextWrapping="Wrap" />

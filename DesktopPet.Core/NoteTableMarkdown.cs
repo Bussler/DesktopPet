@@ -126,6 +126,8 @@ public static class NoteTableMarkdown
         var paragraphs = new List<NoteParagraph>();
         var pieces = Regex.Split(text, "(<br\\s*/?>)", RegexOptions.IgnoreCase);
         var style = NoteTextStyle.None;
+        var tags = new Regex("</?(?<style>b|i|u|s|code)>|</?(?<math>math)>|<a\\s+href=\"(?<destination>[^\"]*)\"\\s*>|</a\\s*>",
+            RegexOptions.IgnoreCase);
         for (var lineIndex = 0; lineIndex < pieces.Length; lineIndex += 2)
         {
             var soft = lineIndex > 0 && pieces[lineIndex - 1].Contains('/');
@@ -140,35 +142,92 @@ public static class NoteTableMarkdown
             { kind = NoteBlockKind.Bulleted; content = content[2..]; }
             var runs = new List<NoteTextRun>();
             var offset = 0;
-            foreach (Match tag in Regex.Matches(content, "</?(b|i|u|s|code)>", RegexOptions.IgnoreCase))
+            var inlineKind = NoteInlineKind.Text;
+            string? linkDestination = null;
+            foreach (Match tag in tags.Matches(content))
             {
-                Add(content[offset..tag.Index]);
-                var flag = tag.Groups[1].Value.ToLowerInvariant() switch
+                var closing = tag.Value.StartsWith("</", StringComparison.Ordinal);
+                if (tag.Groups["style"].Success)
                 {
-                    "b" => NoteTextStyle.Bold, "i" => NoteTextStyle.Italic, "u" => NoteTextStyle.Underline,
-                    "s" => NoteTextStyle.Strikethrough, _ => NoteTextStyle.Code
-                };
-                style = tag.Value[1] == '/' ? style & ~flag : style | flag;
-                offset = tag.Index + tag.Length;
+                    Add(content[offset..tag.Index]);
+                    var flag = tag.Groups["style"].Value.ToLowerInvariant() switch
+                    {
+                        "b" => NoteTextStyle.Bold, "i" => NoteTextStyle.Italic, "u" => NoteTextStyle.Underline,
+                        "s" => NoteTextStyle.Strikethrough, _ => NoteTextStyle.Code
+                    };
+                    style = closing ? style & ~flag : style | flag;
+                    offset = tag.Index + tag.Length;
+                }
+                else if (tag.Groups["math"].Success)
+                {
+                    if (!closing && inlineKind == NoteInlineKind.Text &&
+                        content.IndexOf("</math>", tag.Index + tag.Length, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        Add(content[offset..tag.Index]);
+                        inlineKind = NoteInlineKind.InlineMath;
+                        offset = tag.Index + tag.Length;
+                    }
+                    else if (closing && inlineKind == NoteInlineKind.InlineMath)
+                    {
+                        Add(content[offset..tag.Index]);
+                        inlineKind = NoteInlineKind.Text;
+                        offset = tag.Index + tag.Length;
+                    }
+                }
+                else if (tag.Groups["destination"].Success)
+                {
+                    var destination = WebUtility.HtmlDecode(tag.Groups["destination"].Value)
+                        .Replace("\\|", "|", StringComparison.Ordinal);
+                    if (inlineKind == NoteInlineKind.Text && NoteLinkFormatting.IsValidDestination(destination) &&
+                        content.IndexOf("</a>", tag.Index + tag.Length, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        Add(content[offset..tag.Index]);
+                        inlineKind = NoteInlineKind.Link;
+                        linkDestination = destination;
+                        offset = tag.Index + tag.Length;
+                    }
+                }
+                else if (closing && inlineKind == NoteInlineKind.Link)
+                {
+                    Add(content[offset..tag.Index]);
+                    inlineKind = NoteInlineKind.Text;
+                    linkDestination = null;
+                    offset = tag.Index + tag.Length;
+                }
             }
             Add(content[offset..]);
             if (soft && kind == NoteBlockKind.Paragraph && paragraphs.Count > 0)
             {
                 var previous = paragraphs[^1];
-                previous.Runs.Add(new NoteTextRun("\n", previous.Runs.LastOrDefault()?.Style ?? NoteTextStyle.None));
+                var previousRun = previous.Runs.LastOrDefault();
+                var nextRun = runs.FirstOrDefault();
+                var sameInline = previousRun is not null && nextRun is not null &&
+                    previousRun.Kind == nextRun.Kind && previousRun.LinkDestination == nextRun.LinkDestination;
+                previous.Runs.Add(new NoteTextRun("\n", sameInline ? previousRun!.Style : NoteTextStyle.None,
+                    sameInline ? previousRun!.Kind : NoteInlineKind.Text,
+                    sameInline ? previousRun!.LinkDestination : null));
                 previous.Runs.AddRange(runs);
             }
             else paragraphs.Add(new NoteParagraph { Cell = cell, Kind = kind, IsChecked = check.Success && check.Groups["state"].Value != " ", Runs = runs });
 
             void Add(string value)
             {
-                if (value.Length > 0) runs.Add(new NoteTextRun(value, style));
+                if (value.Length == 0) return;
+                if (runs.Count > 0 && runs[^1].Style == style && runs[^1].Kind == inlineKind &&
+                    runs[^1].LinkDestination == linkDestination)
+                    runs[^1] = runs[^1] with { Text = runs[^1].Text + value };
+                else runs.Add(new NoteTextRun(value, style, inlineKind, linkDestination));
             }
         }
         // Interpret source markers before decoding entities that represent literal characters.
-        var start = 0;
+        var document = new NotesDocument { Paragraphs = paragraphs };
+        var start = document.GetPlainText().Length;
         var length = 0;
-        var formatted = NoteCodeFormatting.Apply(new NotesDocument { Paragraphs = paragraphs }, ref start, ref length);
+        var formatted = NoteCodeFormatting.Apply(document, ref start, ref length);
+        formatted = NoteEmphasisFormatting.Apply(formatted, (0, formatted.GetPlainText().Length), ref start, ref length);
+        formatted = NoteLinkFormatting.Apply(formatted, (0, formatted.GetPlainText().Length), ref start, ref length,
+            pasted: true);
+        formatted = NoteInlineMathFormatting.Apply(formatted, (0, formatted.GetPlainText().Length), ref start, ref length);
         foreach (var paragraph in formatted.Paragraphs)
             paragraph.Runs = paragraph.Runs.Select(run => run with
             {
@@ -204,18 +263,44 @@ public static class NoteTableMarkdown
         {
             var tags = new[] { (NoteTextStyle.Bold, "b"), (NoteTextStyle.Italic, "i"), (NoteTextStyle.Underline, "u"),
                 (NoteTextStyle.Strikethrough, "s"), (NoteTextStyle.Code, "code") }.Where(pair => run.Style.HasFlag(pair.Item1)).ToArray();
-            foreach (var tag in tags) result.Append('<').Append(tag.Item2).Append('>');
-            var encoded = WebUtility.HtmlEncode(NormalizeLineBreaks(run.Text)).Replace("\\", "\\\\", StringComparison.Ordinal)
-                .Replace("|", "\\|", StringComparison.Ordinal).Replace("`", "&#96;", StringComparison.Ordinal)
-                .Replace("\r\n", "<br/>", StringComparison.Ordinal).Replace("\t", "&#9;", StringComparison.Ordinal);
-            encoded = Regex.Replace(encoded, "^( +)|( +)$", match => string.Concat(Enumerable.Repeat("&#32;", match.Length)));
-            encoded = Regex.Replace(encoded, @"(?<=<br/>)([•*-])(?= )|(?<=<br/>)([0-9])(?=[0-9]*\. )", match => $"&#{(int)match.Value[0]};");
-            result.Append(encoded);
-            foreach (var tag in tags.Reverse()) result.Append("</").Append(tag.Item2).Append('>');
+            var lines = NormalizeLineBreaks(run.Text).Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+            for (var line = 0; line < lines.Length; line++)
+            {
+                if (line > 0) result.Append("<br/>");
+                foreach (var tag in tags) result.Append('<').Append(tag.Item2).Append('>');
+                if (run.Kind == NoteInlineKind.Link && NoteLinkFormatting.IsValidDestination(run.LinkDestination))
+                {
+                    var destination = WebUtility.HtmlEncode(run.LinkDestination!).Replace("|", "&#124;", StringComparison.Ordinal);
+                    result.Append("<a href=\"").Append(destination).Append("\">")
+                        .Append(EncodeTableText(lines[line], escapeMarkdown: false)).Append("</a>");
+                }
+                else if (run.Kind == NoteInlineKind.InlineMath)
+                {
+                    result.Append("<math>").Append(EncodeTableText(lines[line], escapeMarkdown: false)).Append("</math>");
+                }
+                else result.Append(EncodeTableText(lines[line], escapeMarkdown: true));
+                foreach (var tag in tags.Reverse()) result.Append("</").Append(tag.Item2).Append('>');
+            }
         }
         // A literal list-looking paragraph must not become a list after a clipboard round trip.
         if (prefix.Length == 0 && Regex.IsMatch(result.ToString(), "^(?:[•*-] |[0-9]+\\. )"))
             return $"&#{(int)result[0]};" + result.ToString()[1..];
         return result.ToString();
+    }
+
+    private static string EncodeTableText(string text, bool escapeMarkdown)
+    {
+        var encoded = WebUtility.HtmlEncode(text).Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("|", "\\|", StringComparison.Ordinal).Replace("\t", "&#9;", StringComparison.Ordinal);
+        if (escapeMarkdown)
+        {
+            encoded = encoded.Replace("*", "&#42;", StringComparison.Ordinal)
+                .Replace("_", "&#95;", StringComparison.Ordinal).Replace("~", "&#126;", StringComparison.Ordinal)
+                .Replace("$", "&#36;", StringComparison.Ordinal).Replace("[", "&#91;", StringComparison.Ordinal)
+                .Replace("]", "&#93;", StringComparison.Ordinal).Replace("`", "&#96;", StringComparison.Ordinal);
+            encoded = Regex.Replace(encoded, @"(?<![\p{L}\p{N}_@])https?://", match =>
+                $"&#{(int)match.Value[0]};" + match.Value[1..], RegexOptions.IgnoreCase);
+        }
+        return Regex.Replace(encoded, "^( +)|( +)$", match => string.Concat(Enumerable.Repeat("&#32;", match.Length)));
     }
 }

@@ -20,10 +20,31 @@ public enum NoteBlockKind
     Bulleted,
     Numbered,
     Checklist,
-    Code
+    Code,
+    Heading1,
+    Heading2,
+    Heading3,
+    Heading4,
+    Heading5,
+    Heading6,
+    Divider,
+    DisplayMath
 }
 
-public sealed record NoteTextRun(string Text, NoteTextStyle Style = NoteTextStyle.None);
+public enum NoteInlineKind
+{
+    Text,
+    InlineMath,
+    Link
+}
+
+public sealed record NoteTextRun(
+    string Text,
+    NoteTextStyle Style = NoteTextStyle.None,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    NoteInlineKind Kind = NoteInlineKind.Text,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? LinkDestination = null);
 
 public sealed class NoteParagraph
 {
@@ -103,14 +124,14 @@ public sealed class NotesDocument
                 var runEnd = runStart + runLength;
                 var selectedStart = RawOffset(run.Text, Math.Clamp(start - runStart, 0, runLength));
                 var selectedEnd = RawOffset(run.Text, Math.Clamp(selectionEnd - runStart, 0, runLength));
-                AddRange(runs, run.Text, 0, selectedStart, run.Style);
+                AddRange(runs, run.Text, 0, selectedStart, run.Style, run.Kind, run.LinkDestination);
                 if (selectedEnd > selectedStart)
                 {
                     var selectedStyle = enabled ? run.Style | style : run.Style & ~style;
-                    AddRange(runs, run.Text, selectedStart, selectedEnd, selectedStyle);
+                    AddRange(runs, run.Text, selectedStart, selectedEnd, selectedStyle, run.Kind, run.LinkDestination);
                 }
 
-                AddRange(runs, run.Text, selectedEnd, run.Text.Length, run.Style);
+                AddRange(runs, run.Text, selectedEnd, run.Text.Length, run.Style, run.Kind, run.LinkDestination);
                 offset = runEnd;
             }
 
@@ -192,7 +213,7 @@ public sealed class NotesDocument
 
     public NotesDocument SetListKind(int start, int length, NoteBlockKind kind)
     {
-        if (!Enum.IsDefined(kind))
+        if (!Enum.IsDefined(kind) || kind is NoteBlockKind.Heading1 or NoteBlockKind.Heading2 or NoteBlockKind.Heading3 or NoteBlockKind.Heading4 or NoteBlockKind.Heading5 or NoteBlockKind.Heading6 or NoteBlockKind.Divider or NoteBlockKind.DisplayMath)
         {
             throw new ArgumentOutOfRangeException(nameof(kind), "Select a supported paragraph or list kind.");
         }
@@ -209,7 +230,7 @@ public sealed class NotesDocument
             Paragraphs = Paragraphs.Select((paragraph, index) =>
             {
                 var copy = paragraph.Copy();
-                if (selected.Contains(index))
+                if (selected.Contains(index) && paragraph.Kind != NoteBlockKind.DisplayMath)
                 {
                     copy.Kind = kind;
                     if (kind != NoteBlockKind.Checklist)
@@ -290,8 +311,8 @@ public sealed class NotesDocument
             var runLength = NormalizeLineBreaks(run.Text).Length;
             var runEnd = runOffset + runLength;
             var splitOffset = RawOffset(run.Text, Math.Clamp(offset - runOffset, 0, runLength));
-            AddRange(leftRuns, run.Text, 0, splitOffset, run.Style);
-            AddRange(rightRuns, run.Text, splitOffset, run.Text.Length, run.Style);
+            AddRange(leftRuns, run.Text, 0, splitOffset, run.Style, run.Kind, run.LinkDestination);
+            AddRange(rightRuns, run.Text, splitOffset, run.Text.Length, run.Style, run.Kind, run.LinkDestination);
             runOffset = runEnd;
         }
 
@@ -347,7 +368,8 @@ public sealed class NotesDocument
         return indexes;
     }
 
-    private static void AddRange(List<NoteTextRun> target, string text, int start, int end, NoteTextStyle style)
+    private static void AddRange(List<NoteTextRun> target, string text, int start, int end, NoteTextStyle style,
+        NoteInlineKind kind, string? linkDestination)
     {
         if (end <= start)
         {
@@ -355,13 +377,14 @@ public sealed class NotesDocument
         }
 
         var value = text[start..end];
-        if (target.Count > 0 && target[^1].Style == style)
+        if (target.Count > 0 && target[^1].Style == style && target[^1].Kind == kind &&
+            target[^1].LinkDestination == linkDestination)
         {
             target[^1] = target[^1] with { Text = target[^1].Text + value };
         }
         else
         {
-            target.Add(new NoteTextRun(value, style));
+            target.Add(new NoteTextRun(value, style, kind, linkDestination));
         }
     }
 }
