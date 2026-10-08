@@ -19,6 +19,89 @@ public sealed class NoteNestedListInteractionTests
     [DataRow(NoteBlockKind.Bulleted)]
     [DataRow(NoteBlockKind.Numbered)]
     [DataRow(NoteBlockKind.Checklist)]
+    public void EnterContinuesNestedItemsThenOutdentsOneLevelAtATime(NoteBlockKind kind)
+    {
+        var source = NotesDocument.FromText("Parent\r\nChild\r\nTask\r\nAfter");
+        var depths = new[] { 0, 1, 2, 0 };
+        for (var index = 0; index < source.Paragraphs.Count; index++)
+        {
+            source.Paragraphs[index].Kind = kind;
+            source.Paragraphs[index].ListDepth = depths[index];
+        }
+        source.Paragraphs[2].IsChecked = kind == NoteBlockKind.Checklist;
+        NotesDocument? saved = null;
+        var window = Create(source, document => saved = document);
+        try
+        {
+            Show(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            editor.Focus();
+            editor.CaretPosition = Row(editor, "Task").ContentEnd;
+            foreach (var (expectedDepth, expectedKind) in new[] { (2, kind), (1, kind), (0, kind), (0, NoteBlockKind.Paragraph) })
+            {
+                PressEnter(editor);
+                Assert.IsNotNull(saved);
+                Assert.AreEqual("Parent\r\nChild\r\nTask\r\n\r\nAfter", saved.GetPlainText());
+                CollectionAssert.AreEqual(new[] { 0, 1, 2, expectedDepth, 0 }, saved.Paragraphs.Select(row => row.ListDepth).ToArray());
+                Assert.AreEqual(expectedKind, saved.Paragraphs[3].Kind);
+                Assert.IsFalse(saved.Paragraphs[3].IsChecked);
+                Assert.AreEqual(kind == NoteBlockKind.Checklist, saved.Paragraphs[2].IsChecked);
+                Assert.AreSame(Row(editor, string.Empty), editor.CaretPosition.Paragraph);
+                if (expectedKind == NoteBlockKind.Checklist)
+                    Assert.IsFalse(((CheckBox)Row(editor, string.Empty).Inlines.OfType<InlineUIContainer>().Single().Child).IsChecked);
+                else if (expectedKind == NoteBlockKind.Numbered)
+                    Assert.AreEqual("2.", ((TextBlock)Row(editor, string.Empty).Inlines.OfType<InlineUIContainer>().Single().Child).Text);
+            }
+            Assert.AreEqual(NoteBlockKind.Paragraph, saved!.Paragraphs[3].Kind);
+            var reopened = Create(saved, _ => { });
+            try
+            {
+                Show(reopened);
+                var restoredEditor = (RichTextBox)reopened.FindName("Editor");
+                Assert.IsTrue(Row(restoredEditor, "Task").Parent is ListItem { Parent: EditorList { Parent: ListItem } });
+                Assert.IsTrue(Row(restoredEditor, string.Empty).Parent is FlowDocument);
+            }
+            finally { reopened.CloseWithoutMembershipChange(); }
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    [DataRow(NoteBlockKind.Numbered, NoteBlockKind.Bulleted)]
+    [DataRow(NoteBlockKind.Checklist, NoteBlockKind.Bulleted)]
+    [DataRow(NoteBlockKind.Bulleted, NoteBlockKind.Numbered)]
+    [DataRow(NoteBlockKind.Checklist, NoteBlockKind.Numbered)]
+    [DataRow(NoteBlockKind.Bulleted, NoteBlockKind.Checklist)]
+    [DataRow(NoteBlockKind.Numbered, NoteBlockKind.Checklist)]
+    public void EnterOnEmptyNestedItemJoinsTheParentList(NoteBlockKind outer, NoteBlockKind child)
+    {
+        var source = NotesDocument.FromText("Parent\r\nTask\r\nAfter");
+        foreach (var row in source.Paragraphs) row.Kind = outer;
+        source.Paragraphs[1].Kind = child;
+        source.Paragraphs[1].ListDepth = 1;
+        NotesDocument? saved = null;
+        var window = Create(source, document => saved = document);
+        try
+        {
+            Show(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            editor.Focus();
+            editor.CaretPosition = Row(editor, "Task").ContentEnd;
+            PressEnter(editor);
+            PressEnter(editor);
+            Assert.IsNotNull(saved);
+            Assert.AreEqual("Parent\r\nTask\r\n\r\nAfter", saved.GetPlainText());
+            CollectionAssert.AreEqual(new[] { outer, child, outer, outer }, saved.Paragraphs.Select(row => row.Kind).ToArray());
+            CollectionAssert.AreEqual(new[] { 0, 1, 0, 0 }, saved.Paragraphs.Select(row => row.ListDepth).ToArray());
+            Assert.AreSame(Row(editor, string.Empty), editor.CaretPosition.Paragraph);
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    [DataRow(NoteBlockKind.Bulleted)]
+    [DataRow(NoteBlockKind.Numbered)]
+    [DataRow(NoteBlockKind.Checklist)]
     public void IndentingListItemPreservesNestingAndContentAcrossSaveAndReopen(NoteBlockKind kind)
     {
         var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"HoodNestedList-{Guid.NewGuid():N}.json");
@@ -272,6 +355,15 @@ public sealed class NoteNestedListInteractionTests
         editor.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         editor.UpdateLayout();
         Assert.IsTrue(Row(editor, "Nested").Parent is ListItem { Parent: EditorList { Parent: ListItem } });
+    }
+
+    private static void PressEnter(RichTextBox editor)
+    {
+        var key = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(editor), 0, Key.Enter)
+            { RoutedEvent = Keyboard.PreviewKeyDownEvent };
+        editor.RaiseEvent(key);
+        if (!key.Handled) EditingCommands.EnterParagraphBreak.Execute(null, editor);
+        editor.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
     }
 
     private static Paragraph Row(RichTextBox editor, string text) => Paragraphs(editor.Document.Blocks)

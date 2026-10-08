@@ -921,7 +921,12 @@ public partial class NoteWindow : Window
         int caretOffset;
         if (paragraphLength == 0)
         {
-            updated = document.EndEmptyListItem(paragraphIndex);
+            if (document.Paragraphs[paragraphIndex].ListDepth > 0)
+            {
+                EditingCommands.DecreaseIndentation.Execute(null, Editor);
+                updated = ReadEditorDocument();
+            }
+            else updated = document.EndEmptyListItem(paragraphIndex);
             caretOffset = paragraphStart;
         }
         else
