@@ -162,6 +162,7 @@ public partial class NoteWindow
             selected.Paragraphs.Add(new NoteParagraph
             {
                 Kind = paragraph.Kind,
+                ListDepth = paragraph.ListDepth,
                 IsChecked = paragraph.IsChecked,
                 Runs = SliceRuns(paragraph, Math.Max(0, start - range.Start),
                     Math.Min(range.Length, start + length - range.Start))

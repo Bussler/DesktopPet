@@ -71,7 +71,7 @@ public sealed class JsonNotesStore : INotesStore
                 throw new InvalidDataException("Saved notes must be a JSON object with an integer schemaVersion.");
             }
 
-            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or NotesSnapshot.CurrentSchemaVersion))
+            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or NotesSnapshot.CurrentSchemaVersion))
             {
                 throw new InvalidDataException($"Saved notes schema version {version} is unsupported; version {NotesSnapshot.CurrentSchemaVersion} is required.");
             }
@@ -79,7 +79,7 @@ public sealed class JsonNotesStore : INotesStore
             var snapshot = version switch
             {
                 1 => MigrateVersionOne(json),
-                2 or 3 or 4 or 5 or 6 => MigrateSnapshot(json, version),
+                2 or 3 or 4 or 5 or 6 or 7 => MigrateSnapshot(json, version),
                 NotesSnapshot.CurrentSchemaVersion => JsonSerializer.Deserialize<NotesSnapshot>(json, JsonOptions)
                     ?? throw new InvalidDataException("The saved notes file is empty."),
                 _ => throw new InvalidDataException($"Saved notes schema version {version} is unsupported; version {NotesSnapshot.CurrentSchemaVersion} is required.")

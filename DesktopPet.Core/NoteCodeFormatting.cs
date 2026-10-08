@@ -130,7 +130,7 @@ public static class NoteCodeFormatting
                 }
             }
 
-            var formatted = new NoteParagraph { Cell = row.Cell, Kind = row.Kind, IsChecked = row.IsChecked };
+            var formatted = new NoteParagraph { Cell = row.Cell, Kind = row.Kind, IsChecked = row.IsChecked, ListDepth = row.ListDepth };
             for (var index = 0; index < text.Length;)
             {
                 if (omit[index]) { index++; continue; }

@@ -343,7 +343,7 @@ public partial class NoteWindow : Window
             SetSaveStatus(_updateDocument(_noteId, document));
             _lastAcceptedDocument = document.Copy();
             _updatingEditor = true;
-            try { RefreshNumberedMarkers(); }
+            try { RefreshListLayout(); RefreshNumberedMarkers(); }
             finally { _updatingEditor = false; }
             if (!_markupFormattingPending && (_tablePasteRequested || _blockSyntaxPasteRequested ||
                 plainText.IndexOfAny(['`', '|', '-', '[', ')', '*', '_', '~', '$', '#']) >= 0 ||
@@ -753,9 +753,12 @@ public partial class NoteWindow : Window
             var source = document.Paragraphs[index];
             if (source.Cell is { } cell)
                 index = document.Paragraphs.FindLastIndex(row => row.Cell?.TableId == cell.TableId);
-            else if (source.Kind is NoteBlockKind.Bulleted or NoteBlockKind.Numbered or NoteBlockKind.Checklist)
-                while (index + 1 < document.Paragraphs.Count && document.Paragraphs[index + 1].Cell is null &&
-                       document.Paragraphs[index + 1].Kind == source.Kind) index++;
+            else if (paragraphs[index].Parent is ListItem { Parent: System.Windows.Documents.List list })
+            {
+                while (list.Parent is ListItem { Parent: System.Windows.Documents.List parent }) list = parent;
+                var last = list.ListItems.SelectMany(item => GetEditorBlocks(item.Blocks)).OfType<Paragraph>().Last();
+                index = Array.IndexOf(paragraphs, last);
+            }
             document.Paragraphs.Insert(index + 1, new NoteParagraph());
             CommitEditorDocument(document, document.GetParagraphRange(index + 1).Start);
             UpdateToolbar();
@@ -1055,6 +1058,7 @@ public partial class NoteWindow : Window
 
     private void SetEditorDocument(NotesDocument document, int? selectionStart, int? selectionLength)
     {
+        NotesSnapshotValidator.ValidateDocument(document);
         _activeMathSource = null;
         _inlineMathCommitPending = false;
         _pendingPlainUrl = null;
@@ -1111,25 +1115,7 @@ public partial class NoteWindow : Window
             }
             if (noteParagraph.Kind is NoteBlockKind.Bulleted or NoteBlockKind.Numbered or NoteBlockKind.Checklist)
             {
-                var listKind = noteParagraph.Kind;
-                var list = new System.Windows.Documents.List
-                {
-                    Tag = listKind,
-                    MarkerStyle = listKind == NoteBlockKind.Bulleted ? TextMarkerStyle.Disc : TextMarkerStyle.None,
-                    MarkerOffset = 18,
-                    Padding = new Thickness(GetListMarkerWidth(), 0, 0, 0)
-                };
-                if (noteParagraph.Cell is not null) list.Margin = new Thickness(0);
-                var number = 1;
-                while (index < paragraphs.Count && paragraphs[index].Kind == listKind && paragraphs[index].Cell == noteParagraph.Cell)
-                {
-                    list.ListItems.Add(new ListItem(CreateEditorParagraph(paragraphs[index], number++)));
-                    index++;
-                }
-
-                blocks.Add(list);
-                foreach (var paragraph in list.ListItems.SelectMany(item => item.Blocks.OfType<Paragraph>()))
-                    ApplyInlineMarkerSpacing(paragraph);
+                blocks.Add(CreateEditorList(paragraphs, ref index, 0));
                 continue;
             }
 
@@ -1137,6 +1123,41 @@ public partial class NoteWindow : Window
             index++;
         }
 
+    }
+
+    private System.Windows.Documents.List CreateEditorList(IReadOnlyList<NoteParagraph> paragraphs, ref int index, int depth)
+    {
+        var first = paragraphs[index];
+        var list = new System.Windows.Documents.List
+        {
+            Tag = first.Kind,
+            MarkerStyle = first.Kind == NoteBlockKind.Bulleted && first.ListDepth == depth
+                ? TextMarkerStyle.Disc : TextMarkerStyle.None,
+            MarkerOffset = 18,
+            Margin = new Thickness(0),
+            Padding = new Thickness(GetListMarkerWidth(), 0, 0, 0)
+        };
+        var number = 1;
+        while (index < paragraphs.Count && paragraphs[index].Cell == first.Cell &&
+               paragraphs[index].Kind is NoteBlockKind.Bulleted or NoteBlockKind.Numbered or NoteBlockKind.Checklist)
+        {
+            var row = paragraphs[index];
+            if (row.ListDepth < depth || (row.ListDepth == depth && (row.Kind != first.Kind || first.ListDepth > depth))) break;
+            if (row.ListDepth > depth)
+            {
+                if (list.ListItems.Count == 0) list.ListItems.Add(new ListItem());
+                list.ListItems.LastListItem.Blocks.Add(CreateEditorList(paragraphs, ref index, depth + 1));
+            }
+            else
+            {
+                var paragraph = CreateEditorParagraph(row, number++);
+                list.ListItems.Add(new ListItem(paragraph));
+                index++;
+            }
+        }
+        foreach (var paragraph in list.ListItems.SelectMany(item => item.Blocks.OfType<Paragraph>()))
+            ApplyInlineMarkerSpacing(paragraph);
+        return list;
     }
 
     private NotesDocument ReadEditorDocument()
@@ -1147,7 +1168,8 @@ public partial class NoteWindow : Window
         return new NotesDocument { Paragraphs = paragraphs };
     }
 
-    private void ReadEditorBlocks(BlockCollection blocks, List<NoteParagraph> paragraphs, NoteTableCell? cell = null)
+    private void ReadEditorBlocks(BlockCollection blocks, List<NoteParagraph> paragraphs, NoteTableCell? cell = null,
+        int listDepth = 0, NoteBlockKind? containingListKind = null)
     {
         foreach (var block in blocks)
         {
@@ -1155,7 +1177,7 @@ public partial class NoteWindow : Window
             {
                 var runs = new List<NoteTextRun>();
                 ReadInlines(paragraph.Inlines, NoteTextStyle.None, runs);
-                var kind = paragraph.Tag is NoteBlockKind blockKind ? blockKind : NoteBlockKind.Paragraph;
+                var kind = containingListKind ?? (paragraph.Tag is NoteBlockKind blockKind ? blockKind : NoteBlockKind.Paragraph);
                 if (kind == NoteBlockKind.Code)
                     runs = runs.Select(run => run with { Style = run.Style & ~NoteTextStyle.Code }).ToList();
                 else if (kind == NoteBlockKind.Divider && runs.Any(run => run.Text.Length > 0))
@@ -1166,39 +1188,21 @@ public partial class NoteWindow : Window
                     paragraph.Margin = new Thickness(0, 0, 0, 8);
                     kind = NoteBlockKind.Paragraph;
                 }
-                paragraphs.Add(new NoteParagraph { Cell = cell, Kind = kind, Runs = runs });
+                var isChecked = kind == NoteBlockKind.Checklist && paragraph.Inlines.OfType<InlineUIContainer>()
+                    .Any(container => container.Child is System.Windows.Controls.CheckBox { IsChecked: true });
+                paragraphs.Add(new NoteParagraph { Cell = cell, Kind = kind, ListDepth = listDepth, IsChecked = isChecked, Runs = runs });
             }
             else if (block is System.Windows.Documents.List list)
             {
-                var kind = list.Tag is NoteBlockKind listKind ? listKind : list.MarkerStyle switch
+                var kind = list.Tag is NoteBlockKind listKind ? listKind : containingListKind ?? (list.MarkerStyle switch
                 {
                     TextMarkerStyle.Decimal => NoteBlockKind.Numbered,
                     TextMarkerStyle.None => NoteBlockKind.Checklist,
                     _ => NoteBlockKind.Bulleted
-                };
+                });
+                var depth = containingListKind.HasValue ? listDepth + 1 : 0;
                 foreach (var item in list.ListItems)
-                {
-                    foreach (var itemBlock in item.Blocks)
-                    {
-                        if (itemBlock is Paragraph itemParagraph)
-                        {
-                            var runs = new List<NoteTextRun>();
-                            ReadInlines(itemParagraph.Inlines, NoteTextStyle.None, runs);
-                            var isChecked = kind == NoteBlockKind.Checklist && itemParagraph.Inlines
-                                .OfType<InlineUIContainer>()
-                                .Select(container => container.Child)
-                                .OfType<System.Windows.Controls.CheckBox>()
-                                .Any(checkBox => checkBox.IsChecked == true);
-                            paragraphs.Add(new NoteParagraph { Cell = cell, Kind = kind, IsChecked = isChecked, Runs = runs });
-                        }
-                        else
-                        {
-                            var text = new TextRange(itemBlock.ContentStart, itemBlock.ContentEnd).Text;
-                            paragraphs.AddRange(NotesDocument.FromText(text).Paragraphs.Select(noteParagraph =>
-                                new NoteParagraph { Cell = cell, Kind = kind, Runs = noteParagraph.Runs }));
-                        }
-                    }
-                }
+                    ReadEditorBlocks(item.Blocks, paragraphs, cell, depth, kind);
             }
             else if (block is Table table)
             {
@@ -1338,6 +1342,22 @@ public partial class NoteWindow : Window
             paragraph.SetResourceReference(TextElement.ForegroundProperty, "NotesSecondaryTextBrush");
         else
             paragraph.ClearValue(TextElement.ForegroundProperty);
+    }
+
+    private void RefreshListLayout()
+    {
+        foreach (var list in GetEditorBlocks(Editor.Document.Blocks).OfType<System.Windows.Documents.List>().ToArray())
+        {
+            // Paragraphs own the spacing; WPF's automatic list margins add unrelated gaps.
+            list.Margin = new Thickness(0);
+            if (list.Parent is ListItem { Parent: System.Windows.Documents.List parent })
+            {
+                if (list.Tag is not NoteBlockKind) list.Tag = parent.Tag;
+            }
+            list.Padding = new Thickness(GetListMarkerWidth(), 0, 0, 0);
+            foreach (var paragraph in list.ListItems.SelectMany(item => item.Blocks.OfType<Paragraph>()).ToArray())
+                ApplyInlineMarkerSpacing(paragraph);
+        }
     }
 
     private void RefreshNumberedMarkers()

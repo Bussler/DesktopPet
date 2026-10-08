@@ -26,7 +26,7 @@ public sealed record HoodNote
 
 public sealed class NotesSnapshot
 {
-    public const int CurrentSchemaVersion = 7;
+    public const int CurrentSchemaVersion = 8;
 
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
     public List<HoodNote> Notes { get; set; } = [];
@@ -58,6 +58,7 @@ public static class NotesSnapshotValidator
 {
     public const int MaximumNotes = 200;
     public const int MaximumTextCharacters = 1_000_000;
+    public const int MaximumListDepth = 32;
     public const double MinimumNoteWidth = 240;
     public const double MinimumNoteHeight = 180;
     public const double MaximumNoteWidth = 1920;
@@ -154,10 +155,13 @@ public static class NotesSnapshotValidator
         foreach (var paragraph in document.Paragraphs)
         {
             if (paragraph is null || !Enum.IsDefined(paragraph.Kind) || paragraph.Runs is null ||
+                (paragraph.ListDepth != 0 && paragraph.Kind is not (NoteBlockKind.Bulleted or NoteBlockKind.Numbered or NoteBlockKind.Checklist)) ||
                 (paragraph.IsChecked && paragraph.Kind != NoteBlockKind.Checklist))
             {
                 throw new InvalidDataException("Each note paragraph must use a supported block kind and contain valid text runs.");
             }
+            if (paragraph.ListDepth < 0 || paragraph.ListDepth > MaximumListDepth)
+                throw new InvalidDataException($"List indentation must be between 0 and {MaximumListDepth} levels.");
             if (paragraph.Cell is not null && paragraph.Kind is NoteBlockKind.Heading1 or NoteBlockKind.Heading2 or
                 NoteBlockKind.Heading3 or NoteBlockKind.Heading4 or NoteBlockKind.Heading5 or NoteBlockKind.Heading6 or
                 NoteBlockKind.Divider or NoteBlockKind.DisplayMath)
@@ -738,6 +742,7 @@ public sealed class NotesApplication
             var leftParagraph = left.Paragraphs[index];
             var rightParagraph = right.Paragraphs[index];
             if (leftParagraph.Kind != rightParagraph.Kind ||
+                leftParagraph.ListDepth != rightParagraph.ListDepth ||
                 leftParagraph.Cell != rightParagraph.Cell ||
                 leftParagraph.IsChecked != rightParagraph.IsChecked ||
                 !leftParagraph.Runs.SequenceEqual(rightParagraph.Runs))

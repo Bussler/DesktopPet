@@ -280,7 +280,7 @@ public static class NoteDisplayMathFormatting
     };
 
     private static NoteParagraph CreateTextFragment(NoteParagraph source, int start, int end) =>
-        CreateFragment(source, start, end) ?? new NoteParagraph { Kind = source.Kind };
+        CreateFragment(source, start, end) ?? new NoteParagraph { Kind = source.Kind, ListDepth = source.ListDepth };
 
     private static NoteParagraph? CreateFragment(NoteParagraph source, int start, int end)
     {
@@ -288,6 +288,7 @@ public static class NoteDisplayMathFormatting
         return new NoteParagraph
         {
             Kind = source.Kind,
+            ListDepth = source.ListDepth,
             IsChecked = source.Kind == NoteBlockKind.Checklist && source.IsChecked,
             Runs = SliceRuns(source, start, end)
         };

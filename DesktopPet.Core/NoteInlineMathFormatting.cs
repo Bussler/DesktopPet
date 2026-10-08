@@ -98,6 +98,7 @@ public static class NoteInlineMathFormatting
             {
                 Cell = row.Cell,
                 Kind = row.Kind,
+                ListDepth = row.ListDepth,
                 IsChecked = row.IsChecked,
                 Runs = runs
             });

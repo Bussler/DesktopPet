@@ -52,6 +52,8 @@ public sealed class NoteParagraph
     public NoteTableCell? Cell { get; set; }
     public NoteBlockKind Kind { get; set; } = NoteBlockKind.Paragraph;
     public bool IsChecked { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int ListDepth { get; set; }
     public List<NoteTextRun> Runs { get; set; } = [];
 
     internal NoteParagraph Copy() => new()
@@ -59,6 +61,7 @@ public sealed class NoteParagraph
         Cell = Cell,
         Kind = Kind,
         IsChecked = IsChecked,
+        ListDepth = ListDepth,
         Runs = [.. Runs]
     };
 }
@@ -135,7 +138,7 @@ public sealed class NotesDocument
                 offset = runEnd;
             }
 
-            paragraphs.Add(new NoteParagraph { Cell = source.Cell, Kind = source.Kind, IsChecked = source.IsChecked, Runs = runs });
+            paragraphs.Add(new NoteParagraph { Cell = source.Cell, Kind = source.Kind, IsChecked = source.IsChecked, ListDepth = source.ListDepth, Runs = runs });
             if (paragraphIndex < Paragraphs.Count - 1)
             {
                 offset += 2;
@@ -233,6 +236,8 @@ public sealed class NotesDocument
                 if (selected.Contains(index) && paragraph.Kind != NoteBlockKind.DisplayMath)
                 {
                     copy.Kind = kind;
+                    if (kind is not (NoteBlockKind.Bulleted or NoteBlockKind.Numbered or NoteBlockKind.Checklist))
+                        copy.ListDepth = 0;
                     if (kind != NoteBlockKind.Checklist)
                     {
                         copy.IsChecked = false;
@@ -269,6 +274,7 @@ public sealed class NotesDocument
         var paragraphs = Paragraphs.Select(paragraph => paragraph.Copy()).ToList();
         paragraphs[paragraphIndex].Kind = NoteBlockKind.Paragraph;
         paragraphs[paragraphIndex].IsChecked = false;
+        paragraphs[paragraphIndex].ListDepth = 0;
         return new NotesDocument { Paragraphs = paragraphs };
     }
 
@@ -328,6 +334,7 @@ public sealed class NotesDocument
         {
             Cell = source.Cell,
             Kind = source.Kind,
+            ListDepth = source.ListDepth,
             IsChecked = false,
             Runs = rightRuns
         };
