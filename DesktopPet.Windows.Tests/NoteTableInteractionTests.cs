@@ -111,8 +111,8 @@ public sealed class NoteTableInteractionTests
     }
 
     [TestMethod]
-    [DataRow("Insert row below")]
-    [DataRow("Insert column right")]
+    [DataRow("Add row below")]
+    [DataRow("Add column right")]
     [DataRow("Tab")]
     [DataRow("Enter")]
     [DataRow("Ctrl+Enter")]
@@ -131,7 +131,7 @@ public sealed class NoteTableInteractionTests
             var accepted = editor.Document;
             var cell = accepted.Blocks.OfType<Table>().Single().RowGroups[0].Rows[0].Cells[0];
             editor.CaretPosition = ((Paragraph)cell.Blocks.FirstBlock).ContentEnd;
-            if (action.StartsWith("Insert", StringComparison.Ordinal))
+            if (action.StartsWith("Add", StringComparison.Ordinal))
             {
                 var item = cell.ContextMenu.Items.OfType<MenuItem>().Single(item => (string)item.Header == action);
                 typeof(MenuItem).GetMethod("OnClick", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(item, null);
@@ -225,7 +225,7 @@ public sealed class NoteTableInteractionTests
     [DataRow("before after", 7)]
     [DataRow("text", 0)]
     [DataRow("text", 4)]
-    public void CreateTableMenuInsertsOneEditableCellAtCaretAndPreservesText(string text, int offset)
+    public void CreateTableMenuInsertsTwoByTwoEditableTableAtCaretAndPreservesText(string text, int offset)
     {
         NotesDocument? saved = null;
         var source = NotesDocument.FromText(text).SetStyle(0, text.Length, NoteTextStyle.Bold, true);
@@ -239,18 +239,27 @@ public sealed class NoteTableInteractionTests
             ClickCreateTable(window);
             Assert.IsNotNull(saved);
             var table = editor.Document.Blocks.OfType<Table>().Single();
-            Assert.AreEqual(1, table.Columns.Count);
-            Assert.AreEqual(1, table.RowGroups[0].Rows.Count);
-            Assert.AreEqual(1, table.RowGroups[0].Rows[0].Cells.Count);
+            Assert.AreEqual(2, table.Columns.Count);
+            Assert.AreEqual(2, table.RowGroups[0].Rows.Count);
+            Assert.IsTrue(table.RowGroups[0].Rows.All(row => row.Cells.Count == 2));
+            Assert.AreEqual(4, saved.Paragraphs.Count(row => row.Cell is not null));
+            Assert.IsTrue(saved.Paragraphs.Where(row => row.Cell is not null).All(row => row.Runs.All(run => run.Text.Length == 0)));
             Assert.AreSame(table.RowGroups[0].Rows[0].Cells[0], CellAt(editor.CaretPosition));
             Assert.IsTrue(editor.IsKeyboardFocusWithin);
             Assert.AreEqual(text, string.Concat(saved.Paragraphs.Where(row => row.Cell is null).SelectMany(row => row.Runs).Select(run => run.Text)));
             Assert.IsTrue(saved.Paragraphs.Where(row => row.Cell is null).SelectMany(row => row.Runs).All(run => run.Style == NoteTextStyle.Bold));
             Type(editor, "Name");
             Pump(window);
-            Assert.AreEqual("Name", saved.Paragraphs.Single(row => row.Cell is not null).Runs.Single().Text);
+            Assert.AreEqual("Name", saved.Paragraphs.First(row => row.Cell is not null).Runs.Single().Text);
             Press(editor, Key.Tab);
+            Assert.AreSame(table.RowGroups[0].Rows[0].Cells[1], CellAt(editor.CaretPosition));
             Assert.AreEqual(2, saved.Paragraphs.Where(row => row.Cell is not null).Select(row => row.Cell!.Row).Distinct().Count());
+            editor.CaretPosition = table.RowGroups[0].Rows[1].Cells[1].ContentStart;
+            Type(editor, "Last");
+            Pump(window);
+            Assert.AreEqual("Last", saved.Paragraphs.Last(row => row.Cell is not null).Runs.Single().Text);
+            Press(editor, Key.Tab);
+            Assert.AreEqual(3, saved.Paragraphs.Where(row => row.Cell is not null).Select(row => row.Cell!.Row).Distinct().Count());
         }
         finally { window.CloseWithoutMembershipChange(); }
     }
@@ -274,10 +283,10 @@ public sealed class NoteTableInteractionTests
                 ((Paragraph)editor.Document.Blocks.FirstBlock).ContentStart;
             ClickCreateTable(window);
             Assert.IsNotNull(saved);
-            Assert.AreEqual(source.Paragraphs.Count + 1, saved.Paragraphs.Count);
+            Assert.AreEqual(source.Paragraphs.Count + 4, saved.Paragraphs.Count);
             Assert.AreEqual(source.GetPlainText(), string.Join("\r\n", saved.Paragraphs.Take(source.Paragraphs.Count).Select(row => string.Concat(row.Runs.Select(run => run.Text)))));
-            Assert.AreEqual(0, saved.Paragraphs.Last().Cell!.Row);
-            Assert.AreEqual(0, saved.Paragraphs.Last().Cell!.Column);
+            Assert.AreEqual(1, saved.Paragraphs.Last().Cell!.Row);
+            Assert.AreEqual(1, saved.Paragraphs.Last().Cell!.Column);
             Assert.AreNotEqual(source.Paragraphs[0].Cell?.TableId, saved.Paragraphs.Last().Cell!.TableId);
             Assert.AreSame(editor.Document.Blocks.OfType<Table>().Last().RowGroups[0].Rows[0].Cells[0], CellAt(editor.CaretPosition));
         }
@@ -303,7 +312,7 @@ public sealed class NoteTableInteractionTests
             Assert.AreEqual(TextMarkerStyle.Disc, list.MarkerStyle);
             Assert.AreEqual(2, list.ListItems.Count);
             Assert.AreEqual(TextAlignment.Right, cell.TextAlignment);
-            CollectionAssert.AreEqual(new[] { "Insert row above", "Insert row below", "Insert column left", "Insert column right",
+            CollectionAssert.AreEqual(new[] { "Add column right", "Add column left", "Add row below", "Add row above",
                 "Delete row", "Delete column", "Copy table as Markdown", "Create _table", "Create math block" },
                 cell.ContextMenu.Items.OfType<MenuItem>().Select(item => (string)item.Header).ToArray());
             Assert.IsNotNull(table.RowGroups[0].Rows[0].Cells[0].Background);
@@ -376,6 +385,34 @@ public sealed class NoteTableInteractionTests
     }
 
     [TestMethod]
+    [DataRow("Add column right", 1, 1, 1, 2)]
+    [DataRow("Add column left", 1, 2, 1, 1)]
+    [DataRow("Add row below", 1, 1, 2, 1)]
+    [DataRow("Add row above", 2, 1, 1, 1)]
+    public void ContextMenuAddsBesideSelectedCell(string action, int contentRow, int contentColumn, int addedRow, int addedColumn)
+    {
+        NotesDocument? saved = null;
+        var window = Create(Parse(), result => saved = result);
+        try
+        {
+            var editor = (RichTextBox)window.FindName("Editor");
+            var cell = editor.Document.Blocks.OfType<Table>().Single().RowGroups[0].Rows[1].Cells[1];
+            var item = cell.ContextMenu.Items.OfType<MenuItem>().Single(item => (string)item.Header == action);
+            typeof(MenuItem).GetMethod("OnClick", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(item, null);
+            Pump(window);
+            Assert.IsNotNull(saved);
+            var content = saved.Paragraphs.Single(row => row.Runs.Any(run => run.Text == "Open"));
+            Assert.AreEqual(contentRow, content.Cell!.Row);
+            Assert.AreEqual(contentColumn, content.Cell.Column);
+            Assert.IsTrue(saved.Paragraphs.Single(row => row.Cell!.Row == addedRow && row.Cell.Column == addedColumn)
+                .Runs.All(run => run.Text.Length == 0));
+            NotesSnapshotValidator.ValidateDocument(saved);
+            Assert.IsTrue(saved.GetPlainText().Contains("Call\r\nEmail", StringComparison.Ordinal));
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
     public void ContextMenuEditsPreserveRectangularTableAndContent()
     {
         NotesDocument? saved = null;
@@ -383,10 +420,10 @@ public sealed class NoteTableInteractionTests
         try
         {
             var editor = (RichTextBox)window.FindName("Editor");
-            Click("Insert row below");
+            Click("Add row below");
             Assert.IsNotNull(saved);
             Assert.AreEqual(3, saved.Paragraphs.Select(row => row.Cell!.Row).Distinct().Count());
-            Click("Insert column right");
+            Click("Add column right");
             Assert.AreEqual(4, saved.Paragraphs.Select(row => row.Cell!.Column).Distinct().Count());
             Click("Delete column");
             Click("Delete row");
@@ -670,13 +707,13 @@ public sealed class NoteTableInteractionTests
             var editor = (RichTextBox)window.FindName("Editor");
             editor.CaretPosition = editor.Document.ContentEnd;
             ClickCreateTable(window);
-            Assert.AreEqual(1, app.GetNote(id).Document.Paragraphs.Count(row => row.Cell is not null));
+            Assert.AreEqual(4, app.GetNote(id).Document.Paragraphs.Count(row => row.Cell is not null));
             typeof(NoteWindow).GetMethod("RestoreHistory", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [true]);
             Assert.AreEqual("text", app.GetNote(id).Document.GetPlainText());
             Assert.AreEqual(0, editor.Document.Blocks.OfType<Table>().Count());
             typeof(NoteWindow).GetMethod("RestoreHistory", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [false]);
             Assert.AreEqual(1, editor.Document.Blocks.OfType<Table>().Count());
-            Assert.AreEqual(1, app.GetNote(id).Document.Paragraphs.Count(row => row.Cell is not null));
+            Assert.AreEqual(4, app.GetNote(id).Document.Paragraphs.Count(row => row.Cell is not null));
         }
         finally { window.CloseWithoutMembershipChange(); }
     }

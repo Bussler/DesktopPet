@@ -66,7 +66,7 @@ Copying a rendered inline equation to plain text includes its `$` delimiters; a 
 
 ## Tables
 
-Right-click in the note editor and choose **Create table** to insert a blank table with one row and one column at the caret. The cell is ready to type in; right-click it to add columns or rows. If the caret is inside a table or code block, the new table is inserted immediately after that block.
+Right-click in the note editor and choose **Create table** to insert a blank table with two rows and two columns at the caret. The first cell is ready to type in; right-click a cell for **Add column right**, **Add column left**, **Add row below**, and **Add row above**, in that order. If the caret is inside a table or code block, the new table is inserted immediately after that block.
 
 You can also type a complete Markdown table, then add a blank line after it to render it. Pasting a complete Markdown table renders it immediately. A header and separator row are required, and every row must have the same number of cells. Incomplete or malformed tables stay as text; tables inside code blocks remain literal.
 

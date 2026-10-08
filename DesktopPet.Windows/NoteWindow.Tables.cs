@@ -34,7 +34,11 @@ public partial class NoteWindow
                 if (offset > 0) index++;
                 else document.Paragraphs.RemoveAt(index);
             }
-            document.Paragraphs.Insert(index, new NoteParagraph { Cell = new NoteTableCell(Guid.NewGuid(), 0, 0) });
+            var tableId = Guid.NewGuid();
+            for (var row = 0; row < 2; row++)
+                for (var column = 0; column < 2; column++)
+                    document.Paragraphs.Insert(index + row * 2 + column,
+                        new NoteParagraph { Cell = new NoteTableCell(tableId, row, column) });
             CommitEditorDocument(document, document.GetParagraphRange(index).Start);
         }
         catch (Exception exception) when (exception is InvalidDataException or ArgumentException or InvalidOperationException)
@@ -154,10 +158,10 @@ public partial class NoteWindow
     {
         var menu = new System.Windows.Controls.ContextMenu();
         NotesAppearance.Apply(menu, _appearanceSettings.Theme, _uiStyle);
-        Add("Insert row above", NoteTableChange.InsertRow, after: false);
-        Add("Insert row below", NoteTableChange.InsertRow, after: true);
-        Add("Insert column left", NoteTableChange.InsertColumn, after: false);
-        Add("Insert column right", NoteTableChange.InsertColumn, after: true);
+        Add("Add column right", NoteTableChange.InsertColumn, after: true);
+        Add("Add column left", NoteTableChange.InsertColumn, after: false);
+        Add("Add row below", NoteTableChange.InsertRow, after: true);
+        Add("Add row above", NoteTableChange.InsertRow, after: false);
         menu.Items.Add(new Separator());
         Add("Delete row", NoteTableChange.DeleteRow, after: false);
         Add("Delete column", NoteTableChange.DeleteColumn, after: false);
