@@ -150,6 +150,8 @@ public sealed class HoodSession
     private bool _quitRequested;
     private bool _editingArea;
     private bool _dragging;
+    private PetAction? _dragAction;
+    private TimeSpan _dragAnimationElapsed;
     private PetPosition _roamingDirection;
 
     private HoodSession(
@@ -226,11 +228,24 @@ public sealed class HoodSession
     public bool IsDragging => _dragging;
     public bool RequiresAnimationFrames =>
         _configuration.Behavior.ShowSprites &&
-        !((_action is PetAction.RunLeft or PetAction.RunRight) && IsRoamingPaused) &&
-        (_action != PetAction.Idle || _configuration.Behavior.IdleAnimations);
+        (_dragAction is not null ||
+         (!((_action is PetAction.RunLeft or PetAction.RunRight) && IsRoamingPaused) &&
+          (_action != PetAction.Idle || _configuration.Behavior.IdleAnimations)));
     public bool QuitRequested => _quitRequested;
 
-    public HoodPresentation Presentation => new(_action, _frameIndex, PresentationPosition(), _quitRequested);
+    public HoodPresentation Presentation
+    {
+        get
+        {
+            if (_dragAction is { } action)
+            {
+                var frameDuration = TimeSpan.FromMilliseconds(_definition.GetAnimation(action).FrameDurationMilliseconds);
+                return new(action, (int)(_dragAnimationElapsed.Ticks / frameDuration.Ticks), Position, _quitRequested);
+            }
+
+            return new(_action, _frameIndex, PresentationPosition(), _quitRequested);
+        }
+    }
 
     private PetPosition PresentationPosition()
     {
@@ -306,6 +321,16 @@ public sealed class HoodSession
         }
 
         var placement = PetPlacementPolicy.Move(_definition, Position, RoamingArea, requestedPosition, _displays);
+        if (_dragging && placement.Position.X != Position.X)
+        {
+            var action = placement.Position.X < Position.X ? PetAction.RunLeft : PetAction.RunRight;
+            if (_dragAction != action)
+            {
+                _dragAction = action;
+                _dragAnimationElapsed = TimeSpan.Zero;
+            }
+        }
+
         Position = placement.Position;
         RoamingArea = placement.RoamingArea;
         if (persist)
@@ -427,7 +452,12 @@ public sealed class HoodSession
 
     public void BeginDragging() => _dragging = true;
 
-    public void EndDragging() => _dragging = false;
+    public void EndDragging()
+    {
+        _dragging = false;
+        _dragAction = null;
+        _dragAnimationElapsed = TimeSpan.Zero;
+    }
 
     public void React()
     {
@@ -497,6 +527,13 @@ public sealed class HoodSession
         if (_quitRequested || !_configuration.Behavior.ShowSprites)
         {
             return;
+        }
+
+        if (_dragAction is { } dragAction)
+        {
+            var animation = _definition.GetAnimation(dragAction);
+            var cycleTicks = TimeSpan.FromMilliseconds(animation.FrameDurationMilliseconds).Ticks * animation.Frames.Count;
+            _dragAnimationElapsed = TimeSpan.FromTicks((_dragAnimationElapsed.Ticks + elapsed.Ticks % cycleTicks) % cycleTicks);
         }
 
         while (true)

@@ -12,7 +12,7 @@ The preview shows each unique pose, with rows in playback order:
 | Run right | 1 | 16 | 55 ms | Alternating feet with a restrained body bounce; loops every 880 ms. |
 | Run left | 2 | 16 | 55 ms | Mirrored right-running stride; loops every 880 ms. |
 | Wave | 3 | 12 | 78 ms | Completes in 936 ms. |
-| Look up | 4 | 12 | 60 ms | Completes in 720 ms. |
+| Look up | 4 | 12 | 78 ms | Completes in 936 ms. |
 | Look around | 5 | 16 | 143 ms | Completes in 2288 ms. |
 | Jump | 6 | 15 | 80 ms | Crouch, vertical jump, and soft landing; completes in 1200 ms. |
 | Feed | 7 | 15 | 60 ms | Completes in 900 ms; Hood takes a seed from his bowl. |

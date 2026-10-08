@@ -7,6 +7,105 @@ namespace DesktopPet.Tests;
 public sealed class HoodPlacementTests
 {
     [TestMethod]
+    [DataRow(-20d, PetAction.RunLeft)]
+    [DataRow(20d, PetAction.RunRight)]
+    public void Dragging_AnimatesHorizontalMovementEvenWhenRoamingAndIdleAnimationsAreDisabled(
+        double dx, PetAction expectedAction)
+    {
+        var configuration = HoodConfiguration.Defaults with
+        {
+            Behavior = HoodConfiguration.Defaults.Behavior with
+            {
+                Roaming = false, IdleAnimations = false, RandomEvents = false
+            }
+        };
+        var store = new RecordingSessionStore();
+        var session = CreateSession([Primary(1920, 1040)], configuration, store: store);
+        session.BeginDragging();
+        session.MoveTo(session.Position with { X = session.Position.X + dx }, persist: false);
+        var position = session.Position;
+        var animation = Definition().GetAnimation(expectedAction);
+
+        Assert.AreEqual(expectedAction, session.Presentation.Action);
+        Assert.IsTrue(session.RequiresAnimationFrames);
+        session.Advance(TimeSpan.FromMilliseconds(animation.FrameDurationMilliseconds));
+        Assert.AreEqual(1, session.Presentation.FrameIndex);
+        Assert.AreEqual(position, session.Position, "Dragging must not cause autonomous movement.");
+        session.MoveTo(position with { X = position.X + dx }, persist: false);
+        Assert.AreEqual(1, session.Presentation.FrameIndex, "Mouse moves must not restart the walk cycle.");
+        session.Advance(TimeSpan.FromMilliseconds(animation.FrameDurationMilliseconds * animation.Frames.Count));
+        Assert.AreEqual(1, session.Presentation.FrameIndex, "The walk cycle must loop.");
+        session.SaveCurrentState();
+        Assert.AreEqual(PetAction.Idle, store.Snapshot!.Action, "Drag feedback must not enter saved behavior.");
+        session.EndDragging();
+        Assert.AreEqual(PetAction.Idle, session.Presentation.Action);
+        Assert.IsFalse(session.RequiresAnimationFrames);
+    }
+
+    [TestMethod]
+    public void Dragging_ReversesDirectionAndResumesThePausedRoamingAnimationOnRelease()
+    {
+        var session = CreateSession([Primary(1920, 1040)]);
+        session.Advance(TimeSpan.FromMilliseconds(250));
+        var before = session.Presentation;
+        Assert.AreEqual(PetAction.RunLeft, before.Action);
+        session.BeginDragging();
+        session.MoveTo(session.Position with { X = session.Position.X + 20 }, persist: false);
+        session.Advance(TimeSpan.FromMilliseconds(100));
+        Assert.AreEqual(PetAction.RunRight, session.Presentation.Action);
+        session.MoveTo(session.Position with { X = session.Position.X - 10 }, persist: false);
+        Assert.AreEqual(PetAction.RunLeft, session.Presentation.Action);
+        Assert.AreEqual(0, session.Presentation.FrameIndex);
+        session.EndDragging();
+
+        Assert.AreEqual(before.Action, session.Presentation.Action);
+        Assert.AreEqual(before.FrameIndex, session.Presentation.FrameIndex);
+        var position = session.Position;
+        session.Advance(TimeSpan.FromMilliseconds(100));
+        Assert.IsTrue(session.Position.X < position.X, "Roaming must resume after release.");
+    }
+
+    [TestMethod]
+    public void Dragging_VerticalOrClampedMovementDoesNotChooseANewHorizontalAnimation()
+    {
+        var session = CreateSession([Primary(1920, 1040)]);
+        session.BeginDragging();
+        session.MoveTo(session.Position with { Y = 400 }, persist: false);
+        Assert.AreEqual(PetAction.Idle, session.Presentation.Action);
+        session.MoveTo(session.Position with { X = -10000 }, persist: false);
+        Assert.AreEqual(PetAction.RunLeft, session.Presentation.Action);
+        session.Advance(TimeSpan.FromMilliseconds(100));
+        var frame = session.Presentation.FrameIndex;
+        session.MoveTo(session.Position with { X = -10000 }, persist: false);
+        Assert.AreEqual(PetAction.RunLeft, session.Presentation.Action);
+        Assert.AreEqual(frame, session.Presentation.FrameIndex);
+        session.EndDragging();
+        session.BeginDragging();
+        session.MoveTo(session.Position with { Y = 300 }, persist: false);
+        Assert.AreEqual(PetAction.Idle, session.Presentation.Action, "A new drag must clear old feedback.");
+    }
+
+    [TestMethod]
+    public void Dragging_PreservesSleepAndRestoresItsPresentationOnRelease()
+    {
+        var store = new RecordingSessionStore();
+        var session = CreateSession([Primary(1920, 1040)], store: store);
+        session.Sleep();
+        var remainingNap = session.RemainingNap;
+        session.BeginDragging();
+        session.MoveTo(session.Position with { X = session.Position.X + 20 }, persist: false);
+        Assert.AreEqual(PetAction.RunRight, session.Presentation.Action);
+        session.Advance(TimeSpan.FromMilliseconds(100));
+        Assert.AreEqual(HoodSessionMode.Sleeping, session.Mode);
+        Assert.AreEqual(remainingNap - TimeSpan.FromMilliseconds(100), session.RemainingNap);
+        session.SaveCurrentState();
+        HoodSessionSnapshotValidator.Validate(store.Snapshot!);
+        Assert.AreEqual(PetAction.Sleep, store.Snapshot!.Action);
+        session.EndDragging();
+        Assert.AreEqual(PetAction.Sleep, session.Presentation.Action);
+    }
+
+    [TestMethod]
     public void Start_CreatesAnAreaLargeEnoughForTheCompletePetFootprint()
     {
         var session = CreateSession([Primary(1920, 1040)]);

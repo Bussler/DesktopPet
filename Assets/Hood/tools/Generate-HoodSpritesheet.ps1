@@ -61,7 +61,7 @@ $actions = @(
     @('runRight', 4, 16, 55, $true),
     @('runLeft', 4, 16, 55, $true),
     @('wave', 4, 12, 78, $false),
-    @('lookUp', 4, 12, 60, $false),
+    @('lookUp', 4, 12, 78, $false),
     @('lookAround', 4, 16, 143, $false),
     @('jump', 5, 15, 80, $false),
     @('feed', 5, 15, 60, $false),

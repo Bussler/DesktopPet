@@ -217,6 +217,7 @@ public partial class HoodOverlayWindow : Window
 
         _lastPointerScreen = pointer;
         ApplyPlacement();
+        RenderPresentation();
         UpdateTimerInterval();
     }
 
@@ -241,6 +242,7 @@ public partial class HoodOverlayWindow : Window
         }
 
         _dragged = false;
+        RenderPresentation();
         UpdateTimerInterval();
         e.Handled = true;
     }
@@ -260,6 +262,7 @@ public partial class HoodOverlayWindow : Window
         }
 
         _dragged = false;
+        RenderPresentation();
         UpdateTimerInterval();
     }
 
