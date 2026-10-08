@@ -1,4 +1,6 @@
 using System.Runtime.InteropServices;
+using System.Windows;
+using System.Windows.Interop;
 using Forms = System.Windows.Forms;
 using DesktopPet.Core;
 
@@ -8,10 +10,12 @@ internal static class WindowsDisplayProvider
 {
     private const int EffectiveDpi = 0;
     private const uint MonitorDefaultToNearest = 2;
+    private const uint PositionOnly = 0x0001 | 0x0004 | 0x0010; // No resize, z-order change, or activation.
 
-    public static DisplayInfo[] GetDisplays()
+    public static DisplayInfo[] GetDisplays() => GetDisplays(Forms.Screen.AllScreens);
+
+    private static DisplayInfo[] GetDisplays(Forms.Screen[] screens)
     {
-        var screens = Forms.Screen.AllScreens;
         var primary = screens.Single(screen => screen.Primary);
         var primaryScale = GetScale(primary);
         return screens.Select(screen =>
@@ -30,6 +34,39 @@ internal static class WindowsDisplayProvider
                 scale);
         }).ToArray();
     }
+
+    public static void ApplyPosition(Window window, PetPosition position)
+    {
+        var handle = new WindowInteropHelper(window).Handle;
+        if (handle == IntPtr.Zero)
+        {
+            window.Left = position.X;
+            window.Top = position.Y;
+            return;
+        }
+
+        var screens = Forms.Screen.AllScreens;
+        var display = GetDisplays(screens).MinBy(display =>
+        {
+            var area = display.WorkArea;
+            var dx = position.X - Math.Clamp(position.X, area.X, area.Right);
+            var dy = position.Y - Math.Clamp(position.Y, area.Y, area.Bottom);
+            return dx * dx + dy * dy;
+        })!;
+        var workArea = screens.Single(screen => screen.DeviceName == display.Name).WorkingArea;
+        var point = ToScreenPosition(position, display, new PetBounds(workArea.X, workArea.Y, workArea.Width, workArea.Height));
+        // Physical positioning avoids WPF scaling the desktop origin with the window's DPI.
+        if (!SetWindowPos(handle, IntPtr.Zero, (int)Math.Round(point.X), (int)Math.Round(point.Y), 0, 0, PositionOnly))
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+    }
+
+    internal static PetPosition ToScreenPosition(PetPosition position, DisplayInfo display, PetBounds physicalWorkArea) =>
+        new(physicalWorkArea.X + (position.X - display.WorkArea.X) * display.ScaleFactor,
+            physicalWorkArea.Y + (position.Y - display.WorkArea.Y) * display.ScaleFactor);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(IntPtr handle, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
 
     private static double GetScale(Forms.Screen screen)
     {

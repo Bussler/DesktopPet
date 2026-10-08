@@ -17,12 +17,12 @@ public partial class RoamingAreaEditorWindow : Window
         MinWidth = session.MinimumRoamingArea.Width;
         MinHeight = session.MinimumRoamingArea.Height;
         ApplyPlacement();
+        SourceInitialized += (_, _) => ApplyPlacement();
     }
 
     internal void ApplyPlacement()
     {
-        Left = _session.RoamingArea.X;
-        Top = _session.RoamingArea.Y;
+        WindowsDisplayProvider.ApplyPosition(this, new PetPosition(_session.RoamingArea.X, _session.RoamingArea.Y));
         Width = _session.RoamingArea.Width;
         Height = _session.RoamingArea.Height;
     }

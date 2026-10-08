@@ -2,6 +2,7 @@
 Store relevant findings or thought processes in dedicated files to the session in a local .codex/ directory.
 
 You can build the app with the .\tools\Build-AndPublish.ps1 script.
+Tests can be run on tools\Test.ps1.
 
 Always keep changes to the codebase lean and as short as possible without impacting correctness. Do not introduce unnecessary complexity unless there is a clear benefit.
 A smaller and easier-to-understand solution is preferred over a more sophisticated one.

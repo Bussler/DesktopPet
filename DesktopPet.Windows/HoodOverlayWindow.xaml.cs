@@ -43,6 +43,7 @@ public partial class HoodOverlayWindow : Window
     private System.Windows.Point _mouseDownScreen;
     private System.Windows.Point _lastPointerScreen;
     private PetPosition _dragStartPosition;
+    private PetPosition _dragRequestedPosition;
     private bool _trackingMouse;
     private bool _dragged;
 
@@ -98,6 +99,7 @@ public partial class HoodOverlayWindow : Window
         if (PresentationSource.FromVisual(this) is HwndSource source)
         {
             source.AddHook(WindowMessageHook);
+            ApplyPlacement();
         }
     }
 
@@ -175,6 +177,7 @@ public partial class HoodOverlayWindow : Window
         _mouseDownScreen = PointToScreen(e.GetPosition(this));
         _lastPointerScreen = _mouseDownScreen;
         _dragStartPosition = _session.Position;
+        _dragRequestedPosition = _dragStartPosition;
         _session.BeginDragging();
         CaptureMouse();
         UpdateTimerInterval();
@@ -190,6 +193,11 @@ public partial class HoodOverlayWindow : Window
 
         var pointer = PointToScreen(e.GetPosition(this));
         var scale = VisualTreeHelper.GetDpi(this);
+        MoveDraggedPet(pointer, scale);
+    }
+
+    private void MoveDraggedPet(System.Windows.Point pointer, DpiScale scale)
+    {
         var total = pointer - _mouseDownScreen;
         if (!_dragged)
         {
@@ -201,20 +209,19 @@ public partial class HoodOverlayWindow : Window
             }
 
             _dragged = true;
-            _session.MoveTo(new PetPosition(
+            _dragRequestedPosition = new PetPosition(
                 _dragStartPosition.X + total.X / scale.DpiScaleX,
-                _dragStartPosition.Y + total.Y / scale.DpiScaleY),
-                persist: false);
+                _dragStartPosition.Y + total.Y / scale.DpiScaleY);
         }
         else
         {
             var delta = pointer - _lastPointerScreen;
-            _session.MoveTo(new PetPosition(
-                _session.Position.X + delta.X / scale.DpiScaleX,
-                _session.Position.Y + delta.Y / scale.DpiScaleY),
-                persist: false);
+            _dragRequestedPosition = new PetPosition(
+                _dragRequestedPosition.X + delta.X / scale.DpiScaleX,
+                _dragRequestedPosition.Y + delta.Y / scale.DpiScaleY);
         }
 
+        _session.MoveTo(_dragRequestedPosition, persist: false);
         _lastPointerScreen = pointer;
         ApplyPlacement();
         RenderPresentation();
@@ -392,8 +399,7 @@ public partial class HoodOverlayWindow : Window
         }
 
         var presentation = _session.Presentation;
-        Left = presentation.Position.X;
-        Top = presentation.Position.Y;
+        WindowsDisplayProvider.ApplyPosition(this, presentation.Position);
         if (_renderedAction == presentation.Action && _renderedFrame == presentation.FrameIndex)
         {
             return;
@@ -451,8 +457,7 @@ public partial class HoodOverlayWindow : Window
 
     internal void ApplyPlacement()
     {
-        Left = _session.Presentation.Position.X;
-        Top = _session.Presentation.Position.Y;
+        WindowsDisplayProvider.ApplyPosition(this, _session.Presentation.Position);
         _areaEditor?.ApplyPlacement();
     }
 
