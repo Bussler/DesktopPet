@@ -491,6 +491,10 @@ public partial class NoteWindow : Window
         {
             return true;
         }
+        else if (!control && !shift && key == Key.Tab && IndentEmptyListAtCaret())
+        {
+            return true;
+        }
         else if (!control && !shift && key == Key.Enter && ContinueCodeAtCaret())
         {
             return true;
@@ -902,6 +906,19 @@ public partial class NoteWindow : Window
         SetSaveStatus(_updateDocument(_noteId, updated));
         _lastAcceptedDocument = updated.Copy();
         UpdateToolbar();
+        return true;
+    }
+
+    private bool IndentEmptyListAtCaret()
+    {
+        if (!Editor.IsKeyboardFocused || !Editor.Selection.IsEmpty) return false;
+        var document = ReadEditorDocument();
+        var (start, _) = GetSelectionOffsets(document);
+        var index = document.GetParagraphIndexAt(start);
+        if (document.Paragraphs[index].Kind is not (NoteBlockKind.Checklist or NoteBlockKind.Numbered) ||
+            document.GetParagraphRange(index).Length != 0) return false;
+
+        EditingCommands.IncreaseIndentation.Execute(null, Editor);
         return true;
     }
 

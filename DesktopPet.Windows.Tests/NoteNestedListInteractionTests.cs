@@ -16,6 +16,51 @@ namespace DesktopPet.Windows.Tests;
 public sealed class NoteNestedListInteractionTests
 {
     [TestMethod]
+    [DataRow(NoteBlockKind.Bulleted, false, false)]
+    [DataRow(NoteBlockKind.Numbered, false, false)]
+    [DataRow(NoteBlockKind.Checklist, false, false)]
+    [DataRow(NoteBlockKind.Bulleted, true, false)]
+    [DataRow(NoteBlockKind.Numbered, true, false)]
+    [DataRow(NoteBlockKind.Checklist, true, false)]
+    [DataRow(NoteBlockKind.Bulleted, false, true)]
+    [DataRow(NoteBlockKind.Numbered, false, true)]
+    [DataRow(NoteBlockKind.Checklist, false, true)]
+    public void TabIndentsEmptyListItemAndKeepsTheCaretReadyForTyping(NoteBlockKind kind, bool afterEnter, bool singleItem)
+    {
+        var source = NotesDocument.FromText(singleItem ? string.Empty : afterEnter ? "Parent\r\nTask\r\nAfter" : "Parent\r\n\r\nAfter");
+        foreach (var row in source.Paragraphs) row.Kind = kind;
+        var saved = source.Copy();
+        var window = Create(source, document => saved = document);
+        try
+        {
+            Show(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            editor.Focus();
+            editor.CaretPosition = Row(editor, afterEnter ? "Task" : string.Empty).ContentEnd;
+            if (afterEnter) PressEnter(editor);
+            var key = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(editor), 0, Key.Tab)
+                { RoutedEvent = Keyboard.PreviewKeyDownEvent };
+            editor.RaiseEvent(key);
+            if (!key.Handled) EditingCommands.TabForward.Execute(null, editor);
+            editor.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            var index = singleItem ? 0 : afterEnter ? 2 : 1;
+            var expectedDepth = singleItem ? 0 : 1;
+            Assert.AreEqual(expectedDepth, saved.Paragraphs[index].ListDepth,
+                "Tab must indent under the preceding item, matching native bullets.");
+            Assert.AreEqual(kind, saved.Paragraphs[index].Kind);
+            Assert.AreEqual(afterEnter ? "Parent\r\nTask\r\n\r\nAfter" : source.GetPlainText(), saved.GetPlainText());
+            Assert.AreSame(Row(editor, string.Empty), editor.CaretPosition.Paragraph);
+            Assert.IsTrue(editor.IsKeyboardFocused);
+            editor.Selection.Text = "Child";
+            editor.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            Assert.AreEqual("Child", string.Concat(saved.Paragraphs[index].Runs.Select(run => run.Text)));
+            Assert.AreEqual(expectedDepth, saved.Paragraphs[index].ListDepth);
+            Assert.AreEqual(kind, saved.Paragraphs[index].Kind);
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
     [DataRow(NoteBlockKind.Bulleted)]
     [DataRow(NoteBlockKind.Numbered)]
     [DataRow(NoteBlockKind.Checklist)]
