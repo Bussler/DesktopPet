@@ -18,7 +18,8 @@ public partial class HoodOverlayWindow : Window
     private const int WmMouseActivate = 0x0021;
     private const int MaNoActivate = 3;
     private readonly HoodSession _session;
-    private LoadedHoodAssets _assets;
+    private HoodAssetSource _assetSource;
+    private LoadedHoodAssets? _assets;
     private readonly Action _showSettings;
     private readonly Action _quitApplication;
     private readonly Action _activateNotes;
@@ -29,8 +30,8 @@ public partial class HoodOverlayWindow : Window
     private readonly DispatcherTimer _frameTimer = new() { Interval = TimeSpan.FromMilliseconds(33) };
     private long _lastTick;
     private int _suspended;
-    private PetAction? _renderedAction;
-    private int _renderedFrame = -1;
+    private BitmapSource? _renderedSpriteSheet;
+    private Int32Rect? _renderedRectangle;
     private readonly WpfMenuItem _hungerMenuItem = new() { IsEnabled = false };
     private readonly WpfMenuItem _boredomMenuItem = new() { IsEnabled = false };
     private readonly WpfMenuItem _sleepMenuItem = new() { IsEnabled = false };
@@ -70,8 +71,25 @@ public partial class HoodOverlayWindow : Window
         Action showNotesList,
         Action showNotesSettings,
         string uiStyle)
+        : this(session, assets.Source ?? new HoodAssetSource(assets.SourceDirectory, assets.Definition), assets,
+            showSettings, quitApplication, activateNotes, createNote, showNotesList, showNotesSettings, uiStyle)
+    {
+    }
+
+    internal HoodOverlayWindow(
+        HoodSession session,
+        HoodAssetSource assetSource,
+        LoadedHoodAssets? assets,
+        Action showSettings,
+        Action quitApplication,
+        Action activateNotes,
+        Action createNote,
+        Action showNotesList,
+        Action showNotesSettings,
+        string uiStyle)
     {
         _session = session;
+        _assetSource = assetSource;
         _assets = assets;
         _uiStyle = UiStyleCatalog.Canonicalize(uiStyle);
         _showSettings = showSettings;
@@ -81,8 +99,8 @@ public partial class HoodOverlayWindow : Window
         _showNotesList = showNotesList;
         _showNotesSettings = showNotesSettings;
         InitializeComponent();
-        Width = PetImage.Width = assets.Definition.DisplayWidth;
-        Height = PetImage.Height = assets.Definition.DisplayHeight;
+        Width = PetImage.Width = assetSource.Definition.DisplayWidth;
+        Height = PetImage.Height = assetSource.Definition.DisplayHeight;
         Topmost = session.Configuration.Behavior.AlwaysOnTop;
         Left = session.Position.X;
         Top = session.Position.Y;
@@ -91,7 +109,8 @@ public partial class HoodOverlayWindow : Window
         ContextMenu.Opened += (_, _) => UpdateNeedLabels();
         Closed += OnOverlayClosed;
         _frameTimer.Tick += OnFrameTimerTick;
-        RenderPresentation();
+        if (session.Configuration.Behavior.ShowSprites) RenderPresentation();
+        else ReleaseSpriteAssets();
     }
 
     private void OnSourceInitialized(object? sender, EventArgs e)
@@ -101,6 +120,49 @@ public partial class HoodOverlayWindow : Window
             source.AddHook(WindowMessageHook);
             ApplyPlacement();
         }
+    }
+
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        try
+        {
+            ReloadAssetsForDpi(newDpi.DpiScaleX, newDpi.DpiScaleY);
+        }
+        catch (PetAssetException exception)
+        {
+            System.Windows.MessageBox.Show(
+                $"Hood could not reload its artwork for this display. The last valid appearance remains active.\n\n{exception.Message}",
+                "Pet artwork could not be reloaded",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
+    internal void ReloadAssetsForDpi(double dpiScaleX, double dpiScaleY)
+    {
+        if (_assets is null || (_assets.DpiScaleX == dpiScaleX && _assets.DpiScaleY == dpiScaleY))
+        {
+            return;
+        }
+
+        var source = _assetSource.CachedSpriteSheet is null
+            ? HoodAssets.ReadSourceForPet(_assetSource.Directory, _assetSource.Definition)
+            : _assetSource;
+        ApplyPetAssets(source, HoodAssets.LoadAtScale(source, dpiScaleX, dpiScaleY));
+    }
+
+    internal void EnsureSpriteAssetsLoaded()
+    {
+        var dpiScale = WindowsDisplayProvider.GetScaleForPet(
+            _session.Position, _assetSource.Definition, WindowsDisplayProvider.GetDisplays());
+        if (_assets is not null && _assets.DpiScaleX == dpiScale && _assets.DpiScaleY == dpiScale)
+            return;
+
+        var source = _assetSource.CachedSpriteSheet is null
+            ? HoodAssets.ReadSourceForPet(_assetSource.Directory, _assetSource.Definition)
+            : _assetSource;
+        ApplyPetAssets(source, HoodAssets.LoadAtScale(source, dpiScale, dpiScale));
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -393,44 +455,80 @@ public partial class HoodOverlayWindow : Window
 
     private void RenderPresentation()
     {
-        if (!_session.Configuration.Behavior.ShowSprites)
+        if (!_session.Configuration.Behavior.ShowSprites || _assets is not { } assets)
         {
             return;
         }
 
         var presentation = _session.Presentation;
         WindowsDisplayProvider.ApplyPosition(this, presentation.Position);
-        if (_renderedAction == presentation.Action && _renderedFrame == presentation.FrameIndex)
+        var animation = assets.Definition.GetAnimation(presentation.Action);
+        var frame = animation.Frames[presentation.FrameIndex];
+        var rectangle = assets.GetFrameRectangle(frame);
+        if (ReferenceEquals(_renderedSpriteSheet, assets.SpriteSheet) && _renderedRectangle == rectangle)
         {
             return;
         }
 
-        var animation = _assets.Definition.GetAnimation(presentation.Action);
-        var frame = animation.Frames[presentation.FrameIndex];
-        var rectangle = new Int32Rect(
-            frame.Column * _assets.Definition.FrameWidth,
-            frame.Row * _assets.Definition.FrameHeight,
-            _assets.Definition.FrameWidth,
-            _assets.Definition.FrameHeight);
-        var cropped = new CroppedBitmap(_assets.SpriteSheet, rectangle);
+        var cropped = new CroppedBitmap(assets.SpriteSheet, rectangle);
         cropped.Freeze();
         PetImage.Source = cropped;
-        _renderedAction = presentation.Action;
-        _renderedFrame = presentation.FrameIndex;
+        _renderedSpriteSheet = assets.SpriteSheet;
+        _renderedRectangle = rectangle;
     }
 
     internal void ApplyAlwaysOnTop(bool enabled) => Topmost = enabled;
 
-    internal LoadedHoodAssets CurrentAssets => _assets;
+    internal LoadedHoodAssets? CurrentAssets => _assets;
+    internal HoodAssetSource CurrentSource => _assetSource;
 
-    internal LoadedHoodAssets LoadPetAssets(string pet) =>
-        HoodAssets.LoadPet(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets"), pet, _assets.Definition);
+    internal LoadedHoodAssets LoadPetAssets(string pet)
+    {
+        var dpiScale = WindowsDisplayProvider.GetScaleForPet(
+            _session.Position, _assetSource.Definition, WindowsDisplayProvider.GetDisplays());
+        return HoodAssets.LoadPetAtScale(
+            System.IO.Path.Combine(AppContext.BaseDirectory, "Assets"), pet, _assetSource.Definition,
+            dpiScale, dpiScale);
+    }
 
     internal void ApplyPetAssets(LoadedHoodAssets assets)
     {
+        ApplyPetAssets(assets.Source ?? new HoodAssetSource(assets.SourceDirectory, assets.Definition), assets);
+    }
+
+    internal void ApplyPetAssets(HoodAssetSource source, LoadedHoodAssets assets)
+    {
+        _assetSource = source;
         _assets = assets;
-        _renderedAction = null;
+        _renderedSpriteSheet = null;
+        _renderedRectangle = null;
         RenderPresentation();
+    }
+
+    internal void RestorePetAssets(HoodAssetSource source, LoadedHoodAssets? assets)
+    {
+        _assetSource = source;
+        _assets = assets;
+        _renderedSpriteSheet = null;
+        _renderedRectangle = null;
+        PetImage.Source = null;
+        RenderPresentation();
+    }
+
+    internal void RestorePetAssets(HoodAssetRollbackSnapshot snapshot)
+    {
+        var dpiScale = WindowsDisplayProvider.GetScaleForPet(
+            _session.Position, snapshot.Source.Definition, WindowsDisplayProvider.GetDisplays());
+        var (source, assets) = snapshot.LoadAtScale(dpiScale, dpiScale);
+        RestorePetAssets(source, assets);
+    }
+
+    internal void ReleaseSpriteAssets()
+    {
+        PetImage.Source = null;
+        _renderedSpriteSheet = null;
+        _renderedRectangle = null;
+        _assets = null;
     }
 
     internal System.Windows.Point PresentationCenter => new(Left + ActualWidth / 2, Top + ActualHeight / 2);
@@ -442,6 +540,8 @@ public partial class HoodOverlayWindow : Window
         UpdateNeedLabels();
         if (_session.Configuration.Behavior.ShowSprites)
         {
+            if (_assets is null)
+                throw new InvalidOperationException("Sprite assets must be loaded before the pet is revealed.");
             if (!IsVisible) Show();
             Interlocked.Exchange(ref _lastTick, Stopwatch.GetTimestamp());
             if (IsLoaded) _frameTimer.Start();
@@ -451,6 +551,7 @@ public partial class HoodOverlayWindow : Window
             _frameTimer.Stop();
             _areaEditor?.Close();
             Hide();
+            ReleaseSpriteAssets();
         }
         SpritesVisibilityChanged?.Invoke();
     }

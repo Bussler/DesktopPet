@@ -75,6 +75,8 @@ public partial class NoteWindow
                 row.Runs = runs;
                 NotesSnapshotValidator.ValidateDocument(document);
                 e.CancelCommand();
+                _tablePasteRequested = false;
+                _blockSyntaxPasteRequested = false;
                 var scrollPosition = CaptureEditorScrollPosition();
                 Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(() =>
                 {
@@ -110,6 +112,8 @@ public partial class NoteWindow
             document.Paragraphs.InsertRange(first, selected.Paragraphs);
             NotesSnapshotValidator.ValidateDocument(document);
             e.CancelCommand();
+            _tablePasteRequested = false;
+            _blockSyntaxPasteRequested = false;
             // The paste event runs inside WPF's edit transaction; rebuild after it ends.
             Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(() =>
             {
@@ -122,6 +126,8 @@ public partial class NoteWindow
         catch (Exception exception) when (exception is JsonException or InvalidDataException or ArgumentException)
         {
             e.CancelCommand();
+            _tablePasteRequested = false;
+            _blockSyntaxPasteRequested = false;
             SetSaveStatus(exception.Message);
         }
     }

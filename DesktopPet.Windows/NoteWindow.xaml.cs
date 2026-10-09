@@ -17,6 +17,23 @@ namespace DesktopPet.Windows;
 public partial class NoteWindow : Window
 {
     private static readonly System.Windows.Media.FontFamily CodeFont = new("Consolas");
+
+    [Flags]
+    private enum MarkupPass
+    {
+        None = 0,
+        TypedBlock = 1 << 0,
+        List = 1 << 1,
+        Code = 1 << 2,
+        Table = 1 << 3,
+        Emphasis = 1 << 4,
+        Block = 1 << 5,
+        DisplayMath = 1 << 6,
+        Link = 1 << 7,
+        InlineMath = 1 << 8,
+        All = TypedBlock | List | Code | Table | Emphasis | Block | DisplayMath | Link | InlineMath
+    }
+
     private readonly Guid _noteId;
     private readonly Func<Guid, NotesDocument, string?> _updateDocument;
     private readonly Func<Guid, string, string?> _updateName;
@@ -49,6 +66,7 @@ public partial class NoteWindow : Window
     private NotesDocument _lastAcceptedDocument;
     private bool _initializing = true;
     private bool _updatingEditor;
+    private EditorOffsetMap? _editorOffsetMap;
     private bool _markupFormattingPending;
     private string? _markupOriginalText;
     private bool _editorRecoveryPending;
@@ -103,6 +121,7 @@ public partial class NoteWindow : Window
         Height = note.Bounds.Height;
         ApplyAppearance(appearanceSettings, note.Color, _uiStyle);
         SetEditorDocument(note.Document, null, null);
+        UpdateToolbar();
         MenuButton.ContextMenu = CreateHeaderMenu();
         InitializeTableEditing();
         InitializeListClipboard();
@@ -322,6 +341,7 @@ public partial class NoteWindow : Window
             return;
         }
 
+        _editorOffsetMap = null;
         try
         {
             var document = ReadEditorDocument();
@@ -338,17 +358,18 @@ public partial class NoteWindow : Window
             }
             var originalText = _lastAcceptedDocument.GetPlainText();
             var plainText = document.GetPlainText();
-            TrackPlainUrlInput(document, GetInsertedRange(originalText, plainText));
+            var input = GetInsertedRange(originalText, plainText);
+            TrackPlainUrlInput(document, input);
             ClearLinkFeedback();
             SetSaveStatus(_updateDocument(_noteId, document));
             _lastAcceptedDocument = document.Copy();
             _updatingEditor = true;
             try { RefreshListLayout(); RefreshNumberedMarkers(); }
             finally { _updatingEditor = false; }
-            if (!_markupFormattingPending && (_tablePasteRequested || _blockSyntaxPasteRequested ||
-                plainText.IndexOfAny(['`', '|', '-', '[', ')', '*', '_', '~', '$', '#']) >= 0 ||
-                plainText.Contains("http://", StringComparison.OrdinalIgnoreCase) ||
-                plainText.Contains("https://", StringComparison.OrdinalIgnoreCase)))
+            var passes = SelectMarkupPasses(document, originalText, plainText, input,
+                _tablePasteRequested || _blockSyntaxPasteRequested, _completedPlainUrl is not null,
+                _pendingPlainUrl is { } pendingUrl && Overlaps(input, pendingUrl));
+            if (!_markupFormattingPending && passes != MarkupPass.None)
             {
                 _markupFormattingPending = true;
                 _markupOriginalText = originalText;
@@ -374,13 +395,15 @@ public partial class NoteWindow : Window
         // A document replacement inside TextChanged causes WPF to terminate the process.
         Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(() =>
         {
-            if (_editorRecoveryPending) SetEditorDocument(_lastAcceptedDocument, null, null);
+            if (!_editorRecoveryPending) return;
+            SetEditorDocument(_lastAcceptedDocument, null, null);
+            UpdateToolbar();
         }));
     }
 
     private void OnSelectionChanged(object sender, RoutedEventArgs e)
     {
-        if (_editorRecoveryPending) return;
+        if (_editorRecoveryPending || _updatingEditor || _lookingUpLinkRange) return;
         try { UpdateToolbar(); }
         catch (Exception exception) when (exception is InvalidDataException or ArgumentException or InvalidOperationException)
         {
@@ -535,57 +558,101 @@ public partial class NoteWindow : Window
             var (start, length) = GetSelectionOffsets(document);
             var text = document.GetPlainText();
             var original = _markupOriginalText ?? text;
-            var typingStyle = GetTypingStyle(document, start);
+            var input = GetInsertedRange(original, text);
+            var passes = SelectMarkupPasses(document, original, text, input,
+                _tablePasteRequested || _blockSyntaxPasteRequested, _completedPlainUrl is not null,
+                _pendingPlainUrl is { } pendingUrl && Overlaps(input, pendingUrl));
+            var tablePasteRequested = _tablePasteRequested;
+            var blockSyntaxPasteRequested = _blockSyntaxPasteRequested;
             _markupOriginalText = null;
-            var opened = _blockSyntaxPasteRequested ? document :
-                NoteBlockMarkdownFormatting.OpenTypedBlock(document, GetInsertedRange(original, text), ref start, length);
-            var openedMath = !ReferenceEquals(opened, document) &&
-                opened.Paragraphs[opened.GetParagraphIndexAt(start)].Kind == NoteBlockKind.DisplayMath;
-            var formatted = NoteListFormatting.Apply(opened, GetInsertedRange(original, opened.GetPlainText()), ref start, ref length);
-            formatted = NoteCodeFormatting.Apply(formatted, ref start, ref length, GetInsertedRange(original, formatted.GetPlainText()));
-            var beforeTable = formatted;
-            formatted = NoteTableMarkdown.Apply(formatted, _tablePasteRequested, ref start, ref length);
-            var tableWasConverted = !ReferenceEquals(beforeTable, formatted);
-            var temporarilyMaskedTableRuns = new HashSet<NoteTextRun>(ReferenceEqualityComparer.Instance);
-            if (tableWasConverted)
+            _tablePasteRequested = false;
+            _blockSyntaxPasteRequested = false;
+            if (passes == MarkupPass.None)
+            {
+                _completedPlainUrl = null;
+                return;
+            }
+
+            var typingStyle = GetTypingStyle(document, start);
+            var projectionDocument = document;
+            var projection = text;
+            string PlainText(NotesDocument source)
+            {
+                if (!ReferenceEquals(projectionDocument, source))
+                {
+                    projectionDocument = source;
+                    projection = source.GetPlainText();
+                }
+                return projection;
+            }
+            (int Start, int Length) InputFor(NotesDocument source) => GetInsertedRange(original, PlainText(source));
+
+            var formatted = document;
+            var openedMath = false;
+            if (passes.HasFlag(MarkupPass.TypedBlock))
+            {
+                var opened = blockSyntaxPasteRequested ? formatted : NoteBlockMarkdownFormatting.OpenTypedBlock(
+                    formatted, InputFor(formatted), ref start, length);
+                openedMath = !ReferenceEquals(opened, formatted) &&
+                    opened.Paragraphs[opened.GetParagraphIndexAt(start)].Kind == NoteBlockKind.DisplayMath;
+                formatted = opened;
+            }
+            if (passes.HasFlag(MarkupPass.List))
+                formatted = NoteListFormatting.Apply(formatted, InputFor(formatted), ref start, ref length);
+            if (passes.HasFlag(MarkupPass.Code))
+                formatted = NoteCodeFormatting.Apply(formatted, ref start, ref length, InputFor(formatted));
+
+            var tableWasConverted = false;
+            HashSet<NoteTextRun>? temporarilyMaskedTableRuns = null;
+            if (passes.HasFlag(MarkupPass.Table))
+            {
+                var beforeTable = formatted;
+                formatted = NoteTableMarkdown.Apply(formatted, tablePasteRequested, ref start, ref length);
+                tableWasConverted = !ReferenceEquals(beforeTable, formatted);
+                if (tableWasConverted)
+                {
+                    temporarilyMaskedTableRuns = new HashSet<NoteTextRun>(ReferenceEqualityComparer.Instance);
+                    foreach (var cellRow in formatted.Paragraphs.Where(row => row.Cell is not null))
+                    {
+                        cellRow.Runs = cellRow.Runs.Select(run =>
+                        {
+                            if (run.Kind != NoteInlineKind.Text || run.Style.HasFlag(NoteTextStyle.Code)) return run;
+                            var masked = run with { Style = run.Style | NoteTextStyle.Code };
+                            temporarilyMaskedTableRuns.Add(masked);
+                            return masked;
+                        }).ToList();
+                    }
+                }
+            }
+
+            var emphasisConverted = false;
+            if (passes.HasFlag(MarkupPass.Emphasis))
+            {
+                var beforeEmphasis = formatted;
+                formatted = NoteEmphasisFormatting.Apply(formatted, InputFor(formatted), ref start, ref length);
+                emphasisConverted = !ReferenceEquals(beforeEmphasis, formatted);
+            }
+            if (passes.HasFlag(MarkupPass.Block))
+                formatted = NoteBlockMarkdownFormatting.Apply(formatted, InputFor(formatted), ref start, ref length,
+                    pasted: blockSyntaxPasteRequested);
+            if (passes.HasFlag(MarkupPass.DisplayMath))
+                formatted = NoteDisplayMathFormatting.Apply(formatted, InputFor(formatted), ref start, ref length);
+            var completedPlainUrl = tableWasConverted ? null : _completedPlainUrl;
+            _completedPlainUrl = null;
+            if (passes.HasFlag(MarkupPass.Link))
+                formatted = NoteLinkFormatting.Apply(formatted, InputFor(formatted), ref start, ref length,
+                    pasted: blockSyntaxPasteRequested, forcePlainUrl: completedPlainUrl);
+            if (passes.HasFlag(MarkupPass.InlineMath))
+                formatted = NoteInlineMathFormatting.Apply(formatted, InputFor(formatted), ref start, ref length);
+            if (temporarilyMaskedTableRuns is not null)
             {
                 foreach (var cellRow in formatted.Paragraphs.Where(row => row.Cell is not null))
                 {
-                    cellRow.Runs = cellRow.Runs.Select(run =>
-                    {
-                        if (run.Kind != NoteInlineKind.Text || run.Style.HasFlag(NoteTextStyle.Code)) return run;
-                        var masked = run with { Style = run.Style | NoteTextStyle.Code };
-                        temporarilyMaskedTableRuns.Add(masked);
-                        return masked;
-                    }).ToList();
+                    cellRow.Runs = cellRow.Runs.Select(run => temporarilyMaskedTableRuns.Contains(run)
+                        ? run with { Style = run.Style & ~NoteTextStyle.Code }
+                        : run).ToList();
                 }
             }
-            var emphasisConverted = false;
-            // Table-cell parsing interprets inline syntax before decoding escaped literal markers.
-            var emphasisInput = GetInsertedRange(original, formatted.GetPlainText());
-            var beforeEmphasis = formatted;
-            formatted = NoteEmphasisFormatting.Apply(formatted, emphasisInput, ref start, ref length);
-            emphasisConverted = !ReferenceEquals(beforeEmphasis, formatted);
-            var blockInput = GetInsertedRange(original, formatted.GetPlainText());
-            formatted = NoteBlockMarkdownFormatting.Apply(formatted, blockInput, ref start, ref length,
-                pasted: _blockSyntaxPasteRequested);
-            var displayMathInput = GetInsertedRange(original, formatted.GetPlainText());
-            formatted = NoteDisplayMathFormatting.Apply(formatted, displayMathInput, ref start, ref length);
-            var linkInput = GetInsertedRange(original, formatted.GetPlainText());
-            var completedPlainUrl = tableWasConverted ? null : _completedPlainUrl;
-            _completedPlainUrl = null;
-            formatted = NoteLinkFormatting.Apply(formatted, linkInput, ref start, ref length,
-                pasted: _blockSyntaxPasteRequested, forcePlainUrl: completedPlainUrl);
-            var mathInput = GetInsertedRange(original, formatted.GetPlainText());
-            formatted = NoteInlineMathFormatting.Apply(formatted, mathInput, ref start, ref length);
-            foreach (var cellRow in formatted.Paragraphs.Where(row => row.Cell is not null))
-            {
-                cellRow.Runs = cellRow.Runs.Select(run => temporarilyMaskedTableRuns.Contains(run)
-                    ? run with { Style = run.Style & ~NoteTextStyle.Code }
-                    : run).ToList();
-            }
-            _tablePasteRequested = false;
-            _blockSyntaxPasteRequested = false;
             if (ReferenceEquals(formatted, document)) return;
             var scrollPosition = CaptureEditorScrollPosition();
             SetEditorDocument(formatted, start, length);
@@ -811,12 +878,258 @@ public partial class NoteWindow : Window
         }
 
         var updated = document.SetStyle(start, length, style, enabled);
+        if (CanApplyInlineStyleLocally(document, start, length) &&
+            TryApplyInlineStyleLocally(style, enabled))
+        {
+            SetSaveStatus(_updateDocument(_noteId, updated));
+            _lastAcceptedDocument = updated.Copy();
+            UpdateToolbar();
+            return;
+        }
+
         var scrollPosition = CaptureEditorScrollPosition();
         SetEditorDocument(updated, start, length);
         RestoreEditorScrollPosition(scrollPosition);
         SetSaveStatus(_updateDocument(_noteId, updated));
         _lastAcceptedDocument = updated.Copy();
         UpdateToolbar();
+    }
+
+    private bool CanApplyInlineStyleLocally(NotesDocument document, int start, int length)
+    {
+        var editorParagraphs = GetEditorParagraphs(Editor.Document).ToArray();
+        if (editorParagraphs.Length != document.Paragraphs.Count)
+        {
+            return false;
+        }
+
+        var end = start + length;
+        var offset = 0;
+        var hasSelectedText = false;
+        for (var index = 0; index < document.Paragraphs.Count; index++)
+        {
+            var paragraph = document.Paragraphs[index];
+            var paragraphLength = NormalizeLineBreaks(string.Concat(paragraph.Runs.Select(run => run.Text))).Length;
+            var paragraphEnd = offset + paragraphLength;
+            var nextParagraphStart = paragraphEnd + (index < document.Paragraphs.Count - 1 ? 2 : 0);
+            if (start < nextParagraphStart && end > offset)
+            {
+                if (paragraph.Kind != NoteBlockKind.Paragraph || paragraph.Cell is not null)
+                {
+                    return false;
+                }
+
+                var runOffset = offset;
+                foreach (var run in paragraph.Runs)
+                {
+                    var runLength = NormalizeLineBreaks(run.Text).Length;
+                    if (start < runOffset + runLength && end > runOffset)
+                    {
+                        hasSelectedText = true;
+                        if (run.Kind != NoteInlineKind.Text || run.Style.HasFlag(NoteTextStyle.Code) ||
+                            run.Text.Contains('\r') || run.Text.Contains('\n'))
+                        {
+                            return false;
+                        }
+                    }
+
+                    runOffset += runLength;
+                }
+
+                foreach (var inline in Flatten(editorParagraphs[index].Inlines))
+                {
+                    if (Editor.Selection.Start.CompareTo(inline.ContentEnd) < 0 &&
+                        Editor.Selection.End.CompareTo(inline.ContentStart) > 0 && inline is not Run)
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            offset = nextParagraphStart;
+        }
+
+        return hasSelectedText;
+    }
+
+    private bool TryApplyInlineStyleLocally(NoteTextStyle style, bool enabled)
+    {
+        var selection = Editor.Selection;
+        var wasUpdating = _updatingEditor;
+        _updatingEditor = true;
+        try
+        {
+            var hasDecorations = style is NoteTextStyle.Underline or NoteTextStyle.Strikethrough;
+            var location = style == NoteTextStyle.Underline ? TextDecorationLocation.Underline : TextDecorationLocation.Strikethrough;
+            var ranges = new List<TextRange>();
+            var decorationUpdates = new List<(TextRange Range, TextDecorationCollection Decorations)>();
+            foreach (var paragraph in GetEditorParagraphs(Editor.Document))
+            foreach (var run in Flatten(paragraph.Inlines).OfType<Run>())
+            {
+                var start = selection.Start.CompareTo(run.ContentStart) > 0 ? selection.Start : run.ContentStart;
+                var end = selection.End.CompareTo(run.ContentEnd) < 0 ? selection.End : run.ContentEnd;
+                if (start.CompareTo(end) >= 0)
+                {
+                    continue;
+                }
+
+                var range = new TextRange(start, end);
+                if (!hasDecorations)
+                {
+                    ranges.Add(range);
+                    continue;
+                }
+
+                var value = range.GetPropertyValue(Inline.TextDecorationsProperty);
+                if (ReferenceEquals(value, DependencyProperty.UnsetValue))
+                {
+                    return false;
+                }
+
+                var decorations = (value as TextDecorationCollection)?.Clone() ?? new TextDecorationCollection();
+                for (var index = decorations.Count - 1; index >= 0; index--)
+                {
+                    if (decorations[index].Location == location)
+                    {
+                        decorations.RemoveAt(index);
+                    }
+                }
+
+                if (enabled)
+                {
+                    decorations.Add(style == NoteTextStyle.Underline
+                        ? TextDecorations.Underline[0]
+                        : TextDecorations.Strikethrough[0]);
+                }
+
+                decorationUpdates.Add((range, decorations));
+            }
+
+            if (hasDecorations ? decorationUpdates.Count == 0 : ranges.Count == 0)
+            {
+                return false;
+            }
+
+            if (style == NoteTextStyle.Bold)
+            {
+                foreach (var range in ranges)
+                {
+                    range.ApplyPropertyValue(TextElement.FontWeightProperty, enabled ? FontWeights.Bold : FontWeights.Normal);
+                }
+            }
+            else if (style == NoteTextStyle.Italic)
+            {
+                foreach (var range in ranges)
+                {
+                    range.ApplyPropertyValue(TextElement.FontStyleProperty, enabled ? FontStyles.Italic : FontStyles.Normal);
+                }
+            }
+            else
+            {
+                foreach (var update in decorationUpdates)
+                {
+                    update.Range.ApplyPropertyValue(Inline.TextDecorationsProperty, update.Decorations);
+                }
+            }
+
+            return true;
+        }
+        finally
+        {
+            _updatingEditor = wasUpdating;
+        }
+    }
+
+    private static MarkupPass SelectMarkupPasses(NotesDocument document, string originalText, string text,
+        (int Start, int Length) input, bool forceAll, bool completedPlainUrl, bool pendingPlainUrlEdit)
+    {
+        if (forceAll) return MarkupPass.All;
+        if (completedPlainUrl) return MarkupPass.Link;
+
+        var start = Math.Clamp(input.Start, 0, text.Length);
+        var removedLength = Math.Clamp(originalText.Length - (text.Length - input.Length), 0,
+            originalText.Length - Math.Min(start, originalText.Length));
+        var oldStart = Math.Min(start, originalText.Length);
+        var added = text.AsSpan(start, Math.Min(input.Length, text.Length - start));
+        var removed = originalText.AsSpan(oldStart, removedLength);
+        if (ContainsLineBreak(added) || ContainsLineBreak(removed)) return MarkupPass.All;
+        if (pendingPlainUrlEdit) return MarkupPass.None;
+
+        var passes = PassesForMarkers(added) | PassesForMarkers(removed) |
+                     PassesNear(text, start, input.Length) | PassesNear(originalText, oldStart, removedLength);
+        if (passes == MarkupPass.None) return passes;
+
+        var (paragraphIndex, _) = document.GetParagraphPositionAt(start);
+        var paragraph = document.Paragraphs[paragraphIndex];
+        if (paragraph.Kind is NoteBlockKind.Code or NoteBlockKind.DisplayMath or NoteBlockKind.Divider ||
+            HasCodeStyleAt(document, start))
+            return MarkupPass.None;
+        if (paragraph.Cell is not null)
+            passes &= MarkupPass.List | MarkupPass.Code | MarkupPass.Emphasis | MarkupPass.Link | MarkupPass.InlineMath;
+        return passes;
+    }
+
+    private static MarkupPass PassesForMarkers(ReadOnlySpan<char> text)
+    {
+        var passes = MarkupPass.None;
+        foreach (var character in text)
+        {
+            passes |= character switch
+            {
+                '#' => MarkupPass.Block,
+                '-' => MarkupPass.List | MarkupPass.Block,
+                '|' => MarkupPass.Table,
+                '`' => MarkupPass.TypedBlock | MarkupPass.Code | MarkupPass.Block,
+                '$' => MarkupPass.TypedBlock | MarkupPass.DisplayMath | MarkupPass.InlineMath,
+                '*' or '_' or '~' => MarkupPass.Emphasis,
+                '[' or ']' or '(' or ')' => MarkupPass.Link,
+                '\\' => MarkupPass.Code | MarkupPass.Emphasis | MarkupPass.Link |
+                         MarkupPass.Block | MarkupPass.DisplayMath | MarkupPass.InlineMath,
+                _ => MarkupPass.None
+            };
+        }
+        return passes;
+    }
+
+    private static MarkupPass PassesNear(string text, int start, int length)
+    {
+        if (text.Length == 0) return MarkupPass.None;
+        var position = Math.Clamp(start, 0, text.Length);
+        var paragraphStart = position == 0 ? 0 : text.LastIndexOfAny(['\r', '\n'], position - 1) + 1;
+        var rangeEnd = Math.Clamp(position + Math.Min(length, 2), position, text.Length);
+        var nextBreak = text.IndexOfAny(['\r', '\n'], rangeEnd);
+        var paragraphEnd = nextBreak < 0 ? text.Length : nextBreak;
+        var from = Math.Max(paragraphStart, position - 2);
+        var to = Math.Min(paragraphEnd, rangeEnd + 2);
+        if (to <= from) return MarkupPass.None;
+        var passes = PassesForMarkers(text.AsSpan(from, to - from));
+        var linePrefixLength = Math.Min(paragraphEnd - paragraphStart, 4);
+        if (linePrefixLength > 0)
+        {
+            var prefix = text.AsSpan(paragraphStart, linePrefixLength);
+            if (position <= paragraphStart + 3 &&
+                (prefix.StartsWith("1)", StringComparison.Ordinal) ||
+                 prefix.StartsWith("[ ]", StringComparison.Ordinal)))
+                passes |= MarkupPass.List;
+        }
+        return passes;
+    }
+
+    private static bool ContainsLineBreak(ReadOnlySpan<char> text) =>
+        text.Contains('\r') || text.Contains('\n');
+
+    private static bool HasCodeStyleAt(NotesDocument document, int offset)
+    {
+        var (paragraphIndex, localOffset) = document.GetParagraphPositionAt(offset);
+        var position = localOffset > 0 ? localOffset - 1 : localOffset;
+        var runStart = 0;
+        foreach (var run in document.Paragraphs[paragraphIndex].Runs)
+        {
+            var runEnd = runStart + NormalizeLineBreaks(run.Text).Length;
+            if (position >= runStart && position < runEnd) return run.Style.HasFlag(NoteTextStyle.Code);
+            runStart = runEnd;
+        }
+        return false;
     }
 
     private void RestoreHistory(bool undo)
@@ -1100,6 +1413,7 @@ public partial class NoteWindow : Window
             LineStackingStrategy = GetEditorLineStackingStrategy()
         };
         AddEditorBlocks(flowDocument.Blocks, document.Paragraphs, allowTables: true);
+        _editorOffsetMap = null;
         Editor.Document = flowDocument;
         UpdateTableWidths();
         if (selectionStart.HasValue)
@@ -1708,56 +2022,183 @@ public partial class NoteWindow : Window
         UnderlineButton.IsChecked = HasDecoration(selection, TextDecorationLocation.Underline);
         StrikethroughButton.IsChecked = HasDecoration(selection, TextDecorationLocation.Strikethrough);
 
-        var document = ReadEditorDocument();
-        var (start, length) = GetSelectionOffsets(document);
-        var listKind = document.GetListKind(start, length);
+        var offsets = GetEditorOffsetMap();
+        var (start, length) = offsets.GetSelectionOffsets(selection);
+        var listKind = offsets.GetListKind(start, length);
         BulletsButton.IsChecked = listKind.HasValue ? listKind == NoteBlockKind.Bulleted : null;
         NumberedButton.IsChecked = listKind.HasValue ? listKind == NoteBlockKind.Numbered : null;
         ChecklistButton.IsChecked = listKind.HasValue ? listKind == NoteBlockKind.Checklist : null;
     }
 
-    private (int Start, int Length) GetSelectionOffsets(NotesDocument document)
+    private EditorOffsetMap GetEditorOffsetMap() => _editorOffsetMap ??= new EditorOffsetMap(Editor.Document);
+
+    private (int Start, int Length) GetSelectionOffsets(NotesDocument _) =>
+        GetEditorOffsetMap().GetSelectionOffsets(Editor.Selection);
+
+    private static NoteBlockKind GetEditorParagraphKind(Paragraph paragraph)
     {
-        var textLength = document.GetPlainText().Length;
-        var start = Math.Clamp(GetTextOffset(Editor.Selection.Start), 0, textLength);
-        var end = Math.Clamp(GetTextOffset(Editor.Selection.End), start, textLength);
-        return (start, end - start);
+        if (paragraph.Tag is NoteBlockKind kind) return kind;
+        if (paragraph.Parent is ListItem { Parent: System.Windows.Documents.List list } &&
+            list.Tag is NoteBlockKind listKind) return listKind;
+        return NoteBlockKind.Paragraph;
+    }
 
-        // TextRange.Text adds list markers and spaces for embedded controls. Count only stored text.
-        int GetTextOffset(TextPointer position)
+    private static int GetNormalizedTextLength(ReadOnlySpan<char> text)
+    {
+        var length = 0;
+        for (var index = 0; index < text.Length; index++)
         {
-            var offset = 0;
-            foreach (var paragraph in GetEditorParagraphs(Editor.Document))
+            if (text[index] == '\r')
             {
-                if (position.CompareTo(paragraph.ContentStart) <= 0) return offset;
-                foreach (var inline in Flatten(paragraph.Inlines))
-                {
-                    if (position.CompareTo(inline.ContentStart) <= 0) return offset;
-                    if (inline is Run run)
-                    {
-                        var count = position.CompareTo(run.ContentEnd) >= 0
-                            ? run.Text.Length
-                            : Math.Clamp(run.ContentStart.GetOffsetToPosition(position), 0, run.Text.Length);
-                        offset += NormalizeLineBreaks(run.Text[..count]).Length;
-                    }
-                    else if (inline is LineBreak && position.CompareTo(inline.ContentEnd) >= 0)
-                    {
-                        offset += 2;
-                    }
-                    else if (inline is InlineUIContainer { Child: NoteInlineMathButton math } &&
-                             position.CompareTo(inline.ContentEnd) >= 0)
-                    {
-                        offset += NormalizeLineBreaks(math.NoteRun.Text).Length;
-                    }
+                if (index + 1 < text.Length && text[index + 1] == '\n') index++;
+                length += 2;
+            }
+            else if (text[index] == '\n') length += 2;
+            else length++;
+        }
 
-                    if (position.CompareTo(inline.ContentEnd) <= 0) return offset;
-                }
+        return length;
+    }
 
-                if (position.CompareTo(paragraph.ContentEnd) <= 0) return offset;
-                offset += 2;
+    private sealed class EditorOffsetMap
+    {
+        private readonly ParagraphOffset[] _paragraphs;
+
+        public int TextLength { get; }
+
+        public EditorOffsetMap(FlowDocument document)
+        {
+            var paragraphs = new List<ParagraphOffset>();
+            var start = 0;
+            foreach (var paragraph in GetEditorParagraphs(document))
+            {
+                var length = GetParagraphTextLength(paragraph);
+                paragraphs.Add(new ParagraphOffset(paragraph, start, length, GetEditorParagraphKind(paragraph)));
+                start += length + 2;
             }
 
-            return offset;
+            _paragraphs = paragraphs.ToArray();
+            TextLength = paragraphs.Count == 0 ? 0 : start - 2;
+        }
+
+        public (int Start, int Length) GetSelectionOffsets(TextSelection selection)
+        {
+            var start = Math.Clamp(GetTextOffset(selection.Start), 0, TextLength);
+            var end = Math.Clamp(GetTextOffset(selection.End), start, TextLength);
+            return (start, end - start);
+        }
+
+        public NoteBlockKind? GetListKind(int start, int length)
+        {
+            if (_paragraphs.Length == 0) return null;
+            var end = start + length;
+            var first = 0;
+            if (length == 0)
+            {
+                var low = 0;
+                var high = _paragraphs.Length;
+                while (low < high)
+                {
+                    var middle = low + (high - low) / 2;
+                    if (_paragraphs[middle].End < start) low = middle + 1;
+                    else high = middle;
+                }
+
+                if (low == _paragraphs.Length) return null;
+                var candidate = _paragraphs[low];
+                return start >= candidate.Start && (start <= candidate.End || low == _paragraphs.Length - 1)
+                    ? candidate.Kind
+                    : null;
+            }
+
+            var upper = 0;
+            var upperBound = _paragraphs.Length;
+            while (upper < upperBound)
+            {
+                var middle = upper + (upperBound - upper) / 2;
+                if (_paragraphs[middle].Start <= start) upper = middle + 1;
+                else upperBound = middle;
+            }
+            first = Math.Max(0, upper - 1);
+
+            NoteBlockKind? kind = null;
+            for (var index = first; index < _paragraphs.Length && _paragraphs[index].Start <= end; index++)
+            {
+                var paragraph = _paragraphs[index];
+                var selected = paragraph.Length == 0
+                    ? start <= paragraph.Start && end >= paragraph.Start
+                    : start < paragraph.End && end > paragraph.Start;
+                if (!selected) continue;
+                if (kind.HasValue && kind.Value != paragraph.Kind) return null;
+                kind = paragraph.Kind;
+            }
+
+            return kind;
+        }
+
+        private int GetTextOffset(TextPointer position)
+        {
+            if (_paragraphs.Length == 0) return 0;
+
+            var low = 0;
+            var high = _paragraphs.Length;
+            while (low < high)
+            {
+                var middle = low + (high - low) / 2;
+                if (_paragraphs[middle].Paragraph.ContentStart.CompareTo(position) <= 0) low = middle + 1;
+                else high = middle;
+            }
+
+            var index = Math.Max(0, low - 1);
+            var paragraph = _paragraphs[index];
+            if (position.CompareTo(paragraph.Paragraph.ContentStart) <= 0) return paragraph.Start;
+            if (position.CompareTo(paragraph.Paragraph.ContentEnd) > 0)
+                return Math.Min(TextLength, paragraph.End + (index < _paragraphs.Length - 1 ? 2 : 0));
+
+            var offset = 0;
+            foreach (var inline in Flatten(paragraph.Paragraph.Inlines))
+            {
+                if (position.CompareTo(inline.ContentStart) <= 0) return paragraph.Start + offset;
+                if (inline is Run run)
+                {
+                    var count = position.CompareTo(run.ContentEnd) >= 0
+                        ? run.Text.Length
+                        : Math.Clamp(run.ContentStart.GetOffsetToPosition(position), 0, run.Text.Length);
+                    offset += GetNormalizedTextLength(run.Text.AsSpan(0, count));
+                }
+                else if (inline is LineBreak && position.CompareTo(inline.ContentEnd) >= 0)
+                {
+                    offset += 2;
+                }
+                else if (inline is InlineUIContainer { Child: NoteInlineMathButton math } &&
+                         position.CompareTo(inline.ContentEnd) >= 0)
+                {
+                    offset += GetNormalizedTextLength(math.NoteRun.Text.AsSpan());
+                }
+
+                if (position.CompareTo(inline.ContentEnd) <= 0) return paragraph.Start + offset;
+            }
+
+            return paragraph.Start + offset;
+        }
+
+        private static int GetParagraphTextLength(Paragraph paragraph)
+        {
+            var length = 0;
+            foreach (var inline in Flatten(paragraph.Inlines))
+            {
+                if (inline is Run run) length += GetNormalizedTextLength(run.Text.AsSpan());
+                else if (inline is LineBreak) length += 2;
+                else if (inline is InlineUIContainer { Child: NoteInlineMathButton math })
+                    length += GetNormalizedTextLength(math.NoteRun.Text.AsSpan());
+            }
+
+            return length;
+        }
+
+        private sealed record ParagraphOffset(Paragraph Paragraph, int Start, int Length, NoteBlockKind Kind)
+        {
+            public int End => Start + Length;
         }
     }
 

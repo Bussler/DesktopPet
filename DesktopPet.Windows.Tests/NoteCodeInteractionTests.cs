@@ -473,6 +473,9 @@ public sealed class NoteCodeInteractionTests
             var paste = new DataObjectPastingEventArgs(data, false, format);
             editor.RaiseEvent(paste);
             Assert.IsTrue(paste.CommandCancelled, "Code paste must consume plain text before rich clipboard formats can split it.");
+            var privateFlags = BindingFlags.Instance | BindingFlags.NonPublic;
+            Assert.IsFalse((bool)typeof(NoteWindow).GetField("_blockSyntaxPasteRequested", privateFlags)!.GetValue(window)!);
+            Assert.IsFalse((bool)typeof(NoteWindow).GetField("_tablePasteRequested", privateFlags)!.GetValue(window)!);
             Pump(window);
             Assert.IsNotNull(saved);
             Assert.AreEqual(normalized, saved.GetPlainText());
@@ -509,6 +512,9 @@ public sealed class NoteCodeInteractionTests
             editor.Selection.Select(run.ContentStart, run.ContentEnd);
             NoteClipboardTestInput.PastePlainText(editor, new string('x', NotesSnapshotValidator.MaximumTextCharacters + 1));
             Assert.IsNull(saved, "An oversized paste must not save a partial or invalid note.");
+            var privateFlags = BindingFlags.Instance | BindingFlags.NonPublic;
+            Assert.IsFalse((bool)typeof(NoteWindow).GetField("_blockSyntaxPasteRequested", privateFlags)!.GetValue(window)!);
+            Assert.IsFalse((bool)typeof(NoteWindow).GetField("_tablePasteRequested", privateFlags)!.GetValue(window)!);
             Assert.AreSame(paragraph, editor.Document.Blocks.FirstBlock);
             Assert.AreEqual("accepted", run.Text);
             Assert.AreEqual("accepted", editor.Selection.Text);

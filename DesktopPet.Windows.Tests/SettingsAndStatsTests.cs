@@ -173,6 +173,32 @@ public sealed class SettingsAndStatsTests
 
             trayToggle.PerformClick();
             Assert.IsFalse(timer.IsEnabled);
+
+            var traySettingsItem = icon.ContextMenuStrip.Items.OfType<Forms.ToolStripMenuItem>()
+                .Single(item => item.Text == "Settings");
+            traySettingsItem.PerformClick();
+            var hiddenSettings = (SettingsWindow)typeof(App).GetField("_settingsWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .GetValue(app)!;
+            try
+            {
+                Assert.IsTrue(hiddenSettings.IsVisible, "Settings must remain available from the tray while sprites are hidden.");
+                Assert.IsFalse(((CheckBox)hiddenSettings.FindName("ShowSpritesCheckBox")).IsChecked == true);
+            }
+            finally { hiddenSettings.Close(); }
+
+            var trayNotes = icon.ContextMenuStrip.Items.OfType<Forms.ToolStripMenuItem>().Single(item => item.Text == "Notes");
+            trayNotes.DropDownItems.OfType<Forms.ToolStripMenuItem>().Single(item => item.Text == "Notes settings").PerformClick();
+            var hiddenNotesSettings = (NotesSettingsWindow)typeof(App).GetField("_notesSettingsWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .GetValue(app)!;
+            try { Assert.IsTrue(hiddenNotesSettings.IsVisible, "Notes settings must remain usable while sprites are hidden."); }
+            finally { hiddenNotesSettings.Close(); }
+
+            trayNotes.DropDownItems.OfType<Forms.ToolStripMenuItem>().Single(item => item.Text == "Notes list").PerformClick();
+            var hiddenNotesList = (NotesListWindow)typeof(App).GetField("_notesListWindow", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .GetValue(app)!;
+            try { Assert.IsTrue(hiddenNotesList.IsVisible, "The Notes list must remain available while sprites are hidden."); }
+            finally { hiddenNotesList.Close(); }
+
             var hiddenPet = fixture.Pet();
             try
             {
@@ -941,7 +967,7 @@ public sealed class SettingsAndStatsTests
                     Assert.AreSame(previewImage, image.Source, "Save must retain the preview image.");
                     var crop = (CroppedBitmap)image.Source;
                     StringAssert.Contains(((BitmapImage)crop.Source).UriSource.LocalPath.ToLowerInvariant(), $"{Path.DirectorySeparatorChar}{choice}{Path.DirectorySeparatorChar}");
-                    Assert.AreEqual(new Int32Rect(4 * 384, 8 * 416, 384, 416), crop.SourceRect);
+                    Assert.AreEqual(ExpectedFrameRectangle(pet, fixture.Session), crop.SourceRect);
                 }
                 finally { settings.Close(); }
             }
@@ -953,7 +979,9 @@ public sealed class SettingsAndStatsTests
                 ((ComboBox)reopened.FindName("PetComboBox")).SelectedValue = PetCatalog.Pip;
                 typeof(SettingsWindow).GetMethod("OnCancelClick", BindingFlags.Instance | BindingFlags.NonPublic)!
                     .Invoke(reopened, [reopened, new RoutedEventArgs(Button.ClickEvent)]);
-                Assert.AreSame(((CroppedBitmap)savedImage).Source, ((CroppedBitmap)image.Source).Source);
+                Assert.AreNotSame(((CroppedBitmap)savedImage).Source, ((CroppedBitmap)image.Source).Source,
+                    "Cancel restores the original pixels from a new decoded sheet.");
+                AssertCurrentPetSource(pet, PetCatalog.Hood);
                 Assert.AreEqual(PetCatalog.Hood, fixture.Store.LoadOrCreate().Pet);
             }
             finally { reopened.Close(); }
@@ -1003,7 +1031,7 @@ public sealed class SettingsAndStatsTests
             Assert.AreEqual(snapshot.Needs, session.Needs);
             session.Advance(TimeSpan.FromMilliseconds(60));
             typeof(HoodOverlayWindow).GetMethod("RefreshBehaviorSettings", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(pet, null);
-            Assert.AreEqual(new Int32Rect(4 * 384, 7 * 416, 384, 416), ((CroppedBitmap)image.Source).SourceRect);
+            Assert.AreEqual(ExpectedFrameRectangle(pet, session), ((CroppedBitmap)image.Source).SourceRect);
             Assert.AreEqual(PetCatalog.Hood, fixture.Store.LoadOrCreate().Pet);
         }
         finally { settings.Close(); pet.Close(); }
@@ -1030,7 +1058,10 @@ public sealed class SettingsAndStatsTests
             Assert.AreEqual(baseline, File.ReadAllText(fixture.ConfigPath));
             Assert.AreEqual(PetCatalog.Hood, fixture.Controller.Current.Pet);
             Assert.AreEqual(PetCatalog.Hood, ((ComboBox)settings.FindName("PetComboBox")).SelectedValue);
-            Assert.AreSame(((CroppedBitmap)original).Source, ((CroppedBitmap)((Image)pet.FindName("PetImage")).Source).Source);
+            Assert.AreNotSame(((CroppedBitmap)original).Source,
+                ((CroppedBitmap)((Image)pet.FindName("PetImage")).Source).Source,
+                "A failed save restores the original pixels from its rollback snapshot.");
+            AssertCurrentPetSource(pet, PetCatalog.Hood);
             Assert.AreEqual(Visibility.Visible, ((TextBlock)settings.FindName("AppearanceErrorText")).Visibility);
             StringAssert.Contains(((TextBlock)settings.FindName("AppearanceErrorText")).Text, "Settings were not saved");
         }
@@ -1111,7 +1142,9 @@ public sealed class SettingsAndStatsTests
                 settings.Close();
 
             Assert.IsFalse(settings.IsVisible);
-            Assert.AreSame(originalSheet, ((CroppedBitmap)image.Source).Source);
+            Assert.AreNotSame(originalSheet, ((CroppedBitmap)image.Source).Source,
+                "Cancel decodes the saved original from its compressed snapshot.");
+            AssertCurrentPetSource(pet, PetCatalog.Pip);
             Assert.AreEqual(originalAccent, ((SolidColorBrush)settings.Resources["AppAccentBrush"]).Color);
             Assert.AreEqual(originalAccent, ((SolidColorBrush)pet.ContextMenu!.Resources["AppAccentBrush"]).Color);
             Assert.AreEqual(baseline, File.ReadAllText(fixture.ConfigPath));
@@ -1120,7 +1153,7 @@ public sealed class SettingsAndStatsTests
             Assert.AreEqual(presentation, fixture.Session.Presentation, "Rollback must not rewind animation progress.");
             Assert.AreEqual(needs, fixture.Session.Needs);
             Assert.AreEqual(remainingNap, fixture.Session.RemainingNap);
-            Assert.AreEqual(new Int32Rect(presentation.FrameIndex * 384, 8 * 416, 384, 416), ((CroppedBitmap)image.Source).SourceRect);
+            Assert.AreEqual(ExpectedFrameRectangle(pet, fixture.Session), ((CroppedBitmap)image.Source).SourceRect);
             var reopened = fixture.HoodSettings(pet, UiStyleCatalog.Studio);
             try
             {
@@ -1564,6 +1597,23 @@ public sealed class SettingsAndStatsTests
         window.Show();
         window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
         window.UpdateLayout();
+    }
+
+    private static Int32Rect ExpectedFrameRectangle(HoodOverlayWindow pet, HoodSession session)
+    {
+        var assets = typeof(HoodOverlayWindow).GetProperty("CurrentAssets", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(pet)!;
+        var definition = (PetDefinition)assets.GetType().GetProperty("Definition")!.GetValue(assets)!;
+        var presentation = session.Presentation;
+        var frame = definition.GetAnimation(presentation.Action).Frames[presentation.FrameIndex];
+        return (Int32Rect)assets.GetType().GetMethod("GetFrameRectangle")!.Invoke(assets, [frame])!;
+    }
+
+    private static void AssertCurrentPetSource(HoodOverlayWindow pet, string expectedPet)
+    {
+        var source = typeof(HoodOverlayWindow).GetProperty("CurrentSource", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(pet)!;
+        var directory = (string)source.GetType().GetProperty("Directory")!.GetValue(source)!;
+        StringAssert.Contains(directory.ToLowerInvariant(), $"{Path.DirectorySeparatorChar}{expectedPet.ToLowerInvariant()}");
     }
 
     private static IEnumerable<DependencyObject> Descendants(DependencyObject parent)

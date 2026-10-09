@@ -17,7 +17,9 @@ public partial class SettingsWindow : Window
     private readonly string _originalUiStyle;
     private readonly string _originalTheme;
     private readonly string _originalPet;
-    private readonly LoadedHoodAssets _originalAssets;
+    private readonly HoodAssetSource _originalSource;
+    private HoodAssetRollbackSnapshot? _originalAssetSnapshot;
+    private LoadedHoodAssets? _originalAssets;
     private string _effectiveUiStyle;
     private string _previewPet;
     private string _theme = "system";
@@ -47,7 +49,9 @@ public partial class SettingsWindow : Window
         _originalUiStyle = _effectiveUiStyle = UiStyleCatalog.Canonicalize(effectiveUiStyle);
         _originalTheme = _theme = effectiveTheme;
         _originalPet = _previewPet = controller.Current.Pet;
-        _originalAssets = petWindow.CurrentAssets;
+        var originalAssets = petWindow.CurrentAssets;
+        _originalSource = originalAssets?.Source ?? petWindow.CurrentSource;
+        _originalAssets = originalAssets;
         _applyUiStyle = applyUiStyle ?? (style => petWindow.ApplyAppearance(_theme, style));
         _applyTheme = applyTheme ?? (theme => petWindow.ApplyAppearance(theme, _effectiveUiStyle));
         InitializeComponent();
@@ -143,20 +147,46 @@ public partial class SettingsWindow : Window
     private void PreviewPet(string pet)
     {
         if (pet == _previewPet) return;
-        var assets = pet == _originalPet ? _originalAssets : _petWindow.LoadPetAssets(pet);
-        _petWindow.ApplyPetAssets(assets);
+        if (pet == _originalPet)
+            RestoreOriginalPetAssets();
+        else
+        {
+            CaptureOriginalAssetsForRollback();
+            _petWindow.ApplyPetAssets(_petWindow.LoadPetAssets(pet));
+        }
         _previewPet = pet;
+    }
+
+    private void CaptureOriginalAssetsForRollback()
+    {
+        if (_originalAssets is null || _originalAssetSnapshot is not null) return;
+        try
+        {
+            _originalAssetSnapshot = HoodAssetRollbackSnapshot.Capture(_originalSource, _originalAssets);
+            _originalAssets = null;
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            // Keep the decoded original if a compressed rollback snapshot cannot be captured.
+        }
     }
 
     private void RestoreAppearance()
     {
-        if (!ReferenceEquals(_petWindow.CurrentAssets, _originalAssets))
-        {
-            _petWindow.ApplyPetAssets(_originalAssets);
-        }
+        if (_previewPet != _originalPet || _originalAssetSnapshot?.SourceFilesChanged == true)
+            RestoreOriginalPetAssets();
         _previewPet = _originalPet;
         PreviewUiStyle(_originalUiStyle);
         PreviewTheme(_originalTheme);
+    }
+
+    private void RestoreOriginalPetAssets()
+    {
+        if (_originalAssetSnapshot is null)
+            _petWindow.RestorePetAssets(_originalSource, _originalAssets);
+        else
+            _petWindow.RestorePetAssets(_originalAssetSnapshot);
+        _previewPet = _originalPet;
     }
 
     protected override void OnClosing(CancelEventArgs e)
@@ -234,6 +264,7 @@ public partial class SettingsWindow : Window
             PreviewPet(candidate.Pet);
             PreviewUiStyle(candidate.UiStyle);
             PreviewTheme(candidate.Notes.Theme);
+            if (candidate.Behavior.ShowSprites) _petWindow.EnsureSpriteAssetsLoaded();
             _petWindow.ApplyAlwaysOnTop(candidate.Behavior.AlwaysOnTop);
             _controller.SaveAndApply(BehaviorSetting, candidate);
             _saved = true;
