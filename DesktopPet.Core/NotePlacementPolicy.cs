@@ -2,6 +2,43 @@ namespace DesktopPet.Core;
 
 public static class NotePlacementPolicy
 {
+    public static NoteBounds Create(
+        NoteBounds bounds,
+        IReadOnlyCollection<NoteBounds> existingBounds,
+        IReadOnlyCollection<DisplayInfo>? displays = null)
+    {
+        ArgumentNullException.ThrowIfNull(existingBounds);
+        NotesSnapshotValidator.ValidateBounds(bounds);
+        if (displays is not null) bounds = Restore(bounds, displays);
+        var display = displays?.First(candidate => IsUsable(candidate) && Contains(candidate.WorkArea, bounds));
+        const double offset = 24;
+        bool IsAvailable(NoteBounds candidate) => !existingBounds.Any(existing =>
+            Math.Abs(existing.Left - candidate.Left) < offset && Math.Abs(existing.Top - candidate.Top) < offset);
+
+        for (var index = 0; index <= existingBounds.Count; index++)
+        {
+            var candidate = bounds with { Left = bounds.Left + index * offset, Top = bounds.Top + index * offset };
+            if (display is not null) candidate = Restore(candidate, [display]);
+            if (IsAvailable(candidate)) return candidate;
+        }
+
+        // Start another cascade when the diagonal reaches the work-area edge.
+        if (display is not null)
+        {
+            var area = display.WorkArea;
+            for (var top = area.Y; top <= area.Bottom - bounds.Height; top += offset)
+            {
+                for (var left = area.X; left <= area.Right - bounds.Width; left += offset)
+                {
+                    var candidate = bounds with { Left = left, Top = top };
+                    if (IsAvailable(candidate)) return candidate;
+                }
+            }
+        }
+
+        return bounds;
+    }
+
     public static NoteBounds Restore(NoteBounds bounds, IReadOnlyCollection<DisplayInfo> displays)
     {
         ArgumentNullException.ThrowIfNull(displays);

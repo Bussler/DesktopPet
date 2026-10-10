@@ -591,7 +591,7 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        var result = _notes.Activate();
+        var result = _notes.Activate(WindowsDisplayProvider.GetDisplays());
         RestoreOpenNotes(animateGroupTransition: result.Kind != NotesActivationKind.ShowNotesList);
         if (result.Kind == NotesActivationKind.ShowNotesList)
         {
@@ -613,7 +613,7 @@ public partial class App : System.Windows.Application
         var wasVisible = _notes?.GroupVisible == true;
         try
         {
-            _notes?.CreateNote();
+            _notes?.CreateNote(WindowsDisplayProvider.GetDisplays());
         }
         catch (InvalidDataException exception)
         {

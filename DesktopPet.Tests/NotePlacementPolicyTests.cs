@@ -6,6 +6,61 @@ namespace DesktopPet.Tests;
 public sealed class NotePlacementPolicyTests
 {
     [TestMethod]
+    public void Create_OffsetsPastNotesNearTheDefaultAndNextCascadePositions()
+    {
+        var bounds = new NoteBounds(96, 96, 320, 300);
+        var existing = new[] { bounds with { Left = 100, Top = 100 }, bounds with { Left = 120, Top = 120 } };
+
+        Assert.AreEqual(new NoteBounds(144, 144, 320, 300), NotePlacementPolicy.Create(bounds, existing));
+    }
+
+    [TestMethod]
+    public void Create_FindsAnotherPositionWhenTheCascadeReachesTheWorkAreaEdge()
+    {
+        var bounds = new NoteBounds(96, 96, 320, 300);
+        var display = new DisplayInfo("Small", new PetBounds(96, 96, 368, 348), true);
+        var existing = new[] { bounds, bounds with { Left = 120, Top = 120 }, bounds with { Left = 144, Top = 144 } };
+
+        Assert.AreEqual(new NoteBounds(120, 96, 320, 300), NotePlacementPolicy.Create(bounds, existing, [display]));
+    }
+
+    [TestMethod]
+    public void Create_KeepsMaximumNoteCountAtDistinctAccessiblePositions()
+    {
+        var bounds = new NoteBounds(96, 96, 320, 300);
+        var display = new DisplayInfo("Primary", new PetBounds(0, 0, 1920, 1040), true);
+        var existing = new List<NoteBounds>();
+
+        for (var index = 0; index < NotesSnapshotValidator.MaximumNotes; index++)
+        {
+            var created = NotePlacementPolicy.Create(bounds, existing, [display]);
+            Assert.AreEqual(created, NotePlacementPolicy.Restore(created, [display]));
+            Assert.IsFalse(existing.Any(note => Math.Abs(note.Left - created.Left) < 24 && Math.Abs(note.Top - created.Top) < 24));
+            existing.Add(created);
+        }
+    }
+
+    [TestMethod]
+    public void Create_OffsetsOnNegativeOriginScaledDisplay()
+    {
+        var display = new DisplayInfo("Left", new PetBounds(-800, 40, 640, 460), true, ScaleFactor: 1.5);
+        var bounds = new NoteBounds(96, 96, 320, 300);
+        var first = NotePlacementPolicy.Create(bounds, [], [display]);
+
+        Assert.AreEqual(new NoteBounds(-480, 120, 320, 300), NotePlacementPolicy.Create(bounds, [first], [display]));
+    }
+
+    [TestMethod]
+    public void Create_WhenOnlyOnePositionFitsKeepsTheNoteAccessible()
+    {
+        var display = new DisplayInfo("Tiny", new PetBounds(0, 0, 240, 180), true);
+        var bounds = new NoteBounds(96, 96, 320, 300);
+        var first = NotePlacementPolicy.Create(bounds, [], [display]);
+
+        Assert.AreEqual(new NoteBounds(0, 0, 240, 180), NotePlacementPolicy.Create(bounds, [first], [display]));
+    }
+
+    [TestMethod]
     public void Restore_KeepsAccessibleBoundsOnNegativeOriginScaledDisplay()
     {
         var bounds = new NoteBounds(-1100, 80, 420, 360);

@@ -7,6 +7,50 @@ namespace DesktopPet.Tests;
 public sealed class NotesApplicationTests
 {
     [TestMethod]
+    public void CreatingNotesOffsetsTheirBoundsAndPreservesThemAcrossRestart()
+    {
+        var store = new SwitchableNotesStore();
+        var app = NotesApplication.Start(store);
+        var firstId = app.Activate().NoteId!.Value;
+        var secondId = app.CreateNote();
+        var restarted = NotesApplication.Start(store);
+        var thirdId = restarted.CreateNote();
+
+        Assert.AreEqual(new NoteBounds(96, 96, 320, 300), restarted.GetNote(firstId).Bounds);
+        Assert.AreEqual(new NoteBounds(120, 120, 320, 300), restarted.GetNote(secondId).Bounds);
+        Assert.AreEqual(new NoteBounds(144, 144, 320, 300), restarted.GetNote(thirdId).Bounds);
+        Assert.AreEqual(restarted.GetNote(thirdId).Bounds, store.Load()!.Notes.Single(note => note.Id == thirdId).Bounds);
+    }
+
+    [TestMethod]
+    public void CreatingNotesSkipsMovedAndClosedNotesWithoutRepositioningThem()
+    {
+        var app = NotesApplication.Start(new SwitchableNotesStore());
+        var firstId = app.CreateNote();
+        var moved = new NoteBounds(120, 120, 400, 360);
+        app.UpdateBounds(firstId, moved);
+        var secondId = app.CreateNote();
+        Assert.IsTrue(app.TryCloseNote(secondId, out _));
+        var thirdId = app.CreateNote();
+
+        Assert.AreEqual(moved, app.GetNote(firstId).Bounds);
+        Assert.AreEqual(new NoteBounds(96, 96, 320, 300), app.GetNote(secondId).Bounds);
+        Assert.AreEqual(new NoteBounds(144, 144, 320, 300), app.GetNote(thirdId).Bounds);
+    }
+
+    [TestMethod]
+    public void FirstActivationAndNewNotesUseTheSuppliedWorkArea()
+    {
+        var app = NotesApplication.Start(new SwitchableNotesStore());
+        var displays = new[] { new DisplayInfo("Left", new PetBounds(-800, 40, 640, 460), true) };
+        var firstId = app.Activate(displays).NoteId!.Value;
+        var secondId = app.CreateNote(displays);
+
+        Assert.AreEqual(new NoteBounds(-480, 96, 320, 300), app.GetNote(firstId).Bounds);
+        Assert.AreEqual(new NoteBounds(-480, 120, 320, 300), app.GetNote(secondId).Bounds);
+    }
+
+    [TestMethod]
     public void ActiveListItemLookupReturnsOnlyTheRequestedCurrentNote()
     {
         var app = NotesApplication.Start(new SwitchableNotesStore());

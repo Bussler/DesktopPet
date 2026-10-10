@@ -286,11 +286,11 @@ public sealed class NotesApplication
         return new NotesApplication(store, state, defaultColor);
     }
 
-    public NotesActivationResult Activate()
+    public NotesActivationResult Activate(IReadOnlyCollection<DisplayInfo>? displays = null)
     {
         if (!_state.FirstActivationCompleted)
         {
-            var id = CreateNote();
+            var id = CreateNote(displays);
             return new NotesActivationResult(NotesActivationKind.CreatedFirstNote, id, GroupVisible);
         }
 
@@ -309,7 +309,7 @@ public sealed class NotesApplication
         return new NotesActivationResult(NotesActivationKind.ShowNotesList, null, GroupVisible);
     }
 
-    public Guid CreateNote()
+    public Guid CreateNote(IReadOnlyCollection<DisplayInfo>? displays = null)
     {
         if (_state.Notes.Count + _state.Trash.Count >= NotesSnapshotValidator.MaximumNotes)
         {
@@ -317,6 +317,10 @@ public sealed class NotesApplication
         }
 
         var note = new HoodNote { Color = _defaultColor };
+        note = note with
+        {
+            Bounds = NotePlacementPolicy.Create(note.Bounds, _state.Notes.Select(existing => existing.Bounds).ToArray(), displays)
+        };
         var next = _state.Copy();
         next.Notes.Add(note);
         next.OpenNoteIds.Add(note.Id);
