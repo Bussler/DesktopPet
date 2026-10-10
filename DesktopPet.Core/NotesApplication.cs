@@ -415,7 +415,7 @@ public sealed class NotesApplication
         }
 
         var history = GetHistory(noteId);
-        PushHistory(history.Undo, previous);
+        history.Undo.Push(previous);
         history.Redo.Clear();
         next.Notes[index] = next.Notes[index] with { Document = document.Copy() };
         SaveAfterUpdate(next);
@@ -462,6 +462,14 @@ public sealed class NotesApplication
             .Where(note => string.IsNullOrWhiteSpace(query) || note.Name.Contains(query, StringComparison.OrdinalIgnoreCase) || note.Text.Contains(query, StringComparison.OrdinalIgnoreCase))
             .Select(note => new NoteListItem(note.Id, CreatePreview(note.Text), openIds.Contains(note.Id), note.DisplayName))
             .ToArray();
+    }
+
+    public NoteListItem? GetActiveNoteListItem(Guid noteId)
+    {
+        var note = _state.Notes.FirstOrDefault(note => note.Id == noteId);
+        return note is null
+            ? null
+            : new NoteListItem(note.Id, CreatePreview(note.Text), _state.OpenNoteIds.Contains(note.Id), note.DisplayName);
     }
 
     public IReadOnlyList<TrashedNoteListItem> SearchTrash(string? query) => _state.Trash
@@ -697,10 +705,9 @@ public sealed class NotesApplication
             throw new ArgumentException("The requested note does not exist.", nameof(noteId));
         }
 
-        PushHistory(target, next.Notes[index].Document);
-        var document = source[^1];
-        source.RemoveAt(source.Count - 1);
-        next.Notes[index] = next.Notes[index] with { Document = document.Copy() };
+        target.Push(next.Notes[index].Document);
+        var entry = source.Pop();
+        next.Notes[index] = next.Notes[index] with { Document = entry.Document.Copy() };
         SaveAfterUpdate(next);
         return true;
     }
@@ -719,15 +726,6 @@ public sealed class NotesApplication
         }
 
         return history;
-    }
-
-    private static void PushHistory(List<NotesDocument> history, NotesDocument document)
-    {
-        history.Add(document.Copy());
-        while (history.Count > 100 || history.Sum(item => item.GetPlainText().Length) > 2_000_000)
-        {
-            history.RemoveAt(0);
-        }
     }
 
     private static bool DocumentsEqual(NotesDocument left, NotesDocument right)
@@ -768,7 +766,46 @@ public sealed class NotesApplication
 
     private sealed class DocumentHistory
     {
-        public List<NotesDocument> Undo { get; } = [];
-        public List<NotesDocument> Redo { get; } = [];
+        public HistoryStack Undo { get; } = new();
+        public HistoryStack Redo { get; } = new();
     }
+
+    private sealed class HistoryStack
+    {
+        private const int MaximumEntries = 100;
+        private const int MaximumCharacters = 2_000_000;
+        private readonly List<HistoryEntry> _entries = [];
+        private int _characterCount;
+
+        public int Count => _entries.Count;
+
+        public void Push(NotesDocument document)
+        {
+            var entry = new HistoryEntry(document.Copy(), document.GetPlainText().Length);
+            _entries.Add(entry);
+            _characterCount += entry.CharacterCount;
+            while (_entries.Count > MaximumEntries || _characterCount > MaximumCharacters)
+            {
+                _characterCount -= _entries[0].CharacterCount;
+                _entries.RemoveAt(0);
+            }
+        }
+
+        public HistoryEntry Pop()
+        {
+            var index = _entries.Count - 1;
+            var entry = _entries[index];
+            _entries.RemoveAt(index);
+            _characterCount -= entry.CharacterCount;
+            return entry;
+        }
+
+        public void Clear()
+        {
+            _entries.Clear();
+            _characterCount = 0;
+        }
+    }
+
+    private readonly record struct HistoryEntry(NotesDocument Document, int CharacterCount);
 }

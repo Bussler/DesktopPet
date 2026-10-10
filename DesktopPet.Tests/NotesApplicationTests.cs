@@ -7,6 +7,24 @@ namespace DesktopPet.Tests;
 public sealed class NotesApplicationTests
 {
     [TestMethod]
+    public void ActiveListItemLookupReturnsOnlyTheRequestedCurrentNote()
+    {
+        var app = NotesApplication.Start(new SwitchableNotesStore());
+        var id = app.CreateNote();
+        app.UpdateName(id, "Latest name");
+        app.UpdateDocument(id, NotesDocument.FromText("Latest preview"));
+
+        var item = app.GetActiveNoteListItem(id);
+
+        Assert.IsNotNull(item);
+        Assert.AreEqual(id, item.Id);
+        Assert.AreEqual("Latest name", item.Name);
+        Assert.AreEqual("Latest preview", item.Preview);
+        Assert.IsTrue(item.IsOpen);
+        Assert.IsNull(app.GetActiveNoteListItem(Guid.NewGuid()));
+    }
+
+    [TestMethod]
     public void FailedTableSaveRetainsTheSavedTableAndRetriesTheEditableChanges()
     {
         var store = new SwitchableNotesStore();
@@ -1062,6 +1080,123 @@ public sealed class NotesApplicationTests
     }
 
     [TestMethod]
+    public void UndoAndRedoHistoryRetainsExactEntryAndCharacterBoundaries()
+    {
+        var app = NotesApplication.Start(new InMemoryNotesStore());
+        var id = app.CreateNote();
+        for (var version = 1; version <= 101; version++)
+            app.UpdateDocument(id, NotesDocument.FromText($"version-{version}"));
+
+        var undoCount = 0;
+        while (app.Undo(id)) undoCount++;
+        Assert.AreEqual(100, undoCount);
+        Assert.AreEqual("version-1", app.GetNote(id).Text, "The oldest of 101 entries must be trimmed.");
+        var redoCount = 0;
+        while (app.Redo(id)) redoCount++;
+        Assert.AreEqual(100, redoCount);
+        Assert.AreEqual("version-101", app.GetNote(id).Text);
+
+        var boundaryApp = NotesApplication.Start(new InMemoryNotesStore());
+        var boundaryId = boundaryApp.CreateNote();
+        boundaryApp.UpdateDocument(boundaryId, NotesDocument.FromText(new string('a', NotesSnapshotValidator.MaximumTextCharacters)));
+        boundaryApp.UpdateDocument(boundaryId, NotesDocument.FromText(new string('b', NotesSnapshotValidator.MaximumTextCharacters)));
+        boundaryApp.UpdateDocument(boundaryId, NotesDocument.FromText(new string('c', NotesSnapshotValidator.MaximumTextCharacters)));
+        Assert.IsTrue(boundaryApp.Undo(boundaryId));
+        Assert.IsTrue(boundaryApp.Undo(boundaryId));
+        Assert.IsTrue(boundaryApp.Undo(boundaryId), "Exactly two million normalized characters must be retained.");
+        Assert.AreEqual(string.Empty, boundaryApp.GetNote(boundaryId).Text);
+        Assert.IsTrue(boundaryApp.Redo(boundaryId));
+        Assert.IsTrue(boundaryApp.Redo(boundaryId));
+        Assert.IsFalse(boundaryApp.CanRedo(boundaryId), "The separate redo history must trim to its two-million-character limit.");
+
+        var trimmedApp = NotesApplication.Start(new InMemoryNotesStore());
+        var trimmedId = trimmedApp.CreateNote();
+        foreach (var marker in new[] { 'a', 'b', 'c', 'd' })
+            trimmedApp.UpdateDocument(trimmedId, NotesDocument.FromText(new string(marker, NotesSnapshotValidator.MaximumTextCharacters)));
+        Assert.IsTrue(trimmedApp.Undo(trimmedId));
+        Assert.IsTrue(trimmedApp.Undo(trimmedId));
+        Assert.AreEqual(new string('b', NotesSnapshotValidator.MaximumTextCharacters), trimmedApp.GetNote(trimmedId).Text);
+        Assert.IsFalse(trimmedApp.CanUndo(trimmedId), "Entries older than the character limit must be trimmed.");
+    }
+
+    [TestMethod]
+    public void HistoryTransitionsMatchASeededReferenceAcrossNotesAndNormalizedText()
+    {
+        var app = NotesApplication.Start(new InMemoryNotesStore());
+        var ids = new[] { app.CreateNote(), app.CreateNote() };
+        var current = new[] { string.Empty, string.Empty };
+        var undo = new[] { new List<string>(), new List<string>() };
+        var redo = new[] { new List<string>(), new List<string>() };
+        var undoCharacters = new int[2];
+        var redoCharacters = new int[2];
+        var random = new Random(0x51A7);
+
+        for (var step = 0; step < 300; step++)
+        {
+            var note = random.Next(ids.Length);
+            var operation = random.Next(3);
+            if (operation == 0 || (operation == 1 && undo[note].Count == 0) ||
+                (operation == 2 && redo[note].Count == 0))
+            {
+                var raw = RandomNoteText(random);
+                var document = NotesDocument.FromText(raw);
+                var text = document.GetPlainText();
+                if (text == current[note])
+                {
+                    document = NotesDocument.FromText($"revision-{step}\r\n\t{random.Next()}\u2603");
+                    text = document.GetPlainText();
+                }
+
+                PushReference(undo[note], ref undoCharacters[note], current[note]);
+                redo[note].Clear();
+                redoCharacters[note] = 0;
+                app.UpdateDocument(ids[note], document);
+                current[note] = text;
+            }
+            else if (operation == 1)
+            {
+                PushReference(redo[note], ref redoCharacters[note], current[note]);
+                current[note] = PopReference(undo[note], ref undoCharacters[note]);
+                Assert.IsTrue(app.Undo(ids[note]));
+            }
+            else
+            {
+                PushReference(undo[note], ref undoCharacters[note], current[note]);
+                current[note] = PopReference(redo[note], ref redoCharacters[note]);
+                Assert.IsTrue(app.Redo(ids[note]));
+            }
+
+            for (var index = 0; index < ids.Length; index++)
+            {
+                Assert.AreEqual(current[index], app.GetNote(ids[index]).Text, $"Text diverged at step {step} for note {index}.");
+                Assert.AreEqual(undo[index].Count > 0, app.CanUndo(ids[index]), $"Undo availability diverged at step {step} for note {index}.");
+                Assert.AreEqual(redo[index].Count > 0, app.CanRedo(ids[index]), $"Redo availability diverged at step {step} for note {index}.");
+            }
+        }
+    }
+
+    [TestMethod]
+    public void HistoryOwnsDocumentsAndPermanentRemovalClearsHistory()
+    {
+        var app = NotesApplication.Start(new InMemoryNotesStore());
+        var id = app.CreateNote();
+        var original = NotesDocument.FromText("kept bold").SetStyle(0, 4, NoteTextStyle.Bold, true);
+        app.UpdateDocument(id, original);
+        var escapedDocument = app.GetNote(id).Document;
+        app.UpdateDocument(id, NotesDocument.FromText("replacement"));
+        escapedDocument.Paragraphs[0].Runs[0] = new NoteTextRun("mutated outside the history");
+
+        Assert.IsTrue(app.Undo(id));
+        Assert.AreEqual("kept bold", app.GetNote(id).Text);
+        Assert.AreEqual(NoteTextStyle.Bold, app.GetNote(id).Document.Paragraphs[0].Runs[0].Style);
+        Assert.IsTrue(app.TryMoveToTrash(id, out var moveError), moveError);
+        Assert.IsTrue(app.CanUndo(id), "Moving to Trash preserves the current note's undo history for restoration.");
+        Assert.IsTrue(app.TryPermanentlyDeleteFromTrash(id, confirmed: true, out var deleteError), deleteError);
+        Assert.IsFalse(app.CanUndo(id));
+        Assert.IsFalse(app.CanRedo(id));
+    }
+
+    [TestMethod]
     public void JsonNotesStore_RoundTripsCombinedFormattingThroughRealStorage()
     {
         using var directory = new TemporaryDirectory();
@@ -1439,6 +1574,40 @@ public sealed class NotesApplicationTests
         document.Paragraphs.AddRange(table.Paragraphs);
         NotesSnapshotValidator.ValidateDocument(document);
         return document;
+    }
+
+    private static string RandomNoteText(Random random)
+    {
+        var parts = new[] { "a", "β", "漢", "\t", "\r\n", "" };
+        return string.Concat(Enumerable.Range(0, random.Next(0, 150)).Select(_ => parts[random.Next(parts.Length)]));
+    }
+
+    private static void PushReference(List<string> history, ref int characterCount, string text)
+    {
+        history.Add(text);
+        characterCount += text.Length;
+        while (history.Count > 100 || characterCount > 2_000_000)
+        {
+            characterCount -= history[0].Length;
+            history.RemoveAt(0);
+        }
+    }
+
+    private static string PopReference(List<string> history, ref int characterCount)
+    {
+        var index = history.Count - 1;
+        var text = history[index];
+        history.RemoveAt(index);
+        characterCount -= text.Length;
+        return text;
+    }
+
+    private sealed class InMemoryNotesStore : INotesStore
+    {
+        private NotesSnapshot? _snapshot;
+
+        public NotesSnapshot? Load() => _snapshot;
+        public void Save(NotesSnapshot snapshot) => _snapshot = snapshot;
     }
 
     private sealed class TemporaryDirectory : IDisposable

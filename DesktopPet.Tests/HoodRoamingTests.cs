@@ -42,6 +42,24 @@ public sealed class HoodRoamingTests
     }
 
     [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void Advance_MinimumSizedAxisKeepsItsFractionalCoordinateWhileTheOtherAxisRoams(bool vertical)
+    {
+        var position = vertical
+            ? new PetPosition(Math.BitIncrement(896), 100)
+            : new PetPosition(100, Math.BitIncrement(832));
+        var area = new PetBounds(position.X, position.Y, vertical ? 192 : 480, vertical ? 400 : 208);
+        var session = CreateSession(area, position);
+
+        session.Advance(TimeSpan.FromSeconds(1));
+
+        Assert.AreEqual(vertical ? position.X : position.X + 18, session.Position.X);
+        Assert.AreEqual(vertical ? position.Y + 18 : position.Y, session.Position.Y);
+        AssertContained(session);
+    }
+
+    [TestMethod]
     [DataRow(192d, 226d)]
     [DataRow(192d, 400d)]
     [DataRow(480d, 226d)]

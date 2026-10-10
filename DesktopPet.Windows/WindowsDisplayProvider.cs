@@ -68,6 +68,26 @@ internal static class WindowsDisplayProvider
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetWindowPos(IntPtr handle, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
 
+    public static double GetScaleForPet(PetPosition position, PetDefinition definition, IReadOnlyCollection<DisplayInfo> displays)
+    {
+        var x = position.X + definition.DisplayWidth / 2;
+        var y = position.Y + definition.DisplayHeight / 2;
+        var display = displays.FirstOrDefault(candidate =>
+            x >= candidate.WorkArea.X && x < candidate.WorkArea.Right &&
+            y >= candidate.WorkArea.Y && y < candidate.WorkArea.Bottom);
+        if (display is not null)
+        {
+            return display.ScaleFactor;
+        }
+
+        return displays.MinBy(candidate =>
+        {
+            var dx = Math.Max(candidate.WorkArea.X - x, Math.Max(0, x - candidate.WorkArea.Right));
+            var dy = Math.Max(candidate.WorkArea.Y - y, Math.Max(0, y - candidate.WorkArea.Bottom));
+            return dx * dx + dy * dy;
+        })?.ScaleFactor ?? 1;
+    }
+
     private static double GetScale(Forms.Screen screen)
     {
         var bounds = screen.Bounds;

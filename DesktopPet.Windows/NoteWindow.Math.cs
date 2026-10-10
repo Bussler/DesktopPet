@@ -268,6 +268,7 @@ public partial class NoteWindow
                 var (start, length) = GetSelectionOffsets(document);
                 _activeMathSource = null;
                 SetEditorDocument(document, start, length);
+                UpdateToolbar();
             }
             catch (Exception exception) when (exception is InvalidDataException or ArgumentException or InvalidOperationException)
             {

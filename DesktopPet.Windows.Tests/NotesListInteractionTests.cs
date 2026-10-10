@@ -147,6 +147,180 @@ public sealed class NotesListInteractionTests
     }
 
     [TestMethod]
+    public void ContentRefreshCoalescesToLatestPreviewAndPreservesSelection()
+    {
+        var id = Guid.NewGuid();
+        var otherId = Guid.NewGuid();
+        IReadOnlyList<NoteListItem> active = [new(id, "old preview", true, "Note"), new(otherId, "other", false, "Other")];
+        IReadOnlyList<TrashedNoteListItem> trash = [new(Guid.NewGuid(), "archived", "Archived")];
+        var activeSearches = 0;
+        var trashSearches = 0;
+        var window = new NotesListWindow(query =>
+        {
+            activeSearches++;
+            return string.IsNullOrWhiteSpace(query) ? active : active.Where(item =>
+                item.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                item.Preview.Contains(query, StringComparison.OrdinalIgnoreCase)).ToArray();
+        }, query =>
+        {
+            trashSearches++;
+            return string.IsNullOrWhiteSpace(query) ? trash : trash.Where(item =>
+                item.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                item.Preview.Contains(query, StringComparison.OrdinalIgnoreCase)).ToArray();
+        }, _ => { }, () => { }, _ => null, _ => null, () => null);
+        try
+        {
+            ShowHidden(window);
+            activeSearches = trashSearches = 0;
+            var results = (ListBox)window.FindName("ResultsList");
+            results.SelectedItems.Add(results.Items.Cast<NoteListItem>().Single(item => item.Id == id));
+
+            active = [new(id, "first", true, "Note"), new(otherId, "other", false, "Other")];
+            window.RefreshContent(id);
+            active = [new(id, "latest preview", true, "Note"), new(otherId, "other", false, "Other")];
+            window.RefreshContent(id);
+            Assert.AreEqual(0, activeSearches, "Content presentation should be deferred to coalesce edits.");
+            Assert.AreEqual(0, trashSearches, "An active-note edit must not search Trash.");
+
+            Pump(window);
+            Assert.AreEqual(1, activeSearches);
+            Assert.AreEqual(0, trashSearches);
+            Assert.AreEqual("latest preview", results.Items.Cast<NoteListItem>().Single(item => item.Id == id).Preview);
+            CollectionAssert.AreEqual(new[] { id }, results.SelectedItems.Cast<NoteListItem>().Select(item => item.Id).ToArray());
+
+            ((TextBox)window.FindName("SearchBox")).Text = "latest preview";
+            Assert.AreEqual(1, results.Items.Count, "Search must immediately use the latest accepted note text.");
+            Assert.AreEqual(id, ((NoteListItem)results.Items[0]).Id);
+        }
+        finally { window.Close(); }
+    }
+
+    [TestMethod]
+    public void UnfilteredContentRefreshUpdatesOnlyTheChangedListRow()
+    {
+        var id = Guid.NewGuid();
+        var otherId = Guid.NewGuid();
+        var latest = new NoteListItem(id, "latest preview", true, "Note");
+        IReadOnlyList<NoteListItem> active = [new(id, "old preview", true, "Note"), new(otherId, "other", false, "Other")];
+        var searches = 0;
+        var window = new NotesListWindow(_ => { searches++; return active; }, _ => [], _ => { }, () => { },
+            _ => null, _ => null, () => null);
+        typeof(NotesListWindow).GetMethod("SetActiveNoteLookup", System.Reflection.BindingFlags.Instance |
+            System.Reflection.BindingFlags.NonPublic)!.Invoke(window, [new Func<Guid, NoteListItem?>(noteId => noteId == id ? latest : null)]);
+        try
+        {
+            ShowHidden(window);
+            searches = 0;
+            var results = (ListBox)window.FindName("ResultsList");
+            results.SelectedItems.Add(results.Items.Cast<NoteListItem>().Single(item => item.Id == id));
+
+            window.RefreshContent(id);
+            Pump(window);
+
+            Assert.AreEqual(0, searches, "An unfiltered update should not rebuild previews for every note.");
+            Assert.AreEqual("latest preview", results.Items.Cast<NoteListItem>().Single(item => item.Id == id).Preview);
+            CollectionAssert.AreEqual(new[] { id }, results.SelectedItems.Cast<NoteListItem>().Select(item => item.Id).ToArray());
+        }
+        finally { window.Close(); }
+    }
+
+    [TestMethod]
+    public void ContentRefreshPreservesChangesToDifferentNotesInTheSameBatch()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"HoodNotesBatch-{Guid.NewGuid():N}.json");
+        NotesListWindow? window = null;
+        try
+        {
+            var app = NotesApplication.Start(new JsonNotesStore(path));
+            var ids = Enumerable.Range(0, 3).Select(_ => app.CreateNote()).ToArray();
+            foreach (var id in ids) app.UpdateDocument(id, NotesDocument.FromText("old preview"));
+            window = new NotesListWindow(app.Search, app.SearchTrash, _ => { }, () => { }, _ => null, _ => null, () => null);
+            typeof(NotesListWindow).GetMethod("SetActiveNoteLookup", System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.NonPublic)!.Invoke(window, [new Func<Guid, NoteListItem?>(app.GetActiveNoteListItem)]);
+            ShowHidden(window);
+            var results = (ListBox)window.FindName("ResultsList");
+            results.SelectAll();
+            var untouched = results.Items.Cast<NoteListItem>().Single(item => item.Id == ids[2]);
+            foreach (var id in ids.Take(2))
+            {
+                app.UpdateDocument(id, NotesDocument.FromText($"latest {id}"));
+                window.RefreshContent(id);
+            }
+            app.UpdateDocument(ids[0], NotesDocument.FromText("latest A"));
+            window.RefreshContent(ids[0]);
+            Pump(window);
+
+            foreach (var id in ids)
+                Assert.AreEqual(app.GetActiveNoteListItem(id)!.Preview,
+                    results.Items.Cast<NoteListItem>().Single(item => item.Id == id).Preview);
+            CollectionAssert.AreEquivalent(ids, results.SelectedItems.Cast<NoteListItem>().Select(item => item.Id).ToArray());
+            Assert.AreSame(untouched, results.Items.Cast<NoteListItem>().Single(item => item.Id == ids[2]));
+            var restarted = NotesApplication.Start(new JsonNotesStore(path));
+            foreach (var id in ids) Assert.AreEqual(app.GetNote(id).Text, restarted.GetNote(id).Text);
+        }
+        finally { window?.Close(); File.Delete(path); }
+    }
+
+    [TestMethod]
+    public void ImmediateMembershipRefreshCancelsQueuedContentUpdate()
+    {
+        var id = Guid.NewGuid();
+        var otherId = Guid.NewGuid();
+        IReadOnlyList<NoteListItem> active = [new(id, "selected", true, "Selected"), new(otherId, "other", false, "Other")];
+        var activeSearches = 0;
+        var trashSearches = 0;
+        var window = new NotesListWindow(_ => { activeSearches++; return active; }, _ =>
+        {
+            trashSearches++;
+            return Array.Empty<TrashedNoteListItem>();
+        }, _ => { }, () => { }, _ => null, _ => null, () => null);
+        try
+        {
+            ShowHidden(window);
+            activeSearches = trashSearches = 0;
+            window.RefreshContent(id);
+            active = [new(otherId, "other", false, "Other")];
+            window.Refresh();
+            Assert.AreEqual(1, activeSearches);
+            Assert.AreEqual(1, trashSearches);
+
+            Pump(window);
+            Assert.AreEqual(1, activeSearches, "The canceled callback must not apply a stale or duplicate refresh.");
+            Assert.AreEqual(1, trashSearches);
+            Assert.AreEqual(otherId, ((NoteListItem)((ListBox)window.FindName("ResultsList")).Items[0]).Id);
+        }
+        finally { window.Close(); }
+    }
+
+    [TestMethod]
+    public void HiddenListDefersContentSearchUntilItBecomesVisible()
+    {
+        var id = Guid.NewGuid();
+        IReadOnlyList<NoteListItem> active = [new(id, "old", true, "Note")];
+        var activeSearches = 0;
+        var trashSearches = 0;
+        var window = new NotesListWindow(_ => { activeSearches++; return active; }, _ =>
+        {
+            trashSearches++;
+            return Array.Empty<TrashedNoteListItem>();
+        }, _ => { }, () => { }, _ => null, _ => null, () => null);
+        try
+        {
+            activeSearches = trashSearches = 0;
+            active = [new(id, "latest", true, "Note")];
+            window.RefreshContent(id);
+            Assert.AreEqual(0, activeSearches);
+            Assert.AreEqual(0, trashSearches);
+
+            ShowHidden(window);
+            Assert.AreEqual(1, activeSearches);
+            Assert.AreEqual(1, trashSearches);
+            Assert.AreEqual("latest", ((NoteListItem)((ListBox)window.FindName("ResultsList")).Items[0]).Preview);
+        }
+        finally { window.Close(); }
+    }
+
+    [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
     public void BulkTrashUsesTheOriginalSelectionDespiteCallbackRefreshes(bool failSave)
@@ -445,4 +619,7 @@ public sealed class NotesListInteractionTests
         window.Show();
         window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
     }
+
+    private static void Pump(Window window) =>
+        window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
 }

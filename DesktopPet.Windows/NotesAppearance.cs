@@ -1,7 +1,9 @@
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Shell;
+using System.Windows.Threading;
 using DesktopPet.Core;
 using Microsoft.Win32;
 using MediaColor = System.Windows.Media.Color;
@@ -12,24 +14,33 @@ namespace DesktopPet.Windows;
 
 internal static class NotesAppearance
 {
+    private static readonly ConditionalWeakTable<Dispatcher, Dictionary<bool, ResourceDictionary>> SharedStyles = new();
+
     public static bool Apply(FrameworkElement surface, string theme, string style = UiStyleCatalog.StickyNotes, bool? systemIsDark = null)
     {
-        var styles = surface.Resources.MergedDictionaries.FirstOrDefault(dictionary =>
-            dictionary.Source?.OriginalString.EndsWith("NotesStyles.xaml", StringComparison.OrdinalIgnoreCase) == true);
-        if (styles is null)
+        var dark = IsDarkTheme(theme, systemIsDark);
+        var styles = GetSharedStyles(surface.Dispatcher, dark);
+        var dictionaries = surface.Resources.MergedDictionaries;
+        var styleIndex = -1;
+        for (var index = 0; index < dictionaries.Count; index++)
         {
-            styles = new ResourceDictionary { Source = new Uri("/DesktopPet.Windows;component/NotesStyles.xaml", UriKind.Relative) };
-            surface.Resources.MergedDictionaries.Add(styles);
+            if (dictionaries[index].Source?.OriginalString.EndsWith("NotesStyles.xaml", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                styleIndex = index;
+                break;
+            }
         }
 
-        var dark = IsDarkTheme(theme, systemIsDark);
-        var palette = ApplicationAppearance.Resolve(theme, style, systemIsDark);
-        var mode = dark ? ".Dark" : ".Light";
-        var source = new Uri($"pack://application:,,,/PresentationFramework.Fluent;component/Themes/Fluent{mode}.xaml");
-        if (styles.MergedDictionaries[0].Source != source)
+        if (styleIndex < 0)
         {
-            styles.MergedDictionaries[0] = new ResourceDictionary { Source = source };
+            dictionaries.Add(styles);
         }
+        else if (!ReferenceEquals(dictionaries[styleIndex], styles))
+        {
+            dictionaries[styleIndex] = styles;
+        }
+
+        var palette = ApplicationAppearance.Resolve(theme, style, systemIsDark);
 
         if (surface is Window window)
         {
@@ -57,6 +68,24 @@ internal static class NotesAppearance
         }
 
         return dark;
+    }
+
+    private static ResourceDictionary GetSharedStyles(Dispatcher dispatcher, bool dark)
+    {
+        var variants = SharedStyles.GetValue(dispatcher, static _ => new Dictionary<bool, ResourceDictionary>());
+        if (variants.TryGetValue(dark, out var styles))
+        {
+            return styles;
+        }
+
+        styles = new ResourceDictionary { Source = new Uri("/DesktopPet.Windows;component/NotesStyles.xaml", UriKind.Relative) };
+        var mode = dark ? ".Dark" : ".Light";
+        styles.MergedDictionaries[0] = new ResourceDictionary
+        {
+            Source = new Uri($"pack://application:,,,/PresentationFramework.Fluent;component/Themes/Fluent{mode}.xaml")
+        };
+        variants.Add(dark, styles);
+        return styles;
     }
 
     public static void ApplyContent(FrameworkElement surface, bool dark, NoteColor color, string style)

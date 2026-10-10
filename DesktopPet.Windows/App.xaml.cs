@@ -81,13 +81,13 @@ public partial class App : System.Windows.Application
                 return;
             }
 
-            var assets = HoodAssets.LoadPet(Path.Combine(AppContext.BaseDirectory, "Assets"), configuration.Pet);
+            var assetSource = HoodAssets.LoadPetSource(Path.Combine(AppContext.BaseDirectory, "Assets"), configuration.Pet);
             var displays = WindowsDisplayProvider.GetDisplays();
             _notes?.RecoverNotePlacements(displays);
             try
             {
                 _session = HoodSession.Start(
-                    assets.Definition,
+                    assetSource.Definition,
                     displays,
                     new SystemRandomSource(),
                     sessionStore,
@@ -107,15 +107,20 @@ public partial class App : System.Windows.Application
                 }
 
                 _session = HoodSession.Start(
-                    assets.Definition,
+                    assetSource.Definition,
                     displays,
                     new SystemRandomSource(),
                     sessionStore,
                     configuration);
             }
 
+            var displayScale = WindowsDisplayProvider.GetScaleForPet(_session.Position, assetSource.Definition, displays);
+            var assets = configuration.Behavior.ShowSprites
+                ? HoodAssets.LoadAtScale(assetSource, displayScale, displayScale)
+                : null;
             _petWindow = new HoodOverlayWindow(
                 _session,
+                assetSource,
                 assets,
                 ShowSettings,
                 RequestQuit,
@@ -351,6 +356,22 @@ public partial class App : System.Windows.Application
     {
         if (_session is null || _configurationStore is null || _petWindow is null) return;
         var current = _session.Configuration;
+        var showSprites = !current.Behavior.ShowSprites;
+        if (showSprites)
+        {
+            try
+            {
+                _petWindow.EnsureSpriteAssetsLoaded();
+            }
+            catch (PetAssetException exception)
+            {
+                System.Windows.MessageBox.Show(
+                    $"Hood could not show its sprites. Your notes and saved session are unchanged.\n\n{exception.Message}",
+                    "Pet artwork could not be loaded", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+        }
+
         try
         {
             new HoodConfigurationController(_session, _configurationStore, _startupRegistration).SaveAndApply(
@@ -361,6 +382,7 @@ public partial class App : System.Windows.Application
         }
         catch (HoodConfigurationException exception)
         {
+            if (showSprites) _petWindow.ReleaseSpriteAssets();
             System.Windows.MessageBox.Show(exception.Message, "Could not change sprite visibility", MessageBoxButton.OK, MessageBoxImage.Error);
             return;
         }
@@ -629,6 +651,7 @@ public partial class App : System.Windows.Application
             _effectiveNotesSettings.Theme,
             moveNoteToTrash: MoveNoteToTrash,
             uiStyle: _effectiveUiStyle);
+        _notesListWindow.SetActiveNoteLookup(_notes.GetActiveNoteListItem);
         _notesListWindow.Closed += (_, _) => _notesListWindow = null;
         _notesListWindow.Show();
         _notesListWindow.Activate();
@@ -730,7 +753,7 @@ public partial class App : System.Windows.Application
         try
         {
             _notes.UpdateDocument(noteId, document);
-            _notesListWindow?.Refresh();
+            _notesListWindow?.RefreshContent(noteId);
             return _notes.LastSaveError;
         }
         catch (Exception exception) when (exception is InvalidDataException or ArgumentException)
@@ -841,7 +864,7 @@ public partial class App : System.Windows.Application
         }
 
         var changed = undo ? _notes.Undo(noteId) : _notes.Redo(noteId);
-        _notesListWindow?.Refresh();
+        if (changed) _notesListWindow?.RefreshContent(noteId);
         return changed ? (_notes.GetNote(noteId).Document, _notes.LastSaveError) : (null, _notes.LastSaveError);
     }
 
