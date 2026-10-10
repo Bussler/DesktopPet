@@ -154,6 +154,28 @@ public sealed class HoodPlacementTests
     }
 
     [TestMethod]
+    public void Dragging_ToScaledMonitorKeepsRoamingUsableAtTheBottomEdge()
+    {
+        var secondary = new DisplayInfo("Scaled right", new PetBounds(1920, 0, 2048, 1104), false, 1.25);
+        var session = CreateSession([Primary(1920, 1040), secondary], restored: new HoodSessionSnapshot
+        {
+            Position = new PetPosition(864, Math.BitIncrement(816)),
+            RoamingArea = new PetBounds(720, Math.BitIncrement(816), 480, 208)
+        });
+        session.BeginDragging();
+        session.MoveTo(new PetPosition(2200, Math.BitIncrement(896)), persist: false);
+        session.EndDragging();
+        var position = session.Position;
+
+        session.Advance(TimeSpan.FromMilliseconds(33));
+
+        Assert.AreNotEqual(position.X, session.Position.X, "Horizontal roaming must resume after the drag.");
+        Assert.AreEqual(position.Y, session.Position.Y, 1e-9, "The minimum-height area must keep its vertical position.");
+        Assert.IsTrue(session.Position.Y >= session.RoamingArea.Y);
+        Assert.IsTrue(session.Position.Y + 208 <= session.RoamingArea.Bottom);
+    }
+
+    [TestMethod]
     public void MoveTo_ClampsPetAndAreaTogetherAtTheWorkAreaEdges()
     {
         var session = CreateSession([Primary(1920, 1040)]);

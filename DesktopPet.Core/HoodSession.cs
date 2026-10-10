@@ -966,9 +966,10 @@ public sealed class HoodSession
         }
 
         var travel = RoamingAxisSpeed * elapsed.TotalSeconds;
+        // Subtract dimensions first so a zero travel range stays exactly at its fractional origin.
         var next = new PetPosition(
-            Math.Clamp(Position.X + _roamingDirection.X * travel, RoamingArea.X, RoamingArea.Right - _definition.DisplayWidth),
-            Math.Clamp(Position.Y + _roamingDirection.Y * travel, RoamingArea.Y, RoamingArea.Bottom - _definition.DisplayHeight));
+            Math.Clamp(Position.X + _roamingDirection.X * travel, RoamingArea.X, RoamingArea.X + (RoamingArea.Width - _definition.DisplayWidth)),
+            Math.Clamp(Position.Y + _roamingDirection.Y * travel, RoamingArea.Y, RoamingArea.Y + (RoamingArea.Height - _definition.DisplayHeight)));
         var dx = next.X - Position.X;
         var dy = next.Y - Position.Y;
         var distance = Math.Sqrt(dx * dx + dy * dy);
