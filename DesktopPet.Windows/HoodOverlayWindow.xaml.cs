@@ -507,6 +507,15 @@ public partial class HoodOverlayWindow : Window
 
     internal void RestorePetAssets(HoodAssetSource source, LoadedHoodAssets? assets)
     {
+        if (!_session.Configuration.Behavior.ShowSprites) assets = null;
+        else if (assets is null)
+        {
+            var dpiScale = WindowsDisplayProvider.GetScaleForPet(
+                _session.Position, source.Definition, WindowsDisplayProvider.GetDisplays());
+            if (source.CachedSpriteSheet is null)
+                source = HoodAssets.ReadSourceForPet(source.Directory, source.Definition);
+            assets = HoodAssets.LoadAtScale(source, dpiScale, dpiScale);
+        }
         _assetSource = source;
         _assets = assets;
         _renderedSpriteSheet = null;
@@ -517,6 +526,11 @@ public partial class HoodOverlayWindow : Window
 
     internal void RestorePetAssets(HoodAssetRollbackSnapshot snapshot)
     {
+        if (!_session.Configuration.Behavior.ShowSprites)
+        {
+            RestorePetAssets(snapshot.GetRestoreSource(), null);
+            return;
+        }
         var dpiScale = WindowsDisplayProvider.GetScaleForPet(
             _session.Position, snapshot.Source.Definition, WindowsDisplayProvider.GetDisplays());
         var (source, assets) = snapshot.LoadAtScale(dpiScale, dpiScale);

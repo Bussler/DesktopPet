@@ -244,6 +244,37 @@ public sealed class HoodAssetsTests
     }
 
     [TestMethod]
+    public void RollbackKeepsLoadedPixelsWhenReplacementPngHasIdenticalFileMetadata()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"HoodSameMetadata-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            WriteCustomAsset(directory, solidColor: [0, 0, 180, 255]);
+            var assembly = typeof(HoodOverlayWindow).Assembly;
+            var assetType = assembly.GetType("DesktopPet.Windows.HoodAssets")!;
+            var source = assetType.GetMethod("ReadSource")!.Invoke(null, [directory])!;
+            var original = assetType.GetMethod("LoadAtScale")!.Invoke(null, [source, 1d, 1d])!;
+            var sheetPath = Path.Combine(directory, "hood_spritesheet.png");
+            var manifestPath = Path.Combine(directory, "hood.animations.json");
+            var length = new FileInfo(sheetPath).Length;
+            var sheetTimestamp = File.GetLastWriteTimeUtc(sheetPath);
+            var manifestTimestamp = File.GetLastWriteTimeUtc(manifestPath);
+            WriteCustomAsset(directory, solidColor: [1, 0, 180, 255]);
+            File.SetLastWriteTimeUtc(sheetPath, sheetTimestamp);
+            File.SetLastWriteTimeUtc(manifestPath, manifestTimestamp);
+            Assert.AreEqual(length, new FileInfo(sheetPath).Length, "The regression requires identical PNG lengths.");
+            var snapshotType = assembly.GetType("DesktopPet.Windows.HoodAssetRollbackSnapshot")!;
+            var snapshot = snapshotType.GetMethod("Capture")!.Invoke(null, [source, original])!;
+            var pair = snapshotType.GetMethod("LoadAtScale")!.Invoke(snapshot, [2d, 2d])!;
+            var restored = pair.GetType().GetField("Item2")!.GetValue(pair)!;
+            var sheet = (BitmapSource)restored.GetType().GetProperty("SpriteSheet")!.GetValue(restored)!;
+            AssertSolidFrame(sheet, GetFrameRectangle(restored, new SpriteFrame(0, 0)), [0, 0, 180, 255], "rollback");
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [TestMethod]
     public void SourceDimensionsAndCorruptAssetErrorsRemainActionable()
     {
         var original = Path.Combine(AppContext.BaseDirectory, "Assets", "Hood");
@@ -312,13 +343,13 @@ public sealed class HoodAssetsTests
     private static Int32Rect GetFrameRectangle(object loaded, SpriteFrame frame) =>
         (Int32Rect)loaded.GetType().GetMethod("GetFrameRectangle")!.Invoke(loaded, [frame])!;
 
-    private static void WriteCustomAsset(string directory, double spriteScale = 2)
+    private static void WriteCustomAsset(string directory, double spriteScale = 2, byte[]? solidColor = null)
     {
         var pixels = new byte[44 * 65 * 4];
         for (var y = 0; y < 65; y++)
         for (var x = 0; x < 44; x++)
         {
-            var color = CustomCellColor(x / 11, y / 13);
+            var color = solidColor ?? CustomCellColor(x / 11, y / 13);
             Array.Copy(color, 0, pixels, (y * 44 + x) * 4, 4);
         }
 

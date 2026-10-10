@@ -240,6 +240,44 @@ public sealed class HoodOverlayRenderingTests
     }
 
     [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void CancelAfterATrayVisibilityChangeRestoresArtworkForCurrentVisibility(bool initiallyVisible)
+    {
+        var source = LoadSource(Path.Combine(AppContext.BaseDirectory, "Assets"), "hood");
+        var definition = (PetDefinition)source.GetType().GetProperty("Definition")!.GetValue(source)!;
+        var session = CreateIdleSession(definition, initiallyVisible);
+        var pet = initiallyVisible ? CreatePet(session, LoadAssets("hood")) : CreateMetadataPet(session, source);
+        pet.Opacity = 0;
+        pet.ShowInTaskbar = false;
+        var configPath = Path.Combine(Path.GetTempPath(), $"HoodRollbackVisibility-{Guid.NewGuid():N}.yaml");
+        var controller = new HoodConfigurationController(session, new YamlConfigurationStore(configPath));
+        var settings = (SettingsWindow)typeof(SettingsWindow).GetConstructors(PrivateInstance)
+            .Single(candidate => candidate.GetParameters().Length == 3)
+            .Invoke([controller, pet, UiStyleCatalog.StickyNotes]);
+        try
+        {
+            ((ComboBox)settings.FindName("PetComboBox")).SelectedValue = PetCatalog.Pip;
+            if (!initiallyVisible) typeof(HoodOverlayWindow).GetMethod("EnsureSpriteAssetsLoaded", PrivateInstance)!.Invoke(pet, null);
+            controller.SaveAndApply("behavior.show_sprites", controller.Current with
+            {
+                Behavior = controller.Current.Behavior with { ShowSprites = !initiallyVisible }
+            });
+            typeof(HoodOverlayWindow).GetMethod("RefreshBehaviorSettings", PrivateInstance)!.Invoke(pet, null);
+            settings.Close();
+
+            Assert.AreEqual(!initiallyVisible, session.Configuration.Behavior.ShowSprites);
+            Assert.AreEqual(!initiallyVisible, pet.IsVisible);
+            Assert.AreEqual(!initiallyVisible, GetCurrentAssets(pet) is not null);
+            Assert.AreEqual(!initiallyVisible, ((Image)pet.FindName("PetImage")).Source is not null);
+            var restoredSource = typeof(HoodOverlayWindow).GetProperty("CurrentSource", PrivateInstance)!.GetValue(pet)!;
+            Assert.AreEqual(source.GetType().GetProperty("Directory")!.GetValue(source),
+                restoredSource.GetType().GetProperty("Directory")!.GetValue(restoredSource));
+        }
+        finally { settings.Close(); pet.Close(); File.Delete(configPath); }
+    }
+
+    [TestMethod]
     [DataRow(false, false)]
     [DataRow(true, false)]
     [DataRow(false, true)]

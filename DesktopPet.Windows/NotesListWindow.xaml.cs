@@ -22,6 +22,7 @@ public partial class NotesListWindow : Window
     private bool _contentRefreshPending;
     private int _contentRefreshRevision;
     private DispatcherOperation? _pendingContentRefresh;
+    private readonly HashSet<Guid> _pendingContentNoteIds = [];
 
     public NotesListWindow(
         Func<string?, IReadOnlyList<NoteListItem>> search,
@@ -116,6 +117,7 @@ public partial class NotesListWindow : Window
 
     public void RefreshContent(Guid noteId)
     {
+        _pendingContentNoteIds.Add(noteId);
         _contentRefreshPending = true;
         if (!IsVisible || Views.SelectedIndex != 0 ||
             _pendingContentRefresh?.Status == DispatcherOperationStatus.Pending)
@@ -129,10 +131,12 @@ public partial class NotesListWindow : Window
             if (!IsVisible || Views.SelectedIndex != 0) return;
 
             _contentRefreshPending = false;
+            var changedIds = _pendingContentNoteIds.ToArray();
+            _pendingContentNoteIds.Clear();
             var query = SearchBox.Text;
-            var updatedSingleRow = string.IsNullOrWhiteSpace(query) &&
-                _getActiveNoteListItem is not null && TryUpdateActiveRow(noteId);
-            if (!updatedSingleRow)
+            var updatedRows = string.IsNullOrWhiteSpace(query) &&
+                _getActiveNoteListItem is not null && changedIds.All(TryUpdateActiveRow);
+            if (!updatedRows)
             {
                 var notes = _search(query);
                 SetActiveResults(notes);
@@ -184,6 +188,7 @@ public partial class NotesListWindow : Window
 
     private void CancelPendingContentRefresh()
     {
+        _pendingContentNoteIds.Clear();
         _contentRefreshPending = false;
         _contentRefreshRevision++;
         if (_pendingContentRefresh?.Status == DispatcherOperationStatus.Pending)

@@ -539,6 +539,35 @@ public sealed class NoteEmphasisInteractionTests
     }
 
     [TestMethod]
+    [DataRow(TextMarkerStyle.Disc, NoteBlockKind.Bulleted, "BulletsButton")]
+    [DataRow(TextMarkerStyle.Decimal, NoteBlockKind.Numbered, "NumberedButton")]
+    [DataRow(TextMarkerStyle.None, NoteBlockKind.Checklist, "ChecklistButton")]
+    public void NativeRichTextListsKeepTheToolbarAndSavedKindConsistent(TextMarkerStyle marker, NoteBlockKind kind, string button)
+    {
+        var app = NotesApplication.Start(new MemoryNotesStore());
+        var id = app.CreateNote();
+        var window = CreateWindow(app, id);
+        try
+        {
+            ShowHidden(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            var source = new FlowDocument(new System.Windows.Documents.List(new ListItem(new Paragraph(new Run("native item"))))
+                { MarkerStyle = marker });
+            using var stream = new MemoryStream();
+            new TextRange(source.ContentStart, source.ContentEnd).Save(stream, DataFormats.XamlPackage);
+            stream.Position = 0;
+            editor.Selection.Load(stream, DataFormats.XamlPackage);
+            editor.CaretPosition = editor.Document.ContentStart;
+            Pump(window);
+
+            Assert.AreEqual(kind, app.GetNote(id).Document.Paragraphs.First().Kind);
+            Assert.AreEqual(true, ((ToggleButton)window.FindName(button)).IsChecked);
+            Assert.AreEqual("native item", app.GetNote(id).Text.Trim());
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
     public void ToolbarSelectionOffsetsSkipSyntheticContentAndReuseTheEditorMap()
     {
         var tableId = Guid.NewGuid();

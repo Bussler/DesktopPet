@@ -60,6 +60,44 @@ public sealed class NoteTypingRecognitionTests
     }
 
     [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void CompletingALiteralChecklistPrefixConvertsAndCanBeUndone(bool undoRestored)
+    {
+        var app = NotesApplication.Start(new MemoryNotesStore());
+        var noteId = app.CreateNote();
+        app.UpdateDocument(noteId, NotesDocument.FromText("- [ ]"));
+        var window = CreateWindow(app, noteId);
+        try
+        {
+            Show(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            if (undoRestored)
+            {
+                editor.CaretPosition = editor.Document.ContentEnd;
+                Type(editor, "x");
+                Pump(window);
+                typeof(NoteWindow).GetMethod("RestoreHistory", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(window, [true]);
+                Pump(window);
+                Assert.AreEqual("- [ ]", app.GetNote(noteId).Text);
+            }
+            editor.CaretPosition = editor.Document.ContentEnd;
+            Type(editor, " ");
+            Pump(window);
+
+            Assert.AreEqual(NoteBlockKind.Checklist, app.GetNote(noteId).Document.Paragraphs.Single().Kind);
+            Assert.AreEqual(string.Empty, app.GetNote(noteId).Text);
+            typeof(NoteWindow).GetMethod("RestoreHistory", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(window, [true]);
+            Pump(window);
+            Assert.AreEqual("- [ ] ", app.GetNote(noteId).Text);
+            Assert.AreEqual(NoteBlockKind.Paragraph, app.GetNote(noteId).Document.Paragraphs.Single().Kind);
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
     public void AlphabeticPlainUrlCompletionStillConvertsBesideAnUnrelatedMarker()
     {
         const string url = "https://example.com/path?q=1#part";

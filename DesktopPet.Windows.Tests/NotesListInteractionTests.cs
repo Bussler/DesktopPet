@@ -225,6 +225,43 @@ public sealed class NotesListInteractionTests
     }
 
     [TestMethod]
+    public void ContentRefreshPreservesChangesToDifferentNotesInTheSameBatch()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"HoodNotesBatch-{Guid.NewGuid():N}.json");
+        NotesListWindow? window = null;
+        try
+        {
+            var app = NotesApplication.Start(new JsonNotesStore(path));
+            var ids = Enumerable.Range(0, 3).Select(_ => app.CreateNote()).ToArray();
+            foreach (var id in ids) app.UpdateDocument(id, NotesDocument.FromText("old preview"));
+            window = new NotesListWindow(app.Search, app.SearchTrash, _ => { }, () => { }, _ => null, _ => null, () => null);
+            typeof(NotesListWindow).GetMethod("SetActiveNoteLookup", System.Reflection.BindingFlags.Instance |
+                System.Reflection.BindingFlags.NonPublic)!.Invoke(window, [new Func<Guid, NoteListItem?>(app.GetActiveNoteListItem)]);
+            ShowHidden(window);
+            var results = (ListBox)window.FindName("ResultsList");
+            results.SelectAll();
+            var untouched = results.Items.Cast<NoteListItem>().Single(item => item.Id == ids[2]);
+            foreach (var id in ids.Take(2))
+            {
+                app.UpdateDocument(id, NotesDocument.FromText($"latest {id}"));
+                window.RefreshContent(id);
+            }
+            app.UpdateDocument(ids[0], NotesDocument.FromText("latest A"));
+            window.RefreshContent(ids[0]);
+            Pump(window);
+
+            foreach (var id in ids)
+                Assert.AreEqual(app.GetActiveNoteListItem(id)!.Preview,
+                    results.Items.Cast<NoteListItem>().Single(item => item.Id == id).Preview);
+            CollectionAssert.AreEquivalent(ids, results.SelectedItems.Cast<NoteListItem>().Select(item => item.Id).ToArray());
+            Assert.AreSame(untouched, results.Items.Cast<NoteListItem>().Single(item => item.Id == ids[2]));
+            var restarted = NotesApplication.Start(new JsonNotesStore(path));
+            foreach (var id in ids) Assert.AreEqual(app.GetNote(id).Text, restarted.GetNote(id).Text);
+        }
+        finally { window?.Close(); File.Delete(path); }
+    }
+
+    [TestMethod]
     public void ImmediateMembershipRefreshCancelsQueuedContentUpdate()
     {
         var id = Guid.NewGuid();

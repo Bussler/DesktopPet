@@ -10,10 +10,7 @@ namespace DesktopPet.Windows;
 internal sealed record HoodAssetSource(string Directory, PetDefinition Definition)
 {
     public byte[]? CachedSpriteSheet { get; init; }
-    public long ManifestLength { get; init; } = -1;
-    public DateTime? ManifestLastWriteTimeUtc { get; init; }
-    public long SpriteSheetLength { get; init; } = -1;
-    public DateTime? SpriteSheetLastWriteTimeUtc { get; init; }
+    public byte[]? ManifestHash { get; init; }
 }
 
 internal sealed class HoodAssetRollbackSnapshot
@@ -41,16 +38,14 @@ internal sealed class HoodAssetRollbackSnapshot
         var manifestPath = Path.Combine(source.Directory, "hood.animations.json");
         var spriteSheetPath = Path.Combine(source.Directory, source.Definition.SpriteSheet);
         var sourceChangedBeforePreview = source.CachedSpriteSheet is null &&
-            (!MetadataMatches(manifestPath, source.ManifestLength, source.ManifestLastWriteTimeUtc) ||
-             !MetadataMatches(spriteSheetPath, source.SpriteSheetLength, source.SpriteSheetLastWriteTimeUtc));
+            (source.ManifestHash is null || !HashMatches(manifestPath, source.ManifestHash));
         var originalSpriteSheet = source.CachedSpriteSheet;
-        if (originalSpriteSheet is null && !sourceChangedBeforePreview)
+        if (originalSpriteSheet is null && !sourceChangedBeforePreview && assets.SpriteSheetHash is { } loadedHash)
         {
             try
             {
                 var sourceBytes = File.ReadAllBytes(spriteSheetPath);
-                if (MetadataMatches(manifestPath, source.ManifestLength, source.ManifestLastWriteTimeUtc) &&
-                    MetadataMatches(spriteSheetPath, source.SpriteSheetLength, source.SpriteSheetLastWriteTimeUtc))
+                if (CryptographicOperations.FixedTimeEquals(SHA256.HashData(sourceBytes), loadedHash))
                 {
                     originalSpriteSheet = sourceBytes;
                 }
@@ -74,9 +69,8 @@ internal sealed class HoodAssetRollbackSnapshot
             originalSpriteSheet = stream.ToArray();
         }
 
-        var manifestHash = TryHashFile(manifestPath);
         var spriteSheetHash = SHA256.HashData(originalSpriteSheet);
-        return new HoodAssetRollbackSnapshot(source, originalSpriteSheet, manifestHash,
+        return new HoodAssetRollbackSnapshot(source, originalSpriteSheet, source.ManifestHash,
             spriteSheetHash, sourceChangedBeforePreview);
     }
 
@@ -101,7 +95,7 @@ internal sealed class HoodAssetRollbackSnapshot
     public bool SourceFilesChanged => Source.CachedSpriteSheet is null &&
         (_sourceChangedBeforePreview || !SourceFilesMatchSnapshot());
 
-    private HoodAssetSource GetRestoreSource()
+    public HoodAssetSource GetRestoreSource()
     {
         if (Source.CachedSpriteSheet is not null) return Source;
         if (!_sourceChangedBeforePreview && SourceFilesMatchSnapshot())
@@ -116,20 +110,6 @@ internal sealed class HoodAssetRollbackSnapshot
         _manifestHash is not null && _spriteSheetHash is not null &&
         HashMatches(Path.Combine(Source.Directory, "hood.animations.json"), _manifestHash) &&
         HashMatches(Path.Combine(Source.Directory, Source.Definition.SpriteSheet), _spriteSheetHash);
-
-    private static bool MetadataMatches(string path, long length, DateTime? lastWriteTimeUtc)
-    {
-        if (length < 0 || lastWriteTimeUtc is null) return false;
-        try
-        {
-            var info = new FileInfo(path);
-            return info.Exists && info.Length == length && info.LastWriteTimeUtc == lastWriteTimeUtc.Value;
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
-        {
-            return false;
-        }
-    }
 
     private static byte[]? TryHashFile(string path)
     {
@@ -152,6 +132,7 @@ internal sealed record LoadedHoodAssets(PetDefinition Definition, BitmapSource S
 {
     public string SourceDirectory { get; init; } = "";
     public HoodAssetSource? Source { get; init; }
+    public byte[]? SpriteSheetHash { get; init; }
     public double DpiScaleX { get; init; } = 1;
     public double DpiScaleY { get; init; } = 1;
 
@@ -214,9 +195,14 @@ internal static class HoodAssets
         }
 
         string json;
+        byte[] manifestHash;
         try
         {
-            json = File.ReadAllText(manifestPath);
+            using var stream = File.OpenRead(manifestPath);
+            manifestHash = SHA256.HashData(stream);
+            stream.Position = 0;
+            using var reader = new StreamReader(stream);
+            json = reader.ReadToEnd();
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -246,14 +232,9 @@ internal static class HoodAssets
             throw new PetAssetException("The Hood animation manifest must refer to hood_spritesheet.png beside the manifest.");
         }
 
-        var manifestInfo = new FileInfo(manifestPath);
-        var sheetInfo = new FileInfo(sheetPath);
         return new HoodAssetSource(directory, definition)
         {
-            ManifestLength = manifestInfo.Length,
-            ManifestLastWriteTimeUtc = manifestInfo.LastWriteTimeUtc,
-            SpriteSheetLength = sheetInfo.Length,
-            SpriteSheetLastWriteTimeUtc = sheetInfo.LastWriteTimeUtc
+            ManifestHash = manifestHash
         };
     }
 
@@ -283,15 +264,21 @@ internal static class HoodAssets
 
             if (width != source.Definition.SheetWidth) sheet.DecodePixelWidth = width;
             if (height != source.Definition.SheetHeight) sheet.DecodePixelHeight = height;
+            byte[] spriteSheetHash;
             if (source.CachedSpriteSheet is { } cachedSpriteSheet)
             {
+                spriteSheetHash = SHA256.HashData(cachedSpriteSheet);
                 using var stream = new MemoryStream(cachedSpriteSheet, writable: false);
                 sheet.StreamSource = stream;
                 sheet.EndInit();
             }
             else
             {
-                sheet.UriSource = new Uri(sheetPath, UriKind.Absolute);
+                // Hash and decode the same locked file so rollback identifies the displayed artwork.
+                using var stream = File.OpenRead(sheetPath);
+                spriteSheetHash = SHA256.HashData(stream);
+                stream.Position = 0;
+                sheet.StreamSource = stream;
                 sheet.EndInit();
             }
             sheet.Freeze();
@@ -299,6 +286,7 @@ internal static class HoodAssets
             {
                 SourceDirectory = source.Directory,
                 Source = source,
+                SpriteSheetHash = spriteSheetHash,
                 DpiScaleX = dpiScaleX,
                 DpiScaleY = dpiScaleY
             };

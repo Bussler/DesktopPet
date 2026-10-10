@@ -1103,13 +1103,14 @@ public partial class NoteWindow : Window
         var to = Math.Min(paragraphEnd, rangeEnd + 2);
         if (to <= from) return MarkupPass.None;
         var passes = PassesForMarkers(text.AsSpan(from, to - from));
-        var linePrefixLength = Math.Min(paragraphEnd - paragraphStart, 4);
+        var linePrefixLength = Math.Min(paragraphEnd - paragraphStart, 6);
         if (linePrefixLength > 0)
         {
             var prefix = text.AsSpan(paragraphStart, linePrefixLength);
-            if (position <= paragraphStart + 3 &&
+            if ((position <= paragraphStart + 3 &&
                 (prefix.StartsWith("1)", StringComparison.Ordinal) ||
-                 prefix.StartsWith("[ ]", StringComparison.Ordinal)))
+                 prefix.StartsWith("[ ]", StringComparison.Ordinal))) ||
+                (position <= paragraphStart + 5 && prefix.StartsWith("- [ ]", StringComparison.Ordinal)))
                 passes |= MarkupPass.List;
         }
         return passes;
@@ -1530,12 +1531,7 @@ public partial class NoteWindow : Window
             }
             else if (block is System.Windows.Documents.List list)
             {
-                var kind = list.Tag is NoteBlockKind listKind ? listKind : containingListKind ?? (list.MarkerStyle switch
-                {
-                    TextMarkerStyle.Decimal => NoteBlockKind.Numbered,
-                    TextMarkerStyle.None => NoteBlockKind.Checklist,
-                    _ => NoteBlockKind.Bulleted
-                });
+                var kind = GetEditorListKind(list, containingListKind);
                 var depth = containingListKind.HasValue ? listDepth + 1 : 0;
                 foreach (var item in list.ListItems)
                     ReadEditorBlocks(item.Blocks, paragraphs, cell, depth, kind);
@@ -2037,11 +2033,22 @@ public partial class NoteWindow : Window
 
     private static NoteBlockKind GetEditorParagraphKind(Paragraph paragraph)
     {
-        if (paragraph.Tag is NoteBlockKind kind) return kind;
-        if (paragraph.Parent is ListItem { Parent: System.Windows.Documents.List list } &&
-            list.Tag is NoteBlockKind listKind) return listKind;
-        return NoteBlockKind.Paragraph;
+        if (paragraph.Parent is ListItem { Parent: System.Windows.Documents.List list })
+        {
+            while (list.Tag is not NoteBlockKind && list.Parent is ListItem { Parent: System.Windows.Documents.List parent })
+                list = parent;
+            return GetEditorListKind(list);
+        }
+        return paragraph.Tag is NoteBlockKind kind ? kind : NoteBlockKind.Paragraph;
     }
+
+    private static NoteBlockKind GetEditorListKind(System.Windows.Documents.List list, NoteBlockKind? containingListKind = null) =>
+        list.Tag is NoteBlockKind kind ? kind : containingListKind ?? (list.MarkerStyle switch
+        {
+            TextMarkerStyle.Decimal => NoteBlockKind.Numbered,
+            TextMarkerStyle.None => NoteBlockKind.Checklist,
+            _ => NoteBlockKind.Bulleted
+        });
 
     private static int GetNormalizedTextLength(ReadOnlySpan<char> text)
     {

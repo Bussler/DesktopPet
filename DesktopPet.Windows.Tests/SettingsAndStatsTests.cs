@@ -266,9 +266,7 @@ public sealed class SettingsAndStatsTests
         {
             ((ComboBox)settings.FindName("PetComboBox")).SelectedValue = PetCatalog.Pip;
 
-            var source = (BitmapImage)((CroppedBitmap)((Image)pet.FindName("PetImage")).Source).Source;
-            StringAssert.Contains(source.UriSource.LocalPath.ToLowerInvariant(), "pip",
-                "Selecting a pet should replace the visible sheet immediately.");
+            AssertCurrentPetSource(pet, PetCatalog.Pip);
             Assert.AreEqual(presentation, fixture.Session.Presentation);
             Assert.AreEqual(PetCatalog.Hood, fixture.Controller.Current.Pet);
             Assert.AreEqual(baseline, File.ReadAllText(fixture.ConfigPath));
@@ -966,7 +964,7 @@ public sealed class SettingsAndStatsTests
                     Assert.AreEqual(interval, fixture.Session.RemainingRandomInterval);
                     Assert.AreSame(previewImage, image.Source, "Save must retain the preview image.");
                     var crop = (CroppedBitmap)image.Source;
-                    StringAssert.Contains(((BitmapImage)crop.Source).UriSource.LocalPath.ToLowerInvariant(), $"{Path.DirectorySeparatorChar}{choice}{Path.DirectorySeparatorChar}");
+                    AssertCurrentPetSource(pet, choice);
                     Assert.AreEqual(ExpectedFrameRectangle(pet, fixture.Session), crop.SourceRect);
                 }
                 finally { settings.Close(); }
@@ -1022,8 +1020,7 @@ public sealed class SettingsAndStatsTests
             Assert.AreEqual(fixture.Session.Presentation, session.Presentation);
             Assert.AreEqual(choice, ((ComboBox)settings.FindName("PetComboBox")).SelectedValue);
             var image = (Image)pet.FindName("PetImage");
-            StringAssert.Contains(((BitmapImage)((CroppedBitmap)image.Source).Source).UriSource.LocalPath.ToLowerInvariant(),
-                $"{Path.DirectorySeparatorChar}{choice}{Path.DirectorySeparatorChar}");
+            AssertCurrentPetSource(pet, choice);
             ((ComboBox)settings.FindName("PetComboBox")).SelectedValue = PetCatalog.Hood;
             typeof(SettingsWindow).GetMethod("OnSaveClick", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(settings, [settings, new RoutedEventArgs(Button.ClickEvent)]);
@@ -1614,6 +1611,11 @@ public sealed class SettingsAndStatsTests
             .GetValue(pet)!;
         var directory = (string)source.GetType().GetProperty("Directory")!.GetValue(source)!;
         StringAssert.Contains(directory.ToLowerInvariant(), $"{Path.DirectorySeparatorChar}{expectedPet.ToLowerInvariant()}");
+        var assets = typeof(HoodOverlayWindow).GetProperty("CurrentAssets", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(pet)!;
+        var sheet = assets.GetType().GetProperty("SpriteSheet")!.GetValue(assets);
+        Assert.AreSame(sheet, ((CroppedBitmap)((Image)pet.FindName("PetImage")).Source).Source,
+            "The expected pet's loaded sheet must be the visible crop source.");
     }
 
     private static IEnumerable<DependencyObject> Descendants(DependencyObject parent)
