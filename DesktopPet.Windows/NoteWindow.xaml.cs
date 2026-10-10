@@ -185,12 +185,6 @@ public partial class NoteWindow : Window
             foreach (var paragraph in GetEditorParagraphs(Editor.Document))
                 if (paragraph.Tag is NoteBlockKind kind && GetHeadingLevel(kind) > 0)
                     paragraph.FontSize = GetHeadingFontSize(kind);
-            foreach (var list in GetEditorBlocks(Editor.Document.Blocks).OfType<System.Windows.Documents.List>())
-            {
-                list.Padding = new Thickness(GetListMarkerWidth(), 0, 0, 0);
-                foreach (var paragraph in list.ListItems.SelectMany(item => item.Blocks.OfType<Paragraph>()))
-                    ApplyInlineMarkerSpacing(paragraph);
-            }
         }
         if (!_appearanceInitialized || previousSettings.TextSize != settings.TextSize || previousSettings.LineSpacing != settings.LineSpacing)
         {
@@ -205,6 +199,8 @@ public partial class NoteWindow : Window
             foreach (var paragraph in GetEditorBlocks(Editor.Document.Blocks).OfType<Paragraph>())
                 paragraph.Margin = new Thickness(paragraph.Margin.Left, paragraph.Margin.Top, paragraph.Margin.Right, 4 * settings.LineSpacing);
         }
+        if (!_appearanceInitialized || previousSettings.TextSize != settings.TextSize || previousSettings.LineSpacing != settings.LineSpacing)
+            RefreshListLayout();
         SaveStatus.Foreground = CreateBrush(darkTheme ? "#FFFFB4AB" : "#FF8B1F1F");
         if (!_appearanceInitialized || previousSettings.AlwaysOnTop != settings.AlwaysOnTop)
         {
@@ -362,10 +358,24 @@ public partial class NoteWindow : Window
             TrackPlainUrlInput(document, input);
             ClearLinkFeedback();
             SetSaveStatus(_updateDocument(_noteId, document));
+            var refreshLists = _blockSyntaxPasteRequested || _tablePasteRequested ||
+                HasListStructureChanged(_lastAcceptedDocument, document);
+            // Removing an inline number leaves the semantic paragraph structure unchanged.
+            var markerRepairList = !refreshLists && Editor.CaretPosition.Paragraph is
+                { Parent: ListItem { Parent: System.Windows.Documents.List { Tag: NoteBlockKind.Numbered } list } } paragraph &&
+                !paragraph.Inlines.OfType<InlineUIContainer>().Any(container => container.Child is TextBlock)
+                ? list : null;
             _lastAcceptedDocument = document.Copy();
-            _updatingEditor = true;
-            try { RefreshListLayout(); RefreshNumberedMarkers(); }
-            finally { _updatingEditor = false; }
+            if (refreshLists || markerRepairList is not null)
+            {
+                _updatingEditor = true;
+                try
+                {
+                    if (refreshLists) RefreshListLayout();
+                    else ApplyEditorListLayout(markerRepairList!, GetListMarkerWidth());
+                }
+                finally { _updatingEditor = false; }
+            }
             var passes = SelectMarkupPasses(document, originalText, plainText, input,
                 _tablePasteRequested || _blockSyntaxPasteRequested, _completedPlainUrl is not null,
                 _pendingPlainUrl is { } pendingUrl && Overlaps(input, pendingUrl));
@@ -1310,6 +1320,16 @@ public partial class NoteWindow : Window
         _windowSource?.AddHook(WindowMessageHook);
     }
 
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        if (_initializing) return;
+        var updatingEditor = _updatingEditor;
+        _updatingEditor = true;
+        try { RefreshListLayout(); }
+        finally { _updatingEditor = updatingEditor; }
+    }
+
     protected override void OnClosed(EventArgs e)
     {
         CancelPositionTransition(restoreRestingPosition: false);
@@ -1492,8 +1512,7 @@ public partial class NoteWindow : Window
                 index++;
             }
         }
-        foreach (var paragraph in list.ListItems.SelectMany(item => item.Blocks.OfType<Paragraph>()))
-            ApplyInlineMarkerSpacing(paragraph);
+        ApplyEditorListLayout(list, list.Padding.Left);
         return list;
     }
 
@@ -1676,32 +1695,53 @@ public partial class NoteWindow : Window
             paragraph.ClearValue(TextElement.ForegroundProperty);
     }
 
+    private static bool HasListStructureChanged(NotesDocument previous, NotesDocument current)
+    {
+        if (previous.Paragraphs.Count != current.Paragraphs.Count) return true;
+        for (var index = 0; index < current.Paragraphs.Count; index++)
+        {
+            var before = previous.Paragraphs[index];
+            var after = current.Paragraphs[index];
+            if (before.Kind != after.Kind || before.ListDepth != after.ListDepth || before.Cell != after.Cell)
+                return true;
+        }
+        return false;
+    }
+
     private void RefreshListLayout()
     {
-        foreach (var list in GetEditorBlocks(Editor.Document.Blocks).OfType<System.Windows.Documents.List>().ToArray())
+        // Marker geometry only depends on structure and appearance, not item text.
+        var lists = GetEditorBlocks(Editor.Document.Blocks).OfType<System.Windows.Documents.List>().ToArray();
+        if (lists.Length == 0) return;
+        var markerWidth = GetListMarkerWidth();
+        foreach (var list in lists)
         {
-            // Paragraphs own the spacing; WPF's automatic list margins add unrelated gaps.
-            list.Margin = new Thickness(0);
             if (list.Parent is ListItem { Parent: System.Windows.Documents.List parent })
             {
                 if (list.Tag is not NoteBlockKind) list.Tag = parent.Tag;
             }
-            list.Padding = new Thickness(GetListMarkerWidth(), 0, 0, 0);
-            foreach (var paragraph in list.ListItems.SelectMany(item => item.Blocks.OfType<Paragraph>()).ToArray())
-                ApplyInlineMarkerSpacing(paragraph);
+            ApplyEditorListLayout(list, markerWidth);
         }
     }
 
-    private void RefreshNumberedMarkers()
+    private void ApplyEditorListLayout(System.Windows.Documents.List list, double markerWidth)
     {
-        // Inline edits invalidate WPF block enumerators, so capture the targets first.
-        foreach (var list in GetEditorBlocks(Editor.Document.Blocks).OfType<System.Windows.Documents.List>()
-                     .Where(list => list.Tag is NoteBlockKind.Numbered).ToArray())
+        // Paragraphs own spacing; automatic list margins add unrelated gaps.
+        if (list.Margin != new Thickness(0)) list.Margin = new Thickness(0);
+        var padding = new Thickness(markerWidth, 0, 0, 0);
+        if (list.Padding != padding) list.Padding = padding;
+        var numbered = list.Tag is NoteBlockKind.Numbered;
+        var typeface = new Typeface(Editor.FontFamily, Editor.FontStyle, Editor.FontWeight, Editor.FontStretch);
+        var pixelsPerDip = VisualTreeHelper.GetDpi(Editor).PixelsPerDip;
+        var numberWidth = numbered ? Math.Max(markerWidth, Measure($"{list.ListItems.Count}.").Width + 6) : markerWidth;
+        var index = 1;
+        // Inline edits invalidate WPF enumerators, so capture paragraphs first.
+        foreach (var paragraph in list.ListItems.SelectMany(item => item.Blocks.OfType<Paragraph>()).ToArray())
         {
-            var index = 1;
-            foreach (var paragraph in list.ListItems.SelectMany(item => item.Blocks.OfType<Paragraph>()).ToArray())
+            if (numbered)
             {
-                var markers = paragraph.Inlines.OfType<InlineUIContainer>().ToArray();
+                var markers = paragraph.Inlines.OfType<InlineUIContainer>()
+                    .Where(container => container.Child is TextBlock).ToArray();
                 var label = markers.FirstOrDefault()?.Child as TextBlock;
                 if (label is null)
                 {
@@ -1714,38 +1754,32 @@ public partial class NoteWindow : Window
                 }
                 foreach (var extra in markers.Skip(1))
                     paragraph.Inlines.Remove(extra);
-                label.Text = $"{index++}.";
-                ApplyInlineMarkerSpacing(paragraph);
+                var text = $"{index++}.";
+                if (label.Text != text) label.Text = text;
             }
-        }
-    }
+            if (paragraph.Inlines.FirstInline is not InlineUIContainer { Child: FrameworkElement marker }) continue;
 
-    private void ApplyInlineMarkerSpacing(Paragraph paragraph)
-    {
-        if (paragraph.Inlines.FirstInline is not InlineUIContainer { Child: FrameworkElement marker })
-            return;
-
-        // Match the native disc marker's left edge while keeping wrapped text aligned.
-        var markerWidth = GetListMarkerWidth();
-        paragraph.TextIndent = -markerWidth;
-        if (marker is System.Windows.Controls.CheckBox)
-            marker.Margin = new Thickness(0, 0, markerWidth - marker.Width, 0);
-        else if (marker is TextBlock number)
-        {
-            var list = (System.Windows.Documents.List)((ListItem)paragraph.Parent).Parent;
-            var typeface = new Typeface(Editor.FontFamily, Editor.FontStyle, Editor.FontWeight, Editor.FontStretch);
-            var label = Measure(number.Text, typeface);
-            var widest = Measure($"{list.ListItems.Count}.", typeface);
-            number.Width = Math.Max(markerWidth, widest.Width + 6);
-            var bearing = label.BuildGeometry(new System.Windows.Point()).Bounds.Left;
-            number.Margin = new Thickness(-bearing, 0, bearing, 0);
-            paragraph.Margin = new Thickness(number.Width - markerWidth, 0, 0, 4 * _appearanceSettings.LineSpacing);
-            paragraph.TextIndent = -number.Width;
+            // Match the native disc's left edge and align wrapped text.
+            var indent = -markerWidth;
+            var margin = marker.Margin;
+            if (marker is System.Windows.Controls.CheckBox)
+                margin = new Thickness(0, 0, markerWidth - marker.Width, 0);
+            else if (marker is TextBlock number)
+            {
+                if (number.Width != numberWidth) number.Width = numberWidth;
+                var bearing = Measure(number.Text).BuildGeometry(new System.Windows.Point()).Bounds.Left;
+                margin = new Thickness(-bearing, 0, bearing, 0);
+                var paragraphMargin = new Thickness(numberWidth - markerWidth, 0, 0, 4 * _appearanceSettings.LineSpacing);
+                if (paragraph.Margin != paragraphMargin) paragraph.Margin = paragraphMargin;
+                indent = -numberWidth;
+            }
+            if (marker.Margin != margin) marker.Margin = margin;
+            if (paragraph.TextIndent != indent) paragraph.TextIndent = indent;
         }
 
-        FormattedText Measure(string text, Typeface typeface) => new(text,
+        FormattedText Measure(string text) => new(text,
             System.Globalization.CultureInfo.CurrentCulture, System.Windows.FlowDirection.LeftToRight,
-            typeface, Editor.FontSize, Editor.Foreground, VisualTreeHelper.GetDpi(Editor).PixelsPerDip);
+            typeface, Editor.FontSize, Editor.Foreground, pixelsPerDip);
     }
 
     private double GetListMarkerWidth()
