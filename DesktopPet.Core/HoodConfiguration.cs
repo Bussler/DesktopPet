@@ -10,6 +10,7 @@ public sealed record HoodConfiguration
 {
     public int? SchemaVersion { get; init; } = 1;
     public string Pet { get; init; } = PetCatalog.Hood;
+    public double PetScale { get; init; } = 1;
     public string UiStyle { get; init; } = UiStyleCatalog.StickyNotes;
     public BehaviorSettings Behavior { get; init; } = new();
     public NeedSettings Needs { get; init; } = new();
@@ -206,6 +207,8 @@ public static class HoodConfigurationValidator
             throw new HoodConfigurationException("pet", "Choose hood, pip, crumb, or puddle.");
         }
 
+        ValidatePetScale(configuration.PetScale);
+
         if (configuration.Behavior is null)
         {
             throw new HoodConfigurationException("behavior", "This section must be a YAML mapping.");
@@ -281,6 +284,14 @@ public static class HoodConfigurationValidator
         RequirePositive(configuration.InitialArea.Width, "initial_area.width");
         RequirePositive(configuration.InitialArea.Height, "initial_area.height");
         RequireFiniteNonnegative(configuration.InitialArea.BottomMargin, "initial_area.bottom_margin");
+    }
+
+    public static void ValidatePetScale(double scale)
+    {
+        if (!double.IsFinite(scale) || scale is < 0.5 or > 2)
+        {
+            throw new HoodConfigurationException("pet_scale", "Pet size must be a finite number from 0.5 through 2 (50% through 200%).");
+        }
     }
 
     private static void RequirePositive(double value, string settingPath)
@@ -439,6 +450,7 @@ public sealed class HoodConfigurationController
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(settingPath);
         HoodConfigurationValidator.Validate(candidate);
+        _session.ValidatePetScale(candidate.PetScale);
         candidate = candidate with
         {
             Pet = PetCatalog.Canonicalize(candidate.Pet),

@@ -17,6 +17,12 @@ public partial class SettingsWindow : Window
     private readonly string _originalUiStyle;
     private readonly string _originalTheme;
     private readonly string _originalPet;
+    private readonly double _originalPetScale;
+    private PetPosition _restorePetPosition;
+    private PetBounds _restoreRoamingArea;
+    private PetPosition _previewPetPosition;
+    private PetBounds _previewRoamingArea;
+    private bool _sizePreviewed;
     private readonly HoodAssetSource _originalSource;
     private HoodAssetRollbackSnapshot? _originalAssetSnapshot;
     private LoadedHoodAssets? _originalAssets;
@@ -49,6 +55,9 @@ public partial class SettingsWindow : Window
         _originalUiStyle = _effectiveUiStyle = UiStyleCatalog.Canonicalize(effectiveUiStyle);
         _originalTheme = _theme = effectiveTheme;
         _originalPet = _previewPet = controller.Current.Pet;
+        _originalPetScale = petWindow.PetScale;
+        _restorePetPosition = _previewPetPosition = petWindow.PetPosition;
+        _restoreRoamingArea = _previewRoamingArea = petWindow.RoamingArea;
         var originalAssets = petWindow.CurrentAssets;
         _originalSource = originalAssets?.Source ?? petWindow.CurrentSource;
         _originalAssets = originalAssets;
@@ -144,6 +153,27 @@ public partial class SettingsWindow : Window
         ApplyTheme(_theme, style);
     }
 
+    private void OnPetSizeChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_loadingSettings) return;
+        try
+        {
+            TrackPlacementChanges();
+            CaptureOriginalAssetsForRollback();
+            _petWindow.ApplyPetScale(e.NewValue / 100);
+            RememberPreviewPlacement();
+            _sizePreviewed = true;
+            AppearanceErrorText.Visibility = Visibility.Collapsed;
+        }
+        catch (Exception exception) when (exception is not OutOfMemoryException)
+        {
+            _loadingSettings = true;
+            PetSizeSlider.Value = _petWindow.PetScale * 100;
+            _loadingSettings = false;
+            ShowAppearanceError($"Could not preview this pet size. Settings were not saved. {exception.Message}");
+        }
+    }
+
     private void PreviewPet(string pet)
     {
         if (pet == _previewPet) return;
@@ -173,11 +203,45 @@ public partial class SettingsWindow : Window
 
     private void RestoreAppearance()
     {
-        if (_previewPet != _originalPet || _originalAssetSnapshot?.SourceFilesChanged == true)
+        if (_sizePreviewed)
+        {
+            TrackPlacementChanges();
+            // Original artwork is restored below; rollback must not reload the preview's source.
+            _petWindow.ApplyPetScale(_originalPetScale, _restorePetPosition, _restoreRoamingArea, loadArtwork: false);
+            RememberPreviewPlacement();
+        }
+        if (_sizePreviewed || _previewPet != _originalPet || _originalAssetSnapshot?.SourceFilesChanged == true)
             RestoreOriginalPetAssets();
+        _sizePreviewed = false;
         _previewPet = _originalPet;
         PreviewUiStyle(_originalUiStyle);
         PreviewTheme(_originalTheme);
+    }
+
+    private void TrackPlacementChanges()
+    {
+        var position = _petWindow.PetPosition;
+        var area = _petWindow.RoamingArea;
+        // Carry intervening movement and explicit area dimensions into the rollback placement.
+        _restorePetPosition = new PetPosition(
+            _restorePetPosition.X + (position.X - _previewPetPosition.X),
+            _restorePetPosition.Y + (position.Y - _previewPetPosition.Y));
+        _restoreRoamingArea = _restoreRoamingArea with
+        {
+            X = area.Width == _previewRoamingArea.Width
+                ? _restoreRoamingArea.X + (area.X - _previewRoamingArea.X) : area.X,
+            Y = area.Height == _previewRoamingArea.Height
+                ? _restoreRoamingArea.Y + (area.Y - _previewRoamingArea.Y) : area.Y,
+            Width = area.Width == _previewRoamingArea.Width ? _restoreRoamingArea.Width : area.Width,
+            Height = area.Height == _previewRoamingArea.Height ? _restoreRoamingArea.Height : area.Height
+        };
+        RememberPreviewPlacement();
+    }
+
+    private void RememberPreviewPlacement()
+    {
+        _previewPetPosition = _petWindow.PetPosition;
+        _previewRoamingArea = _petWindow.RoamingArea;
     }
 
     private void RestoreOriginalPetAssets()
@@ -208,6 +272,7 @@ public partial class SettingsWindow : Window
     {
         _loadingSettings = true;
         PetComboBox.SelectedValue = configuration.Pet;
+        PetSizeSlider.Value = configuration.PetScale * 100;
         UiStyleComboBox.SelectedValue = configuration.UiStyle;
         ThemeComboBox.SelectedItem = Enum.Parse<NoteTheme>(_theme, ignoreCase: true);
         ShowSpritesCheckBox.IsChecked = configuration.Behavior.ShowSprites;
@@ -245,6 +310,7 @@ public partial class SettingsWindow : Window
         var candidate = previous with
         {
             Pet = PetComboBox.SelectedValue as string ?? PetCatalog.Hood,
+            PetScale = PetSizeSlider.Value / 100,
             UiStyle = UiStyleComboBox.SelectedValue as string ?? UiStyleCatalog.StickyNotes,
             Notes = previous.Notes with { Theme = ((NoteTheme)ThemeComboBox.SelectedItem).ToString().ToLowerInvariant() },
             RandomInterval = new RandomIntervalSettings { MinimumMinutes = minimum, MaximumMinutes = maximum },
@@ -262,6 +328,7 @@ public partial class SettingsWindow : Window
         try
         {
             PreviewPet(candidate.Pet);
+            _petWindow.ApplyPetScale(candidate.PetScale);
             PreviewUiStyle(candidate.UiStyle);
             PreviewTheme(candidate.Notes.Theme);
             if (candidate.Behavior.ShowSprites) _petWindow.EnsureSpriteAssetsLoaded();

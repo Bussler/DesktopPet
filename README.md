@@ -36,6 +36,8 @@ Use **Notes > New note** to create another note, **Notes > Notes list** to searc
 
 Open **Settings > Appearance** to choose a pet or UI style. Each selection previews immediately while your current action, needs, nap, and placement continue. **Save** keeps the choices for the next launch; **Cancel** or closing Settings restores the appearance from before the menu opened.
 
+Use **Pet size** in the same section to resize any pet from **50% to 200%**. The slider previews immediately; **Save** keeps the size for every pet and the next launch. **Cancel** or closing Settings undoes sizing changes while retaining later movement and roaming-area edits.
+
 ## Saved data, updates, and removal
 
 Hood stores data under `%LOCALAPPDATA%\HoodDesktopPet`, separately from the app folder:

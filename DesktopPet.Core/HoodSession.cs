@@ -136,7 +136,8 @@ public sealed class HoodSession
     private const int RandomSampleResolution = 1_000_000;
     private static readonly TimeSpan RoamingBoutDuration = TimeSpan.FromSeconds(8);
     private const double BaselineRoamingCycleSeconds = 40;
-    private readonly PetDefinition _definition;
+    private readonly PetDefinition _baseDefinition;
+    private PetDefinition _definition;
     private readonly IPetRandomSource _random;
     private readonly ISessionStore _store;
     private readonly int _idleSkippedStillFrames;
@@ -164,7 +165,9 @@ public sealed class HoodSession
         HoodConfiguration configuration,
         HoodSessionSnapshot? restoredSession)
     {
-        _definition = definition;
+        _baseDefinition = definition;
+        _definition = definition.WithDisplayScale(configuration.PetScale);
+        PetScale = configuration.PetScale;
         var idle = definition.GetAnimation(PetAction.Idle);
         // Removing one sixth of the cycle makes idle repeat about 20% more often.
         // Skip only the still pose and retain manifest indices for saved sessions.
@@ -217,6 +220,9 @@ public sealed class HoodSession
     public PetPosition Position { get; private set; }
     public PetBounds RoamingArea { get; private set; }
     public HoodConfiguration Configuration => _configuration;
+    public double PetScale { get; private set; }
+    public double PetWidth => _definition.DisplayWidth;
+    public double PetHeight => _definition.DisplayHeight;
     public PetBounds MinimumRoamingArea => _definition.MinimumRoamingArea;
     public NeedLevels Needs { get; private set; }
     public HoodSessionMode Mode { get; private set; }
@@ -261,7 +267,7 @@ public sealed class HoodSession
         var flight = Math.Clamp((progress - 4d / 15) / (8d / 15), 0, 1);
         var display = PetPlacementPolicy.Restore(
             _definition, Position, RoamingArea, _displays, _configuration.InitialArea).Display;
-        var height = Math.Min(90, Math.Max(0, Position.Y - display.WorkArea.Y));
+        var height = Math.Min(90 * PetScale, Math.Max(0, Position.Y - display.WorkArea.Y));
         return Position with { Y = Position.Y - height * 4 * flight * (1 - flight) };
     }
 
@@ -289,10 +295,11 @@ public sealed class HoodSession
             throw new InvalidOperationException("Hood needs exactly one primary display with a usable work area.");
         }
 
+        var scaledDefinition = definition.WithDisplayScale(configuration.PetScale);
         var placement = restoredSession is null
-            ? PetPlacementPolicy.Initial(definition, primary, configuration.InitialArea)
+            ? PetPlacementPolicy.Initial(scaledDefinition, primary, configuration.InitialArea)
             : PetPlacementPolicy.Restore(
-                definition,
+                scaledDefinition,
                 restoredSession.Position,
                 restoredSession.RoamingArea,
                 displayList,
@@ -376,6 +383,7 @@ public sealed class HoodSession
         var placement = PetPlacementPolicy.Resize(_definition, Position, RoamingArea, width, height, _displays);
         Position = placement.Position;
         RoamingArea = placement.RoamingArea;
+        NormalizeRoamingDirection();
         if (persist)
         {
             SaveSnapshot();
@@ -394,6 +402,7 @@ public sealed class HoodSession
             _definition, Position, RoamingArea, horizontalChange, verticalChange, fromLeft, fromTop, _displays);
         Position = placement.Position;
         RoamingArea = placement.RoamingArea;
+        NormalizeRoamingDirection();
         if (persist)
         {
             SaveSnapshot();
@@ -422,6 +431,7 @@ public sealed class HoodSession
 
         Position = placement.Position;
         RoamingArea = placement.RoamingArea;
+        NormalizeRoamingDirection();
         SaveSnapshot();
     }
 
@@ -436,6 +446,7 @@ public sealed class HoodSession
     internal void ApplyConfiguration(HoodConfiguration configuration)
     {
         HoodConfigurationValidator.Validate(configuration);
+        if (configuration.PetScale != _configuration.PetScale) SetPetScale(configuration.PetScale);
         if (configuration.RandomInterval != _configuration.RandomInterval)
         {
             RemainingRandomInterval = TimeSpan.Zero;
@@ -448,6 +459,30 @@ public sealed class HoodSession
             _frameIndex = NextIdleFrame();
             _frameElapsed = TimeSpan.Zero;
         }
+    }
+
+    internal void ValidatePetScale(double scale) => PlacementForPetScale(scale, null, null);
+
+    public void SetPetScale(double scale, PetPosition? position = null, PetBounds? roamingArea = null)
+    {
+        if (scale == PetScale && position is null && roamingArea is null) return;
+        var placement = PlacementForPetScale(scale, position, roamingArea);
+        _definition = _baseDefinition.WithDisplayScale(scale);
+        PetScale = scale;
+        Position = placement.Position;
+        RoamingArea = placement.RoamingArea;
+        NormalizeRoamingDirection();
+    }
+
+    private PetPlacement PlacementForPetScale(double scale, PetPosition? position, PetBounds? roamingArea)
+    {
+        HoodConfigurationValidator.ValidatePetScale(scale);
+        var definition = _baseDefinition.WithDisplayScale(scale);
+        // Keep the pet's feet and horizontal center fixed until display bounds require a move.
+        position ??= new PetPosition(Position.X + (PetWidth - definition.DisplayWidth) / 2,
+            Position.Y + PetHeight - definition.DisplayHeight);
+        return PetPlacementPolicy.Restore(definition, position.Value, roamingArea ?? RoamingArea,
+            _displays, _configuration.InitialArea);
     }
 
     public void BeginDragging() => _dragging = true;
@@ -829,10 +864,13 @@ public sealed class HoodSession
         _configuration.Behavior.Roaming &&
         !_dragging &&
         !_editingArea &&
-        (RoamingArea.Width > _definition.DisplayWidth || CanRoamVertically);
+        (CanRoamHorizontally || CanRoamVertically);
 
-    // Avoid vertical pacing when there is less than one second of travel space.
+    // Avoid pacing, including microscopic rounding gaps, with less than one second of travel space.
+    private bool CanRoamHorizontally => RoamingArea.Width - _definition.DisplayWidth >= RoamingSpeedUnitsPerSecond;
     private bool CanRoamVertically => RoamingArea.Height - _definition.DisplayHeight >= RoamingSpeedUnitsPerSecond;
+    private double RoamingEndX => RoamingArea.X + (RoamingArea.Width - _definition.DisplayWidth);
+    private double RoamingEndY => RoamingArea.Y + (RoamingArea.Height - _definition.DisplayHeight);
 
     private double RoamingAxisSpeed => RoamingSpeedUnitsPerSecond /
         Math.Sqrt(Math.Max(1, Math.Abs(_roamingDirection.X) + Math.Abs(_roamingDirection.Y)));
@@ -889,11 +927,11 @@ public sealed class HoodSession
 
         // Choose horizontal, diagonal, or vertical travel when both axes have room.
         var travel = CanRoamVertically
-            ? RoamingArea.Width > _definition.DisplayWidth ? NextRandomIndex(3) : 2
+            ? CanRoamHorizontally ? NextRandomIndex(3) : 2
             : 0;
         _roamingDirection = new PetPosition(
-            travel != 2 ? ChooseDirection(Position.X, RoamingArea.X, RoamingArea.Right - _definition.DisplayWidth) : 0,
-            travel != 0 ? ChooseDirection(Position.Y, RoamingArea.Y, RoamingArea.Bottom - _definition.DisplayHeight) : 0);
+            travel != 2 ? ChooseDirection(Position.X, RoamingArea.X, RoamingEndX) : 0,
+            travel != 0 ? ChooseDirection(Position.Y, RoamingArea.Y, RoamingEndY) : 0);
         StartDirectAction(RoamingAction);
         _remainingRoamingBout = RoamingBoutDuration;
         _elapsedRoamingRest = null;
@@ -908,17 +946,28 @@ public sealed class HoodSession
 
     private void NormalizeRoamingDirection()
     {
-        if (!CanRoam || _action is not (PetAction.RunLeft or PetAction.RunRight))
+        if (_action is not (PetAction.RunLeft or PetAction.RunRight))
         {
             return;
         }
 
-        var dx = RoamingArea.Width > _definition.DisplayWidth ? _roamingDirection.X : 0;
+        if (!CanRoamHorizontally && !CanRoamVertically)
+        {
+            _action = PetAction.Idle;
+            _frameIndex = NextIdleFrame();
+            _frameElapsed = TimeSpan.Zero;
+            _remainingRoamingBout = TimeSpan.Zero;
+            _elapsedRoamingRest = null;
+            return;
+        }
+        if (!CanRoam) return;
+
+        var dx = CanRoamHorizontally ? _roamingDirection.X : 0;
         var dy = CanRoamVertically ? _roamingDirection.Y : 0;
         if (dx == 0 && dy == 0)
         {
             var direction = _action == PetAction.RunLeft ? -1 : 1;
-            if (RoamingArea.Width > _definition.DisplayWidth)
+            if (CanRoamHorizontally)
             {
                 dx = direction;
             }
@@ -929,8 +978,8 @@ public sealed class HoodSession
         }
 
         _roamingDirection = new PetPosition(
-            ReflectDirection(Position.X, RoamingArea.X, RoamingArea.Right - _definition.DisplayWidth, dx),
-            ReflectDirection(Position.Y, RoamingArea.Y, RoamingArea.Bottom - _definition.DisplayHeight, dy));
+            ReflectDirection(Position.X, RoamingArea.X, RoamingEndX, dx),
+            ReflectDirection(Position.Y, RoamingArea.Y, RoamingEndY, dy));
         if (_action != RoamingAction)
         {
             StartDirectAction(RoamingAction);
@@ -938,8 +987,8 @@ public sealed class HoodSession
     }
 
     private TimeSpan TimeToRoamingEdge() => Min(
-        TimeToEdge(Position.X, RoamingArea.X, RoamingArea.Right - _definition.DisplayWidth, _roamingDirection.X),
-        TimeToEdge(Position.Y, RoamingArea.Y, RoamingArea.Bottom - _definition.DisplayHeight, _roamingDirection.Y));
+        TimeToEdge(Position.X, RoamingArea.X, RoamingEndX, _roamingDirection.X),
+        TimeToEdge(Position.Y, RoamingArea.Y, RoamingEndY, _roamingDirection.Y));
 
     private TimeSpan TimeToEdge(double coordinate, double start, double end, double direction)
     {
@@ -968,8 +1017,8 @@ public sealed class HoodSession
         var travel = RoamingAxisSpeed * elapsed.TotalSeconds;
         // Subtract dimensions first so a zero travel range stays exactly at its fractional origin.
         var next = new PetPosition(
-            Math.Clamp(Position.X + _roamingDirection.X * travel, RoamingArea.X, RoamingArea.X + (RoamingArea.Width - _definition.DisplayWidth)),
-            Math.Clamp(Position.Y + _roamingDirection.Y * travel, RoamingArea.Y, RoamingArea.Y + (RoamingArea.Height - _definition.DisplayHeight)));
+            Math.Clamp(Position.X + _roamingDirection.X * travel, RoamingArea.X, RoamingEndX),
+            Math.Clamp(Position.Y + _roamingDirection.Y * travel, RoamingArea.Y, RoamingEndY));
         var dx = next.X - Position.X;
         var dy = next.Y - Position.Y;
         var distance = Math.Sqrt(dx * dx + dy * dy);

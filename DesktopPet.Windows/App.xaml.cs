@@ -114,9 +114,9 @@ public partial class App : System.Windows.Application
                     configuration);
             }
 
-            var displayScale = WindowsDisplayProvider.GetScaleForPet(_session.Position, assetSource.Definition, displays);
+            var displayScale = WindowsDisplayProvider.GetScaleForSize(_session.Position, _session.PetWidth, _session.PetHeight, displays);
             var assets = configuration.Behavior.ShowSprites
-                ? HoodAssets.LoadAtScale(assetSource, displayScale, displayScale)
+                ? HoodAssets.LoadForDisplay(assetSource, displayScale, displayScale, configuration.PetScale)
                 : null;
             _petWindow = new HoodOverlayWindow(
                 _session,
@@ -540,6 +540,7 @@ public partial class App : System.Windows.Application
 
     private void RequestQuit()
     {
+        if (!TrySaveSessionForQuit()) return;
         _visibilityTransitions.Request(visible: false);
         if (_notes is not null && !_notes.Flush())
         {
@@ -550,6 +551,27 @@ public partial class App : System.Windows.Application
                 System.Windows.MessageBoxImage.Error);
         }
 
+        foreach (var window in _noteWindows.Values.ToArray())
+        {
+            window.CloseWithoutMembershipChange();
+        }
+
+        _noteWindows.Clear();
+        _notesSettingsWindow?.Close();
+        _notesSettingsWindow = null;
+        _notesListWindow?.Close();
+        _notesListWindow = null;
+
+        _trayIcon?.Dispose();
+        _trayIcon = null;
+        Shutdown();
+    }
+
+    private bool TrySaveSessionForQuit()
+    {
+        // Closing Settings restores unsaved appearance and geometry before the final snapshot.
+        _settingsWindow?.Close();
+        if (_settingsWindow is not null) return false;
         if (_session is { QuitRequested: false })
         {
             try
@@ -566,22 +588,7 @@ public partial class App : System.Windows.Application
             }
         }
 
-        foreach (var window in _noteWindows.Values.ToArray())
-        {
-            window.CloseWithoutMembershipChange();
-        }
-
-        _noteWindows.Clear();
-        _settingsWindow?.Close();
-        _settingsWindow = null;
-        _notesSettingsWindow?.Close();
-        _notesSettingsWindow = null;
-        _notesListWindow?.Close();
-        _notesListWindow = null;
-
-        _trayIcon?.Dispose();
-        _trayIcon = null;
-        Shutdown();
+        return true;
     }
 
     private void ActivateNotes()

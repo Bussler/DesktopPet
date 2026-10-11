@@ -7,6 +7,85 @@ namespace DesktopPet.Tests;
 public sealed class HoodRoamingTests
 {
     [TestMethod]
+    public void ScaledMinimumAreasRemainIdleAtEverySliderSize()
+    {
+        for (var percent = 50; percent <= 200; percent += 5)
+        {
+            var session = CreateSession(new PetBounds(100, 100, 640, 500), new PetPosition(300, 300),
+                scale: percent / 100d);
+            session.ResizeRoamingArea(0, 0, persist: false);
+            var start = session.Position;
+            session.Advance(TimeSpan.FromTicks(1));
+            Assert.AreEqual(PetAction.Idle, session.Presentation.Action, $"Size {percent}% must stay idle.");
+            session.Advance(TimeSpan.FromSeconds(1));
+            Assert.AreEqual(start, session.Position);
+            Assert.IsTrue(session.Configuration.Behavior.Roaming);
+        }
+    }
+
+    [TestMethod]
+    [DataRow(17.9, 0d, 0d, 0d)]
+    [DataRow(18d, 0d, 1.8, 0d)]
+    [DataRow(18.1, 0d, 1.8, 0d)]
+    [DataRow(0d, 17.9, 0d, 0d)]
+    [DataRow(0d, 18d, 0d, 1.8)]
+    [DataRow(0d, 18.1, 0d, 1.8)]
+    [DataRow(17.9, 18d, 0d, 1.8)]
+    [DataRow(18d, 17.9, 1.8, 0d)]
+    public void RoamingRequiresOneSecondOfSpaceOnEachAxis(double horizontalSpace, double verticalSpace,
+        double dx, double dy)
+    {
+        for (var percent = 50; percent <= 200; percent += 5)
+        {
+            var start = new PetPosition(100, 100);
+            var session = CreateSession(new PetBounds(100, 100, 640, 500), start, scale: percent / 100d);
+            session.ResizeRoamingArea(session.PetWidth + horizontalSpace, session.PetHeight + verticalSpace, persist: false);
+            session.MoveRoamingAreaBy(start.X - session.RoamingArea.X, start.Y - session.RoamingArea.Y, persist: false);
+            session.Advance(TimeSpan.FromMilliseconds(100));
+            Assert.AreEqual(start.X + dx, session.Position.X, 1e-9, $"Size {percent}% horizontal threshold.");
+            Assert.AreEqual(start.Y + dy, session.Position.Y, 1e-9, $"Size {percent}% vertical threshold.");
+            if (dx == 0 && dy == 0) Assert.AreEqual(PetAction.Idle, session.Presentation.Action);
+        }
+    }
+
+    [TestMethod]
+    public void ShrinkingDuringRoamingRestsImmediatelyAndEnlargingResumesWithoutChangingTheSetting()
+    {
+        var session = CreateSession(new PetBounds(100, 100, 480, 400), new PetPosition(244, 196));
+        session.Advance(TimeSpan.FromSeconds(1));
+        session.ResizeRoamingArea(200, 216, persist: false);
+        var start = session.Position;
+        Assert.AreEqual(PetAction.Idle, session.Presentation.Action);
+        session.Advance(TimeSpan.FromSeconds(2));
+        Assert.AreEqual(start, session.Position);
+        session.ResizeRoamingArea(480, 400, persist: false);
+        session.Advance(TimeSpan.FromSeconds(1));
+        Assert.AreNotEqual(start, session.Position);
+        Assert.IsTrue(session.Configuration.Behavior.Roaming);
+    }
+
+    [TestMethod]
+    public void ScaledFractionalEdgeBouncesMatchLargeAndSmallTimeUpdates()
+    {
+        for (var percent = 50; percent <= 200; percent += 5)
+        {
+            var scale = percent / 100d;
+            var width = 384 / (2 / scale);
+            var height = 416 / (2 / scale);
+            var area = new PetBounds(100.1, 100.1, width + 36.1, height + 36.1);
+            var single = CreateSession(area, new PetPosition(100.2, 100.2), new SequenceRandomSource(1, 0, 0), scale: scale);
+            var sliced = CreateSession(area, new PetPosition(100.2, 100.2), new SequenceRandomSource(1, 0, 0), scale: scale);
+            single.Advance(TimeSpan.FromSeconds(8));
+            for (var step = 0; step < 80; step++) sliced.Advance(TimeSpan.FromMilliseconds(100));
+            Assert.AreEqual(single.Position.X, sliced.Position.X, 1e-5);
+            Assert.AreEqual(single.Position.Y, sliced.Position.Y, 1e-5);
+            Assert.AreEqual(single.Needs.Boredom, sliced.Needs.Boredom, 1e-6);
+            Assert.AreEqual(PetAction.Idle, single.Presentation.Action);
+            Assert.AreEqual(PetAction.Idle, sliced.Presentation.Action);
+        }
+    }
+
+    [TestMethod]
     [DataRow(0, 0, -18d, 0d)]
     [DataRow(0, 1, 18d, 0d)]
     [DataRow(2, 0, 0d, -18d)]
@@ -441,7 +520,8 @@ public sealed class HoodRoamingTests
     }
 
     private static HoodSession CreateSession(PetBounds area, PetPosition position,
-        IPetRandomSource? random = null, bool roaming = true, double boredom = 20, NeedSettings? needs = null)
+        IPetRandomSource? random = null, bool roaming = true, double boredom = 20, NeedSettings? needs = null,
+        double scale = 1)
     {
         var assetDirectory = Path.Combine(AppContext.BaseDirectory, "Assets", "Hood");
         var png = File.ReadAllBytes(Path.Combine(assetDirectory, "hood_spritesheet.png"));
@@ -451,6 +531,7 @@ public sealed class HoodRoamingTests
         var defaults = HoodConfiguration.Defaults;
         var configuration = defaults with
         {
+            PetScale = scale,
             Behavior = defaults.Behavior with { Roaming = roaming, IdleAnimations = false, RandomEvents = false },
             Needs = needs ?? defaults.Needs with { HungerPointsPerHour = 0, BoredomPointsPerHour = 0, SleepPointsPerHour = 0 }
         };

@@ -10,6 +10,8 @@ Choose **Sticky Notes**, **Minimal**, **Soft**, or **Studio** in Hood Settings t
 
 The configured initial area is adjusted when necessary to contain Hood's full frame, and oversized saved areas shrink to fit the usable display while preserving that minimum footprint. See [placement behavior](placement.md) for details.
 
+The **Pet size** slider under **Appearance** previews a global size from **50% through 200%** in 5% steps. **Save** persists it for all four pets and future launches; **Cancel** or closing Settings undoes sizing changes while retaining later movement and roaming-area edits. Resizing preserves aspect ratio, needs, nap timers, and foreground actions. Jumps scale with pet size while staying inside the monitor. Roaming requires 18 logical units of spare space on each moving axis; if neither axis qualifies, the pet rests until more space becomes available. The pet stays anchored at its feet and horizontal center where screen bounds allow, and the roaming area expands if needed to contain it. Old configurations without `pet_scale` use 100%. A size that cannot fit the primary display is rejected with an error.
+
 With roaming enabled, Hood moves in 8-second bouts at the same travel speed. Boredom smoothly scales the frequency from 10% of the previous 40-second cycle at boredom 0 to 120% at boredom 100: roughly one bout every 400 seconds when content, every 61.5 seconds at boredom 50, or every 33.3 seconds at boredom 100. Increasing boredom shortens the current idle rest, and actual movement still reduces boredom. The first bout can start immediately. The cadence uses active behavior time and pauses while roaming is blocked by sleep, dragging, editing, or another action. These timing changes apply to all four pets.
 
 The default idle animation repeats about 20% more often by shortening its still pause, keeping its moving poses at their original speed. Spontaneous gestures retain their configured interval and playback timing.
@@ -17,6 +19,7 @@ The default idle animation repeats about 20% more often by shortening its still 
 ```yaml
 schema_version: 1
 pet: hood
+pet_scale: 1
 ui_style: sticky-notes
 behavior:
   show_sprites: true
@@ -56,6 +59,7 @@ notes:
 | --- | --- | --- |
 | `schema_version` | Version | Must be `1`. |
 | `pet` | Pet artwork | `hood`, `pip`, `crumb`, or `puddle`, case-insensitive; defaults to `hood`. Settings previews selections live; Save persists them. |
+| `pet_scale` | Size multiplier | Finite number from `0.5` through `2`. Defaults to `1` (100%), including in older files. Applies to every pet. |
 | `ui_style` | UI style | `sticky-notes`, `minimal`, `soft`, or `studio`, case-insensitive; defaults to `sticky-notes`. Other identifiers are invalid. Settings previews selections live; Save persists them. |
 | `behavior.roaming`, `idle_animations`, `random_events`, `always_on_top`, `start_with_windows` | Boolean | `true` or `false`; each option is independent. |
 | `behavior.show_sprites` | Boolean | Defaults to `true`, including in older files. `false` hides the pet and pauses animations, roaming, needs, and timers; open notes stay visible. |

@@ -69,9 +69,12 @@ internal static class WindowsDisplayProvider
     private static extern bool SetWindowPos(IntPtr handle, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
 
     public static double GetScaleForPet(PetPosition position, PetDefinition definition, IReadOnlyCollection<DisplayInfo> displays)
+        => GetScaleForSize(position, definition.DisplayWidth, definition.DisplayHeight, displays);
+
+    public static double GetScaleForSize(PetPosition position, double width, double height, IReadOnlyCollection<DisplayInfo> displays)
     {
-        var x = position.X + definition.DisplayWidth / 2;
-        var y = position.Y + definition.DisplayHeight / 2;
+        var x = position.X + width / 2;
+        var y = position.Y + height / 2;
         var display = displays.FirstOrDefault(candidate =>
             x >= candidate.WorkArea.X && x < candidate.WorkArea.Right &&
             y >= candidate.WorkArea.Y && y < candidate.WorkArea.Bottom);

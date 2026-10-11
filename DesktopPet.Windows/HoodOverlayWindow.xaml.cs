@@ -99,8 +99,8 @@ public partial class HoodOverlayWindow : Window
         _showNotesList = showNotesList;
         _showNotesSettings = showNotesSettings;
         InitializeComponent();
-        Width = PetImage.Width = assetSource.Definition.DisplayWidth;
-        Height = PetImage.Height = assetSource.Definition.DisplayHeight;
+        Width = PetImage.Width = session.PetWidth;
+        Height = PetImage.Height = session.PetHeight;
         Topmost = session.Configuration.Behavior.AlwaysOnTop;
         Left = session.Position.X;
         Top = session.Position.Y;
@@ -149,20 +149,21 @@ public partial class HoodOverlayWindow : Window
         var source = _assetSource.CachedSpriteSheet is null
             ? HoodAssets.ReadSourceForPet(_assetSource.Directory, _assetSource.Definition)
             : _assetSource;
-        ApplyPetAssets(source, HoodAssets.LoadAtScale(source, dpiScaleX, dpiScaleY));
+        ApplyPetAssets(source, HoodAssets.LoadForDisplay(source, dpiScaleX, dpiScaleY, _session.PetScale));
     }
 
     internal void EnsureSpriteAssetsLoaded()
     {
-        var dpiScale = WindowsDisplayProvider.GetScaleForPet(
-            _session.Position, _assetSource.Definition, WindowsDisplayProvider.GetDisplays());
-        if (_assets is not null && _assets.DpiScaleX == dpiScale && _assets.DpiScaleY == dpiScale)
+        var dpiScale = WindowsDisplayProvider.GetScaleForSize(
+            _session.Position, _session.PetWidth, _session.PetHeight, WindowsDisplayProvider.GetDisplays());
+        if (_assets is not null && _assets.DpiScaleX == dpiScale && _assets.DpiScaleY == dpiScale &&
+            _assets.DecodeScale == _session.PetScale)
             return;
 
         var source = _assetSource.CachedSpriteSheet is null
             ? HoodAssets.ReadSourceForPet(_assetSource.Directory, _assetSource.Definition)
             : _assetSource;
-        ApplyPetAssets(source, HoodAssets.LoadAtScale(source, dpiScale, dpiScale));
+        ApplyPetAssets(source, HoodAssets.LoadForDisplay(source, dpiScale, dpiScale, _session.PetScale));
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -481,14 +482,33 @@ public partial class HoodOverlayWindow : Window
 
     internal LoadedHoodAssets? CurrentAssets => _assets;
     internal HoodAssetSource CurrentSource => _assetSource;
+    internal double PetScale => _session.PetScale;
+    internal PetPosition PetPosition => _session.Position;
+    internal PetBounds RoamingArea => _session.RoamingArea;
+
+    internal void ApplyPetScale(double scale, PetPosition? position = null, PetBounds? roamingArea = null,
+        bool loadArtwork = true)
+    {
+        HoodConfigurationValidator.ValidatePetScale(scale);
+        LoadedHoodAssets? assets = null;
+        if (loadArtwork && _assets is { } current && scale > current.DecodeScale)
+        {
+            // Decode once at the slider's maximum to avoid reloading the atlas on every drag step.
+            assets = HoodAssets.LoadForDisplay(_assetSource, current.DpiScaleX, current.DpiScaleY, 2);
+        }
+        _session.SetPetScale(scale, position, roamingArea);
+        if (assets is not null) ApplyPetAssets(_assetSource, assets);
+        ApplyPlacement();
+        RenderPresentation();
+    }
 
     internal LoadedHoodAssets LoadPetAssets(string pet)
     {
-        var dpiScale = WindowsDisplayProvider.GetScaleForPet(
-            _session.Position, _assetSource.Definition, WindowsDisplayProvider.GetDisplays());
-        return HoodAssets.LoadPetAtScale(
-            System.IO.Path.Combine(AppContext.BaseDirectory, "Assets"), pet, _assetSource.Definition,
-            dpiScale, dpiScale);
+        var dpiScale = WindowsDisplayProvider.GetScaleForSize(
+            _session.Position, _session.PetWidth, _session.PetHeight, WindowsDisplayProvider.GetDisplays());
+        var source = HoodAssets.LoadPetSource(
+            System.IO.Path.Combine(AppContext.BaseDirectory, "Assets"), pet, _assetSource.Definition);
+        return HoodAssets.LoadForDisplay(source, dpiScale, dpiScale, _session.PetScale);
     }
 
     internal void ApplyPetAssets(LoadedHoodAssets assets)
@@ -510,11 +530,11 @@ public partial class HoodOverlayWindow : Window
         if (!_session.Configuration.Behavior.ShowSprites) assets = null;
         else if (assets is null)
         {
-            var dpiScale = WindowsDisplayProvider.GetScaleForPet(
-                _session.Position, source.Definition, WindowsDisplayProvider.GetDisplays());
+            var dpiScale = WindowsDisplayProvider.GetScaleForSize(
+                _session.Position, _session.PetWidth, _session.PetHeight, WindowsDisplayProvider.GetDisplays());
             if (source.CachedSpriteSheet is null)
                 source = HoodAssets.ReadSourceForPet(source.Directory, source.Definition);
-            assets = HoodAssets.LoadAtScale(source, dpiScale, dpiScale);
+            assets = HoodAssets.LoadForDisplay(source, dpiScale, dpiScale, _session.PetScale);
         }
         _assetSource = source;
         _assets = assets;
@@ -531,9 +551,9 @@ public partial class HoodOverlayWindow : Window
             RestorePetAssets(snapshot.GetRestoreSource(), null);
             return;
         }
-        var dpiScale = WindowsDisplayProvider.GetScaleForPet(
-            _session.Position, snapshot.Source.Definition, WindowsDisplayProvider.GetDisplays());
-        var (source, assets) = snapshot.LoadAtScale(dpiScale, dpiScale);
+        var dpiScale = WindowsDisplayProvider.GetScaleForSize(
+            _session.Position, _session.PetWidth, _session.PetHeight, WindowsDisplayProvider.GetDisplays());
+        var (source, assets) = snapshot.LoadForDisplay(dpiScale, _session.PetScale);
         RestorePetAssets(source, assets);
     }
 
@@ -549,6 +569,7 @@ public partial class HoodOverlayWindow : Window
 
     internal void RefreshBehaviorSettings()
     {
+        ApplyPlacement();
         UpdateTimerInterval();
         RenderPresentation();
         UpdateNeedLabels();
@@ -572,6 +593,8 @@ public partial class HoodOverlayWindow : Window
 
     internal void ApplyPlacement()
     {
+        Width = PetImage.Width = _session.PetWidth;
+        Height = PetImage.Height = _session.PetHeight;
         WindowsDisplayProvider.ApplyPosition(this, _session.Presentation.Position);
         _areaEditor?.ApplyPlacement();
     }

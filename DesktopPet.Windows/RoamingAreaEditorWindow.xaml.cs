@@ -22,6 +22,8 @@ public partial class RoamingAreaEditorWindow : Window
 
     internal void ApplyPlacement()
     {
+        MinWidth = _session.MinimumRoamingArea.Width;
+        MinHeight = _session.MinimumRoamingArea.Height;
         WindowsDisplayProvider.ApplyPosition(this, new PetPosition(_session.RoamingArea.X, _session.RoamingArea.Y));
         Width = _session.RoamingArea.Width;
         Height = _session.RoamingArea.Height;

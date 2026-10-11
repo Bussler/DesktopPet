@@ -278,10 +278,12 @@ public sealed class HoodOverlayRenderingTests
     }
 
     [TestMethod]
-    [DataRow(false, false)]
-    [DataRow(true, false)]
-    [DataRow(false, true)]
-    public void CancelRestoresOriginalArtworkFromCompressedSnapshotAfterSourceChanges(bool deleteSource, bool mutateBeforeSettings)
+    [DataRow(false, false, false)]
+    [DataRow(true, false, false)]
+    [DataRow(false, true, false)]
+    [DataRow(true, false, true)]
+    public void CancelRestoresOriginalArtworkFromCompressedSnapshotAfterSourceChanges(
+        bool deleteSource, bool mutateBeforeSettings, bool resizePreview)
     {
         var root = Path.Combine(Path.GetTempPath(), $"HoodPreviewRollback-{Guid.NewGuid():N}");
         var directory = Path.Combine(root, "Hood");
@@ -314,7 +316,22 @@ public sealed class HoodOverlayRenderingTests
 
         try
         {
+            if (resizePreview) ((Slider)settings.FindName("PetSizeSlider")).Value = 50;
             ((System.Windows.Controls.ComboBox)settings.FindName("PetComboBox")!).SelectedValue = PetCatalog.Pip;
+            if (resizePreview)
+            {
+                var previewDirectory = Path.Combine(root, "Pip");
+                Directory.CreateDirectory(previewDirectory);
+                var pip = Path.Combine(AppContext.BaseDirectory, "Assets", "Pip");
+                File.Copy(Path.Combine(pip, "hood.animations.json"), Path.Combine(previewDirectory, "hood.animations.json"));
+                File.Copy(Path.Combine(pip, "hood_spritesheet.png"), Path.Combine(previewDirectory, "hood_spritesheet.png"));
+                var previewSource = LoadSource(root, "pip");
+                var preview = typeof(HoodOverlayWindow).Assembly.GetType("DesktopPet.Windows.HoodAssets")!
+                    .GetMethod("LoadForDisplay")!.Invoke(null, [previewSource, displayScale, displayScale, 0.5])!;
+                typeof(HoodOverlayWindow).GetMethod("ApplyPetAssets", PrivateInstance, [preview.GetType()])!
+                    .Invoke(pet, [preview]);
+                File.Delete(Path.Combine(previewDirectory, "hood_spritesheet.png"));
+            }
             Assert.IsNull(typeof(SettingsWindow).GetField("_originalAssets", PrivateInstance)!.GetValue(settings),
                 "The decoded original should be replaced by its compressed rollback snapshot.");
             var snapshot = typeof(SettingsWindow).GetField("_originalAssetSnapshot", PrivateInstance)!.GetValue(settings)!;
@@ -325,6 +342,7 @@ public sealed class HoodOverlayRenderingTests
             if (deleteSource) File.Delete(sourcePath);
             else File.WriteAllText(sourcePath, "changed while Settings was previewing another pet");
             settings.Close();
+            Assert.AreEqual(1d, session.PetScale, "Cancel must restore size even when preview artwork is unavailable.");
 
             var restored = GetCurrentAssets(pet)!;
             var restoredSheet = (BitmapSource)restored.GetType().GetProperty("SpriteSheet")!.GetValue(restored)!;
@@ -341,6 +359,9 @@ public sealed class HoodOverlayRenderingTests
         }
         finally
         {
+            if (resizePreview && Directory.Exists(Path.Combine(root, "Pip")))
+                File.Copy(Path.Combine(AppContext.BaseDirectory, "Assets", "Pip", "hood_spritesheet.png"),
+                    Path.Combine(root, "Pip", "hood_spritesheet.png"), overwrite: true);
             settings.Close();
             pet.Close();
             if (Directory.Exists(root)) Directory.Delete(root, recursive: true);

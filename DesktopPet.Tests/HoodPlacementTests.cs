@@ -7,6 +7,169 @@ namespace DesktopPet.Tests;
 public sealed class HoodPlacementTests
 {
     [TestMethod]
+    public void FractionalDimensionResizingKeepsPetAndAreaContainedAtEverySliderSize()
+    {
+        var definition = Definition();
+        foreach (var dpi in new[] { 1d, 1.25, 1.5, 1.75, 2d, 2.25, 2.5, 3d })
+        foreach (var origin in new[] { 0d, -1920d / dpi, 1920d / dpi, 50d / dpi, -235d / dpi })
+        for (var percent = 50; percent <= 200; percent += 5)
+        foreach (var target in new[] { -10000d, 10000d, 500.1 })
+        {
+            var display = new DisplayInfo("Primary", new PetBounds(origin, origin, 1920 / dpi, 1040 / dpi), true, dpi);
+            if (definition.DisplayWidth * percent / 100 > display.WorkArea.Width ||
+                definition.DisplayHeight * percent / 100 > display.WorkArea.Height) continue;
+            var session = HoodSession.Start(definition, [display], new FixedRandomSource(), new NoopSessionStore(),
+                HoodConfiguration.Defaults with { PetScale = percent / 100d });
+            session.MoveTo(new(target, target), persist: false);
+            session.ResizeRoamingAreaBy(-10000, -10000, false, false, persist: false);
+            session.ResizeRoamingAreaBy(10000, 10000, false, false, persist: false);
+            session.ResizeRoamingAreaBy(10000, 10000, true, true, persist: false);
+            session.MoveRoamingAreaBy(10.1, 10.1, persist: false);
+            session.ResizeRoamingAreaBy(-1, -1, false, false, persist: false);
+            session.ResizeRoamingArea(0, 0, persist: false);
+            Assert.AreEqual(session.MinimumRoamingArea.Width, session.RoamingArea.Width, 1e-9);
+            Assert.AreEqual(session.MinimumRoamingArea.Height, session.RoamingArea.Height, 1e-9);
+            Assert.IsTrue(session.RoamingArea.X >= display.WorkArea.X - 1e-9);
+            Assert.IsTrue(session.RoamingArea.Y >= display.WorkArea.Y - 1e-9);
+            Assert.IsTrue(session.RoamingArea.Right <= display.WorkArea.Right + 1e-9);
+            Assert.IsTrue(session.RoamingArea.Bottom <= display.WorkArea.Bottom + 1e-9);
+            Assert.IsTrue(session.Position.X >= session.RoamingArea.X);
+            Assert.IsTrue(session.Position.Y >= session.RoamingArea.Y);
+            Assert.IsTrue(session.Position.X <= session.RoamingArea.X + (session.RoamingArea.Width - session.PetWidth));
+            Assert.IsTrue(session.Position.Y <= session.RoamingArea.Y + (session.RoamingArea.Height - session.PetHeight));
+        }
+    }
+
+    [TestMethod]
+    public void FractionalPetSizeEdgeResizingKeepsMinimumDimensionsAndValidBounds()
+    {
+        var definition = Definition();
+        foreach (var origin in new[] { new PetPosition(0, 0), new PetPosition(-1920, -1080), new PetPosition(1920, 100) })
+        for (var percent = 50; percent <= 200; percent += 5)
+        foreach (var target in new[] { new PetPosition(-10000, -10000), new PetPosition(10000, 10000), new PetPosition(500, 500) })
+        foreach (var fromLeft in new[] { false, true })
+        foreach (var fromTop in new[] { false, true })
+        {
+            var display = new DisplayInfo("Primary", new PetBounds(origin.X, origin.Y, 1920, 1040), true);
+            var session = HoodSession.Start(definition, [display], new FixedRandomSource(), new NoopSessionStore(),
+                HoodConfiguration.Defaults with { PetScale = percent / 100d });
+            session.MoveTo(target, persist: false);
+            session.ResizeRoamingAreaBy(fromLeft ? 10000 : -10000, fromTop ? 10000 : -10000,
+                fromLeft, fromTop, persist: false);
+            Assert.AreEqual(session.MinimumRoamingArea.Width, session.RoamingArea.Width, 1e-9);
+            Assert.AreEqual(session.MinimumRoamingArea.Height, session.RoamingArea.Height, 1e-9);
+            session.ResizeRoamingAreaBy(1, 1, fromLeft, fromTop, persist: false);
+            session.MoveRoamingAreaBy(3, 3, persist: false);
+            Assert.IsTrue(session.RoamingArea.X >= display.WorkArea.X - 1e-9);
+            Assert.IsTrue(session.RoamingArea.Y >= display.WorkArea.Y - 1e-9);
+            Assert.IsTrue(session.RoamingArea.Right <= display.WorkArea.Right + 1e-9);
+            Assert.IsTrue(session.RoamingArea.Bottom <= display.WorkArea.Bottom + 1e-9);
+            Assert.IsTrue(session.Position.X >= session.RoamingArea.X - 1e-9);
+            Assert.IsTrue(session.Position.Y >= session.RoamingArea.Y - 1e-9);
+            Assert.IsTrue(session.Position.X + session.PetWidth <= session.RoamingArea.Right + 1e-9);
+            Assert.IsTrue(session.Position.Y + session.PetHeight <= session.RoamingArea.Bottom + 1e-9);
+        }
+    }
+
+    [TestMethod]
+    [DataRow(0.5)]
+    [DataRow(1.35)]
+    [DataRow(2.0)]
+    public void SavedPetSizeControlsStartupDraggingAndRoamingBounds(double scale)
+    {
+        var session = CreateSession([Primary(1920, 1040)], HoodConfiguration.Defaults with { PetScale = scale });
+        Assert.AreEqual(192 * scale, session.PetWidth, 1e-9);
+        Assert.AreEqual(208 * scale, session.PetHeight, 1e-9);
+        Assert.AreEqual(192 * scale, session.MinimumRoamingArea.Width, 1e-9);
+        Assert.AreEqual(208 * scale, session.MinimumRoamingArea.Height, 1e-9);
+        session.MoveTo(new PetPosition(10000, 10000), persist: false);
+        session.ResizeRoamingArea(-1, -1, persist: false);
+        Assert.AreEqual(192 * scale, session.RoamingArea.Width, 1e-9);
+        Assert.AreEqual(208 * scale, session.RoamingArea.Height, 1e-9);
+        session.Advance(TimeSpan.FromSeconds(100));
+        Assert.IsTrue(session.Position.X >= 0 && session.Position.Y >= 0);
+        Assert.IsTrue(session.Position.X + session.PetWidth <= 1920);
+        Assert.IsTrue(session.Position.Y + session.PetHeight <= 1040);
+    }
+
+    [TestMethod]
+    [DataRow(0.5)]
+    [DataRow(1.35)]
+    [DataRow(2.0)]
+    public void RoamingAtScaledSizeStaysInsideItsAreaAcrossDirectionChanges(double scale)
+    {
+        var configuration = HoodConfiguration.Defaults with
+        {
+            PetScale = scale,
+            Behavior = HoodConfiguration.Defaults.Behavior with { RandomEvents = false }
+        };
+        var session = CreateSession([Primary(1920, 1040)], configuration, new HoodSessionSnapshot
+        {
+            Position = new PetPosition(200, 200),
+            RoamingArea = new PetBounds(100, 100, 600, 550),
+            Action = PetAction.RunRight,
+            Needs = new NeedLevels(0, 100, 0)
+        });
+        var start = session.Position;
+        for (var second = 0; second < 160; second++)
+        {
+            session.Advance(TimeSpan.FromSeconds(1));
+            Assert.IsTrue(session.Position.X >= session.RoamingArea.X);
+            Assert.IsTrue(session.Position.Y >= session.RoamingArea.Y);
+            Assert.IsTrue(session.Position.X + session.PetWidth <= session.RoamingArea.Right + 1e-9);
+            Assert.IsTrue(session.Position.Y + session.PetHeight <= session.RoamingArea.Bottom + 1e-9);
+        }
+        Assert.AreNotEqual(start, session.Position, "The bounds checks must exercise actual roaming.");
+    }
+
+    [TestMethod]
+    public void ResizingPetPreservesFeetAndSleepingStateAndCanRestorePlacement()
+    {
+        var store = new RecordingSessionStore();
+        var session = CreateSession([Primary(1920, 1040)], store: store);
+        session.Sleep();
+        session.Advance(TimeSpan.FromMilliseconds(500));
+        var position = session.Position;
+        var area = session.RoamingArea;
+        var snapshot = store.Snapshot;
+        var needs = session.Needs;
+        var nap = session.RemainingNap;
+        var presentation = session.Presentation;
+        session.SetPetScale(2);
+        Assert.AreEqual(position.X + 96, session.Position.X + 192, 1e-9);
+        Assert.AreEqual(position.Y + 208, session.Position.Y + 416, 1e-9);
+        Assert.AreEqual(presentation.Action, session.Presentation.Action);
+        Assert.AreEqual(presentation.FrameIndex, session.Presentation.FrameIndex);
+        Assert.AreEqual(needs, session.Needs);
+        Assert.AreEqual(nap, session.RemainingNap);
+        Assert.AreSame(snapshot, store.Snapshot, "A size preview must not explicitly save session state.");
+        Assert.AreEqual(1d, session.Configuration.PetScale, "Preview must leave saved configuration alone.");
+        session.SetPetScale(1, position, area);
+        Assert.AreEqual(position, session.Position);
+        Assert.AreEqual(area, session.RoamingArea);
+    }
+
+    [TestMethod]
+    public void SizeThatCannotFitDisplayIsRejectedBeforeConfigurationOrPlacementChanges()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new YamlConfigurationStore(Path.Combine(directory.Path, "config.yaml"));
+        var configuration = store.LoadOrCreate();
+        var yaml = File.ReadAllText(store.Path);
+        var session = CreateSession([Primary(300, 300)]);
+        var position = session.Position;
+        var area = session.RoamingArea;
+        var controller = new HoodConfigurationController(session, store);
+        Assert.Throws<InvalidOperationException>(() => controller.SaveAndApply("pet_scale", configuration with { PetScale = 2 }));
+        Assert.Throws<InvalidOperationException>(() => session.SetPetScale(2));
+        Assert.AreEqual(yaml, File.ReadAllText(store.Path));
+        Assert.AreEqual(configuration, controller.Current);
+        Assert.AreEqual(1d, session.PetScale);
+        Assert.AreEqual(position, session.Position);
+        Assert.AreEqual(area, session.RoamingArea);
+    }
+
+    [TestMethod]
     [DataRow(-20d, PetAction.RunLeft)]
     [DataRow(20d, PetAction.RunRight)]
     public void Dragging_AnimatesHorizontalMovementEvenWhenRoamingAndIdleAnimationsAreDisabled(
@@ -350,12 +513,16 @@ public sealed class HoodPlacementTests
     }
 
     [TestMethod]
-    public void React_JumpsAboveTheRoamingAreaAndLandsAtTheSameSpotAfterOnePointTwoSeconds()
+    [DataRow(0.5)]
+    [DataRow(1d)]
+    [DataRow(2d)]
+    public void React_JumpsAboveTheRoamingAreaAndLandsAtTheSameSpotAfterOnePointTwoSeconds(double petScale)
     {
         var defaults = HoodConfiguration.Defaults;
-        var configuration = defaults with { Behavior = defaults.Behavior with { Roaming = false, RandomEvents = false } };
+        var configuration = defaults with { PetScale = petScale, Behavior = defaults.Behavior with { Roaming = false, RandomEvents = false } };
         var store = new RecordingSessionStore();
         var session = CreateSession([Primary(1920, 1040)], configuration, store: store);
+        session.ResizeRoamingArea(0, 0, persist: false);
         var start = session.Position;
         var area = session.RoamingArea;
 
@@ -364,7 +531,7 @@ public sealed class HoodPlacementTests
         Assert.AreEqual(start, session.Presentation.Position, "Preparation stays on the ground.");
         session.Advance(TimeSpan.FromMilliseconds(320));
         Assert.AreEqual(start.X, session.Presentation.Position.X);
-        Assert.AreEqual(start.Y - 90, session.Presentation.Position.Y, 1e-9);
+        Assert.AreEqual(start.Y - 90 * petScale, session.Presentation.Position.Y, 1e-9);
         Assert.IsTrue(session.Presentation.Position.Y < area.Y);
         Assert.AreEqual(start, session.Position);
         Assert.AreEqual(area, session.RoamingArea);
@@ -379,6 +546,32 @@ public sealed class HoodPlacementTests
         Assert.AreEqual(start, session.Presentation.Position, "Landing settles on the original baseline.");
         session.Advance(TimeSpan.FromMilliseconds(1));
         Assert.AreEqual(PetAction.Idle, session.Presentation.Action);
+        Assert.AreEqual(start, session.Presentation.Position);
+    }
+
+    [TestMethod]
+    [DataRow(0.5, 0d)]
+    [DataRow(0.5, 25d)]
+    [DataRow(2d, 25d)]
+    [DataRow(2d, 200d)]
+    public void ScaledJumpsRespectMonitorClearance(double petScale, double clearance)
+    {
+        var defaults = HoodConfiguration.Defaults;
+        var configuration = defaults with
+        {
+            PetScale = petScale,
+            Behavior = defaults.Behavior with { Roaming = false, RandomEvents = false }
+        };
+        var session = CreateSession([Primary(1920, 1040)], configuration);
+        session.ResizeRoamingArea(0, 0, persist: false);
+        session.MoveTo(new PetPosition(500, clearance), persist: false);
+        var start = session.Position;
+        session.React();
+        session.Advance(TimeSpan.FromMilliseconds(640));
+        Assert.AreEqual(start.Y - Math.Min(90 * petScale, clearance), session.Presentation.Position.Y, 1e-9);
+        Assert.IsTrue(session.Presentation.Position.Y >= 0);
+        Assert.IsTrue(session.Presentation.Position.Y + session.PetHeight <= 1040);
+        session.Advance(TimeSpan.FromMilliseconds(560));
         Assert.AreEqual(start, session.Presentation.Position);
     }
 

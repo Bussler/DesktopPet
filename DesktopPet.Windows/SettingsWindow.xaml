@@ -23,7 +23,7 @@
             <TextBlock x:Name="SettingsHeadingText" FontSize="{DynamicResource AppSettingsHeadingFontSize}" FontWeight="{DynamicResource AppSettingsHeadingFontWeight}" Foreground="{DynamicResource AppSettingsTextBrush}" Text="Hood settings" />
             <TextBlock x:Name="DescriptionText" Margin="0,5,0,16"
                        Foreground="{DynamicResource AppSettingsSecondaryTextBrush}"
-                       Text="Pet and UI style preview immediately. Other settings take effect on Save."
+                       Text="Appearance changes preview immediately. Other settings take effect on Save."
                        TextWrapping="Wrap" />
 
             <GroupBox Header="Appearance">
@@ -37,6 +37,14 @@
                     </ComboBox>
                     <TextBlock Margin="0,4,0,8" Text="All pets share the same behavior."
                                Foreground="{DynamicResource AppSettingsSecondaryTextBrush}" TextWrapping="Wrap" />
+                    <Label Target="{Binding ElementName=PetSizeSlider}" Content="Pet si_ze" />
+                    <DockPanel Margin="0,0,0,8">
+                        <TextBlock DockPanel.Dock="Right" Width="55" TextAlignment="Right" VerticalAlignment="Center"
+                                   Text="{Binding ElementName=PetSizeSlider, Path=Value, StringFormat={}{0:0}%}" />
+                        <Slider x:Name="PetSizeSlider" Minimum="50" Maximum="200" Value="100"
+                                TickFrequency="5" SmallChange="5" LargeChange="25" IsSnapToTickEnabled="True"
+                                AutomationProperties.Name="Pet size (%)" ValueChanged="OnPetSizeChanged" />
+                    </DockPanel>
                     <Label Target="{Binding ElementName=UiStyleComboBox}" Content="UI _style" />
                     <ComboBox x:Name="UiStyleComboBox" SelectedValuePath="Tag" SelectionChanged="OnUiStyleSelectionChanged">
                         <ComboBoxItem Content="Sticky Notes" Tag="sticky-notes" />

@@ -22,6 +22,276 @@ namespace DesktopPet.Windows.Tests;
 public sealed class SettingsAndStatsTests
 {
     [TestMethod]
+    [DataRow(50d, false, false)]
+    [DataRow(150d, false, false)]
+    [DataRow(200d, false, false)]
+    [DataRow(50d, true, false)]
+    [DataRow(150d, true, false)]
+    [DataRow(200d, true, false)]
+    [DataRow(150d, false, true)]
+    [DataRow(150d, true, true)]
+    public void QuitRestoresUnsavedPetSizeBeforeSavingTheRestartPlacement(double percent, bool drag, bool cancelClose)
+    {
+        using var fixture = new Fixture("light");
+        var pet = fixture.Pet();
+        var settings = fixture.HoodSettings(pet, UiStyleCatalog.StickyNotes);
+        var app = System.Windows.Application.Current as App ?? new TestApp { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        var sessionField = typeof(App).GetField("_session", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var settingsField = typeof(App).GetField("_settingsWindow", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var originalSession = sessionField.GetValue(app);
+        var originalSettings = settingsField.GetValue(app);
+        sessionField.SetValue(app, fixture.Session);
+        settingsField.SetValue(app, settings);
+        settings.Closed += (_, _) => settingsField.SetValue(app, null);
+        var expectedPosition = fixture.Session.Position;
+        var expectedArea = fixture.Session.RoamingArea;
+        try
+        {
+            ((Slider)settings.FindName("PetSizeSlider")).Value = percent;
+            if (drag)
+            {
+                var previewPosition = fixture.Session.Position;
+                fixture.Session.MoveTo(new(300, 300));
+                expectedPosition = new(300 + (fixture.Session.PetWidth - 192) / 2, 300 + fixture.Session.PetHeight - 208);
+                expectedArea = expectedArea with
+                {
+                    X = expectedArea.X + (300 - previewPosition.X),
+                    Y = expectedArea.Y + (300 - previewPosition.Y)
+                };
+            }
+            var prepareQuit = typeof(App).GetMethod("TrySaveSessionForQuit", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            if (cancelClose)
+            {
+                var beforeQuit = fixture.StateStore.Snapshot;
+                System.ComponentModel.CancelEventHandler cancel = (_, e) => e.Cancel = true;
+                settings.Closing += cancel;
+                try
+                {
+                    Assert.AreEqual(false, prepareQuit.Invoke(app, null));
+                    Assert.IsFalse(fixture.Session.QuitRequested);
+                    Assert.AreSame(beforeQuit, fixture.StateStore.Snapshot);
+                }
+                finally { settings.Closing -= cancel; }
+            }
+            Assert.AreEqual(true, prepareQuit.Invoke(app, null));
+            Assert.IsTrue(fixture.Session.QuitRequested);
+            Assert.AreEqual(1d, fixture.Session.PetScale);
+            Assert.AreEqual(expectedPosition, fixture.StateStore.Snapshot!.Position);
+            Assert.AreEqual(expectedArea, fixture.StateStore.Snapshot.RoamingArea);
+            var definition = (PetDefinition)fixture.Assets.GetType().GetProperty("Definition")!.GetValue(fixture.Assets)!;
+            var restarted = HoodSession.Start(definition, [new("Primary", new PetBounds(0, 0, 1920, 1040), true)],
+                new FixedRandomSource(), fixture.StateStore, fixture.Controller.Current, fixture.StateStore.Snapshot);
+            Assert.AreEqual(expectedPosition, restarted.Position);
+            Assert.AreEqual(expectedArea, restarted.RoamingArea);
+        }
+        finally
+        {
+            settings.Close(); pet.Close();
+            sessionField.SetValue(app, originalSession);
+            settingsField.SetValue(app, originalSettings);
+        }
+    }
+
+    [TestMethod]
+    [DataRow(false, false)]
+    [DataRow(true, false)]
+    [DataRow(false, true)]
+    [DataRow(true, true)]
+    public void PetSizeCancelPreservesIndependentPlacementChanges(bool editArea, bool previewAgain)
+    {
+        using var fixture = new Fixture("light");
+        var pet = fixture.Pet();
+        var settings = fixture.HoodSettings(pet, UiStyleCatalog.StickyNotes);
+        try
+        {
+            var slider = (Slider)settings.FindName("PetSizeSlider");
+            slider.Value = 150;
+            if (editArea)
+            {
+                fixture.Session.ResizeRoamingArea(640, 500, persist: false);
+                fixture.Session.MoveRoamingAreaBy(30, -100, persist: false);
+            }
+            else fixture.Session.MoveTo(new PetPosition(300, 300), persist: false);
+            var center = fixture.Session.Position.X + fixture.Session.PetWidth / 2;
+            var feet = fixture.Session.Position.Y + fixture.Session.PetHeight;
+            if (previewAgain) slider.Value = 175;
+            settings.Close();
+            Assert.AreEqual(1d, fixture.Session.PetScale);
+            Assert.AreEqual(center, fixture.Session.Position.X + fixture.Session.PetWidth / 2, 1e-9);
+            Assert.AreEqual(feet, fixture.Session.Position.Y + fixture.Session.PetHeight, 1e-9);
+            if (editArea)
+            {
+                Assert.AreEqual(640d, fixture.Session.RoamingArea.Width);
+                Assert.AreEqual(500d, fixture.Session.RoamingArea.Height);
+            }
+        }
+        finally { settings.Close(); pet.Close(); }
+    }
+
+    [TestMethod]
+    [DataRow(PetCatalog.Hood, false)]
+    [DataRow(PetCatalog.Pip, false)]
+    [DataRow(PetCatalog.Crumb, false)]
+    [DataRow(PetCatalog.Puddle, false)]
+    [DataRow(PetCatalog.Hood, true)]
+    [DataRow(PetCatalog.Pip, true)]
+    [DataRow(PetCatalog.Crumb, true)]
+    [DataRow(PetCatalog.Puddle, true)]
+    public void PetSizePreviewsForEveryPetAndSaveOrCancelPreservesSleepingState(string choice, bool save)
+    {
+        using var fixture = new Fixture("light");
+        fixture.Store.Save(fixture.Controller.Current);
+        var originalYaml = File.ReadAllText(fixture.ConfigPath);
+        fixture.Session.Sleep();
+        fixture.Session.Advance(TimeSpan.FromMilliseconds(900));
+        var position = fixture.Session.Position;
+        var area = fixture.Session.RoamingArea;
+        var presentation = fixture.Session.Presentation;
+        var needs = fixture.Session.Needs;
+        var nap = fixture.Session.RemainingNap;
+        var pet = fixture.Pet();
+        var settings = fixture.HoodSettings(pet, UiStyleCatalog.StickyNotes);
+        try
+        {
+            var slider = (Slider)settings.FindName("PetSizeSlider");
+            var image = (Image)pet.FindName("PetImage");
+            Assert.AreEqual(100d, slider.Value);
+            slider.Value = 200;
+            slider.Value = 150;
+            ((ComboBox)settings.FindName("PetComboBox")).SelectedValue = choice;
+            Assert.AreEqual(288d, pet.Width);
+            Assert.AreEqual(312d, pet.Height);
+            Assert.AreEqual(pet.Width, image.Width);
+            Assert.AreEqual(pet.Height, image.Height);
+            Assert.AreEqual(1.5, fixture.Session.PetScale);
+            Assert.AreEqual(1d, fixture.Controller.Current.PetScale);
+            Assert.AreEqual(originalYaml, File.ReadAllText(fixture.ConfigPath));
+            Assert.IsInstanceOfType<CroppedBitmap>(image.Source);
+
+            typeof(SettingsWindow).GetMethod(save ? "OnSaveClick" : "OnCancelClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(settings, [settings, new RoutedEventArgs(Button.ClickEvent)]);
+
+            Assert.AreEqual(save ? 1.5 : 1d, fixture.Store.LoadOrCreate().PetScale);
+            Assert.AreEqual(save ? 1.5 : 1d, fixture.Session.PetScale);
+            Assert.AreEqual(save ? 288d : 192d, pet.Width);
+            Assert.AreEqual(presentation.Action, fixture.Session.Presentation.Action);
+            Assert.AreEqual(presentation.FrameIndex, fixture.Session.Presentation.FrameIndex);
+            Assert.AreEqual(needs, fixture.Session.Needs);
+            Assert.AreEqual(nap, fixture.Session.RemainingNap);
+            if (!save)
+            {
+                Assert.AreEqual(position, fixture.Session.Position);
+                Assert.AreEqual(area, fixture.Session.RoamingArea);
+            }
+            var reopened = fixture.HoodSettings(pet, UiStyleCatalog.StickyNotes);
+            try
+            {
+                Assert.AreEqual(save ? 150d : 100d, ((Slider)reopened.FindName("PetSizeSlider")).Value);
+                var savedPosition = fixture.Session.Position;
+                var savedArea = fixture.Session.RoamingArea;
+                ((Slider)reopened.FindName("PetSizeSlider")).Value = 50;
+                Assert.AreEqual(96d, pet.Width);
+                Assert.AreEqual(104d, pet.Height);
+                reopened.Close();
+                Assert.AreEqual(save ? 1.5 : 1d, fixture.Session.PetScale);
+                Assert.AreEqual(savedPosition, fixture.Session.Position);
+                Assert.AreEqual(savedArea, fixture.Session.RoamingArea);
+            }
+            finally { reopened.Close(); }
+        }
+        finally { settings.Close(); pet.Close(); }
+    }
+
+    [TestMethod]
+    public void PetSizeKeepsWindowDimensionsAndCropCoordinatesDuringDpiReload()
+    {
+        using var fixture = new Fixture("light");
+        var pet = fixture.Pet();
+        var settings = fixture.HoodSettings(pet, UiStyleCatalog.StickyNotes);
+        try
+        {
+            ((Slider)settings.FindName("PetSizeSlider")).Value = 150;
+            var firstSheet = ((CroppedBitmap)((Image)pet.FindName("PetImage")).Source).Source;
+            ((Slider)settings.FindName("PetSizeSlider")).Value = 175;
+            Assert.AreSame(firstSheet, ((CroppedBitmap)((Image)pet.FindName("PetImage")).Source).Source,
+                "Growing again must reuse the atlas already decoded for the slider's maximum.");
+            ((Slider)settings.FindName("PetSizeSlider")).Value = 50;
+            typeof(HoodOverlayWindow).GetMethod("ReloadAssetsForDpi", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(pet, [1.5, 1.5]);
+            Assert.AreEqual(96d, pet.Width);
+            Assert.AreEqual(104d, pet.Height);
+            var crop = (CroppedBitmap)((Image)pet.FindName("PetImage")).Source;
+            Assert.AreEqual(2304, crop.Source.PixelWidth);
+            Assert.AreEqual(1560, crop.Source.PixelHeight);
+            Assert.AreEqual(ExpectedFrameRectangle(pet, fixture.Session), crop.SourceRect);
+        }
+        finally { settings.Close(); pet.Close(); }
+    }
+
+    [TestMethod]
+    public void FailedPetSizeSaveRestoresSizePlacementAndControls()
+    {
+        using var fixture = new Fixture("light");
+        fixture.Store.Save(fixture.Controller.Current);
+        var yaml = File.ReadAllText(fixture.ConfigPath);
+        var position = fixture.Session.Position;
+        var area = fixture.Session.RoamingArea;
+        var pet = fixture.Pet();
+        var settings = fixture.HoodSettings(pet, UiStyleCatalog.StickyNotes);
+        try
+        {
+            ((Slider)settings.FindName("PetSizeSlider")).Value = 200;
+            using (var locked = new FileStream(fixture.ConfigPath, FileMode.Open, FileAccess.Read, FileShare.None))
+            {
+                typeof(SettingsWindow).GetMethod("OnSaveClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(settings, [settings, new RoutedEventArgs(Button.ClickEvent)]);
+            }
+            Assert.AreEqual(yaml, File.ReadAllText(fixture.ConfigPath));
+            Assert.AreEqual(1d, fixture.Controller.Current.PetScale);
+            Assert.AreEqual(1d, fixture.Session.PetScale);
+            Assert.AreEqual(192d, pet.Width);
+            Assert.AreEqual(position, fixture.Session.Position);
+            Assert.AreEqual(area, fixture.Session.RoamingArea);
+            Assert.AreEqual(100d, ((Slider)settings.FindName("PetSizeSlider")).Value);
+            StringAssert.Contains(((TextBlock)settings.FindName("AppearanceErrorText")).Text, "Settings were not saved");
+        }
+        finally { settings.Close(); pet.Close(); }
+    }
+
+    [TestMethod]
+    public void HiddenPetSizePreviewStaysHiddenAndRevealUsesTheSavedSize()
+    {
+        using var fixture = new Fixture("light");
+        fixture.Controller.SaveAndApply("behavior", fixture.Controller.Current with
+        {
+            Behavior = fixture.Controller.Current.Behavior with { ShowSprites = false }
+        });
+        var pet = fixture.Pet();
+        var settings = fixture.HoodSettings(pet, UiStyleCatalog.StickyNotes);
+        try
+        {
+            ((Slider)settings.FindName("PetSizeSlider")).Value = 50;
+            Assert.IsFalse(pet.IsVisible);
+            Assert.IsNull(((Image)pet.FindName("PetImage")).Source);
+            Assert.IsNull(typeof(HoodOverlayWindow).GetProperty("CurrentAssets", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(pet));
+            typeof(SettingsWindow).GetMethod("OnSaveClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(settings, [settings, new RoutedEventArgs(Button.ClickEvent)]);
+            Assert.AreEqual(0.5, fixture.Store.LoadOrCreate().PetScale);
+            typeof(HoodOverlayWindow).GetMethod("EnsureSpriteAssetsLoaded", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(pet, null);
+            fixture.Controller.SaveAndApply("behavior", fixture.Controller.Current with
+            {
+                Behavior = fixture.Controller.Current.Behavior with { ShowSprites = true }
+            });
+            typeof(HoodOverlayWindow).GetMethod("RefreshBehaviorSettings", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(pet, null);
+            Assert.IsTrue(pet.IsVisible);
+            Assert.AreEqual(96d, pet.Width);
+            Assert.AreEqual(104d, pet.Height);
+            Assert.IsInstanceOfType<CroppedBitmap>(((Image)pet.FindName("PetImage")).Source);
+        }
+        finally { settings.Close(); pet.Close(); }
+    }
+
+    [TestMethod]
     public void TrayNotesSubmenuTextFollowsThemeAndStyleChanges()
     {
         using var tray = new Forms.ContextMenuStrip();
@@ -1638,6 +1908,7 @@ public sealed class SettingsAndStatsTests
         public string ConfigPath { get; } = Path.Combine(Path.GetTempPath(), $"HoodSettingsTest-{Guid.NewGuid():N}.yaml");
         public object Assets { get; }
         public HoodSession Session { get; }
+        public NoopSessionStore StateStore { get; } = new();
         public YamlConfigurationStore Store { get; }
         public HoodConfigurationController Controller { get; }
 
@@ -1647,7 +1918,7 @@ public sealed class SettingsAndStatsTests
                 .Invoke(null, [Path.Combine(AppContext.BaseDirectory, "Assets", "Hood")])!;
             var definition = (PetDefinition)Assets.GetType().GetProperty("Definition")!.GetValue(Assets)!;
             Session = HoodSession.Start(definition, [new("Primary", new PetBounds(0, 0, 1920, 1040), true)],
-                new FixedRandomSource(), new NoopSessionStore(), HoodConfiguration.Defaults with
+                new FixedRandomSource(), StateStore, HoodConfiguration.Defaults with
                 { UiStyle = uiStyle, Notes = HoodConfiguration.Defaults.Notes with { Theme = theme } });
             Store = new YamlConfigurationStore(ConfigPath);
             Controller = new HoodConfigurationController(Session, Store);
@@ -1672,8 +1943,9 @@ public sealed class SettingsAndStatsTests
 
     private sealed class NoopSessionStore : ISessionStore
     {
+        public HoodSessionSnapshot? Snapshot { get; private set; }
         public HoodSessionSnapshot? Load() => null;
-        public void Save(HoodSessionSnapshot snapshot) { }
+        public void Save(HoodSessionSnapshot snapshot) => Snapshot = snapshot;
         public string? ResetAfterAcknowledgement() => null;
     }
 

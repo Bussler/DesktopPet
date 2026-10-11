@@ -75,14 +75,20 @@ public static class PetPlacementPolicy
         var minimum = definition.MinimumRoamingArea;
         var width = Math.Min(workArea.Width, Math.Max(minimum.Width, requestedWidth));
         var height = Math.Min(workArea.Height, Math.Max(minimum.Height, requestedHeight));
+        var maximumX = Math.Min(position.X, workArea.Right - width);
+        var maximumY = Math.Min(position.Y, workArea.Bottom - height);
+        // At a fractional monitor edge, containment bounds can differ by a rounding step.
         var x = Math.Clamp(
             currentArea.X,
-            Math.Max(workArea.X, position.X + definition.DisplayWidth - width),
-            Math.Min(position.X, workArea.Right - width));
+            Math.Min(maximumX, Math.Max(workArea.X, position.X - (width - definition.DisplayWidth))),
+            maximumX);
         var y = Math.Clamp(
             currentArea.Y,
-            Math.Max(workArea.Y, position.Y + definition.DisplayHeight - height),
-            Math.Min(position.Y, workArea.Bottom - height));
+            Math.Min(maximumY, Math.Max(workArea.Y, position.Y - (height - definition.DisplayHeight))),
+            maximumY);
+        position = new PetPosition(
+            Math.Clamp(position.X, x, x + (width - definition.DisplayWidth)),
+            Math.Clamp(position.Y, y, y + (height - definition.DisplayHeight)));
         return new PetPlacement(position, new PetBounds(x, y, width, height), display);
     }
 
@@ -100,20 +106,19 @@ public static class PetPlacementPolicy
         var display = FindDisplay(position, definition, displays) ?? primary;
         var workArea = display.WorkArea;
         var minimum = definition.MinimumRoamingArea;
-        var left = fromLeft
-            ? Math.Clamp(currentArea.X + horizontalChange, workArea.X, currentArea.Right - minimum.Width)
-            : currentArea.X;
-        var right = fromLeft ? currentArea.Right
-            : Math.Clamp(currentArea.Right + horizontalChange, currentArea.X + minimum.Width, workArea.Right);
-        var top = fromTop
-            ? Math.Clamp(currentArea.Y + verticalChange, workArea.Y, currentArea.Bottom - minimum.Height)
-            : currentArea.Y;
-        var bottom = fromTop ? currentArea.Bottom
-            : Math.Clamp(currentArea.Bottom + verticalChange, currentArea.Y + minimum.Height, workArea.Bottom);
-        var area = new PetBounds(left, top, right - left, bottom - top);
+        // Clamp dimensions directly so subtracting fractional edges cannot round below the minimum.
+        var maximumWidth = fromLeft ? currentArea.Right - workArea.X : workArea.Right - currentArea.X;
+        var maximumHeight = fromTop ? currentArea.Bottom - workArea.Y : workArea.Bottom - currentArea.Y;
+        var width = Math.Clamp(currentArea.Width + (fromLeft ? -horizontalChange : horizontalChange),
+            minimum.Width, Math.Max(minimum.Width, maximumWidth));
+        var height = Math.Clamp(currentArea.Height + (fromTop ? -verticalChange : verticalChange),
+            minimum.Height, Math.Max(minimum.Height, maximumHeight));
+        var left = currentArea.X + (fromLeft ? currentArea.Width - width : 0);
+        var top = currentArea.Y + (fromTop ? currentArea.Height - height : 0);
+        var area = new PetBounds(left, top, width, height);
         var containedPosition = new PetPosition(
-            Math.Clamp(position.X, left, right - definition.DisplayWidth),
-            Math.Clamp(position.Y, top, bottom - definition.DisplayHeight));
+            Math.Clamp(position.X, left, left + (width - definition.DisplayWidth)),
+            Math.Clamp(position.Y, top, top + (height - definition.DisplayHeight)));
         return new PetPlacement(containedPosition, area, display);
     }
 
@@ -142,8 +147,8 @@ public static class PetPlacementPolicy
         var x = Math.Clamp(requestedX, workArea.X, workArea.Right - width);
         var y = Math.Clamp(requestedY, workArea.Y, workArea.Bottom - height);
         var position = new PetPosition(
-            Math.Clamp(currentPosition.X, x, x + width - definition.DisplayWidth),
-            Math.Clamp(currentPosition.Y, y, y + height - definition.DisplayHeight));
+            Math.Clamp(currentPosition.X, x, x + (width - definition.DisplayWidth)),
+            Math.Clamp(currentPosition.Y, y, y + (height - definition.DisplayHeight)));
         return new PetPlacement(position, new PetBounds(x, y, width, height), display);
     }
 
@@ -172,8 +177,15 @@ public static class PetPlacementPolicy
         var offsetY = area.Y < workArea.Y
             ? workArea.Y - area.Y
             : area.Bottom > workArea.Bottom ? workArea.Bottom - area.Bottom : 0;
-        position = new PetPosition(position.X + offsetX, position.Y + offsetY);
-        area = area with { X = area.X + offsetX, Y = area.Y + offsetY };
+        // Normalize rounding after translation; retain already-contained fractional origins.
+        position = new PetPosition(
+            offsetX == 0 ? position.X : Math.Clamp(position.X + offsetX, workArea.X, workArea.Right - definition.DisplayWidth),
+            offsetY == 0 ? position.Y : Math.Clamp(position.Y + offsetY, workArea.Y, workArea.Bottom - definition.DisplayHeight));
+        area = area with
+        {
+            X = offsetX == 0 ? area.X : Math.Clamp(area.X + offsetX, workArea.X, workArea.Right - width),
+            Y = offsetY == 0 ? area.Y : Math.Clamp(area.Y + offsetY, workArea.Y, workArea.Bottom - height)
+        };
         return new PetPlacement(position, area, display);
     }
 

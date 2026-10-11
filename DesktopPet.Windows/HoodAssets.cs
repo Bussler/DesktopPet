@@ -95,6 +95,12 @@ internal sealed class HoodAssetRollbackSnapshot
     public bool SourceFilesChanged => Source.CachedSpriteSheet is null &&
         (_sourceChangedBeforePreview || !SourceFilesMatchSnapshot());
 
+    public (HoodAssetSource Source, LoadedHoodAssets Assets) LoadForDisplay(double dpiScale, double petScale)
+    {
+        var (source, assets) = LoadAtScale(dpiScale * petScale, dpiScale * petScale);
+        return (source, assets with { DpiScaleX = dpiScale, DpiScaleY = dpiScale, DecodeScale = petScale });
+    }
+
     public HoodAssetSource GetRestoreSource()
     {
         if (Source.CachedSpriteSheet is not null) return Source;
@@ -135,6 +141,7 @@ internal sealed record LoadedHoodAssets(PetDefinition Definition, BitmapSource S
     public byte[]? SpriteSheetHash { get; init; }
     public double DpiScaleX { get; init; } = 1;
     public double DpiScaleY { get; init; } = 1;
+    public double DecodeScale { get; init; } = 1;
 
     public Int32Rect GetFrameRectangle(SpriteFrame frame)
     {
@@ -151,6 +158,17 @@ internal sealed record LoadedHoodAssets(PetDefinition Definition, BitmapSource S
 
 internal static class HoodAssets
 {
+    public static LoadedHoodAssets LoadForDisplay(HoodAssetSource source, double dpiScaleX, double dpiScaleY, double petScale)
+    {
+        HoodConfigurationValidator.ValidatePetScale(petScale);
+        return LoadAtScale(source, dpiScaleX * petScale, dpiScaleY * petScale) with
+        {
+            DpiScaleX = dpiScaleX,
+            DpiScaleY = dpiScaleY,
+            DecodeScale = petScale
+        };
+    }
+
     public static LoadedHoodAssets LoadPet(string assetsDirectory, string pet, PetDefinition? currentDefinition = null)
         => LoadAtScale(LoadPetSource(assetsDirectory, pet, currentDefinition), 1, 1);
 

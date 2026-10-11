@@ -7,6 +7,39 @@ namespace DesktopPet.Tests;
 public sealed class HoodConfigurationTests
 {
     [TestMethod]
+    [DataRow(0.5)]
+    [DataRow(1.35)]
+    [DataRow(2.0)]
+    public void PetSizeDefaultsForOlderFilesAndRoundTrips(double scale)
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new YamlConfigurationStore(Path.Combine(directory.Path, "config.yaml"));
+        store.LoadOrCreate();
+        File.WriteAllText(store.Path, Regex.Replace(File.ReadAllText(store.Path), @"(?m)^pet_scale:.*\r?\n", string.Empty));
+        var legacy = store.LoadOrCreate();
+        Assert.AreEqual(1d, legacy.PetScale);
+        store.Save(legacy with { PetScale = scale });
+        Assert.AreEqual(scale, store.LoadOrCreate().PetScale);
+    }
+
+    [TestMethod]
+    [DataRow(0.0)]
+    [DataRow(0.49)]
+    [DataRow(2.01)]
+    [DataRow(double.NaN)]
+    [DataRow(double.PositiveInfinity)]
+    public void InvalidPetSizeDoesNotReplaceSavedConfiguration(double scale)
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new YamlConfigurationStore(Path.Combine(directory.Path, "config.yaml"));
+        var configuration = store.LoadOrCreate();
+        var original = File.ReadAllText(store.Path);
+        var exception = Assert.Throws<HoodConfigurationException>(() => store.Save(configuration with { PetScale = scale }));
+        Assert.AreEqual("pet_scale", exception.SettingPath);
+        Assert.AreEqual(original, File.ReadAllText(store.Path));
+    }
+
+    [TestMethod]
     public void SpriteVisibilityDefaultsForOlderFilesAndRoundTripsHiddenChoice()
     {
         using var directory = new TemporaryDirectory();

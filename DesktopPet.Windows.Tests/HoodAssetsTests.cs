@@ -18,6 +18,30 @@ namespace DesktopPet.Windows.Tests;
 public sealed class HoodAssetsTests
 {
     [TestMethod]
+    [DataRow(0.5, 1.0, 1536, 1040)]
+    [DataRow(1.5, 1.25, 5760, 3900)]
+    [DataRow(2.0, 1.5, 6144, 4160)]
+    public void PetSizeAndDisplayDpiDetermineDecodedResolution(double petScale, double dpi, int width, int height)
+    {
+        var assetsType = typeof(HoodOverlayWindow).Assembly.GetType("DesktopPet.Windows.HoodAssets")!;
+        var source = assetsType.GetMethod("LoadPetSource")!
+            .Invoke(null, [Path.Combine(AppContext.BaseDirectory, "Assets"), PetCatalog.Hood, null])!;
+        var assets = assetsType.GetMethod("LoadForDisplay")!.Invoke(null, [source, dpi, dpi, petScale])!;
+        var sheet = (BitmapSource)assets.GetType().GetProperty("SpriteSheet")!.GetValue(assets)!;
+        Assert.AreEqual(width, sheet.PixelWidth);
+        Assert.AreEqual(height, sheet.PixelHeight);
+        Assert.AreEqual(dpi, assets.GetType().GetProperty("DpiScaleX")!.GetValue(assets));
+        var definition = (PetDefinition)assets.GetType().GetProperty("Definition")!.GetValue(assets)!;
+        Assert.AreEqual(192d, definition.DisplayWidth, "Source manifest dimensions must remain unscaled.");
+        foreach (var frame in definition.Animations.SelectMany(animation => animation.Frames))
+        {
+            var rect = (Int32Rect)assets.GetType().GetMethod("GetFrameRectangle")!.Invoke(assets, [frame])!;
+            Assert.IsTrue(rect.X >= 0 && rect.Y >= 0 && rect.Width > 0 && rect.Height > 0);
+            Assert.IsTrue(rect.X + rect.Width <= width && rect.Y + rect.Height <= height);
+        }
+    }
+
+    [TestMethod]
     public void PackagedSpriteAtlasDecodesToThe100PercentDisplaySize()
     {
         var assetsType = typeof(HoodOverlayWindow).Assembly.GetType("DesktopPet.Windows.HoodAssets")!;

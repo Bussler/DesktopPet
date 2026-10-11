@@ -38,6 +38,27 @@ public sealed class PetDefinition
     public double DisplayHeight => FrameHeight / SpriteScale;
     public List<PetAnimation> Animations { get; init; } = [];
 
+    internal PetDefinition WithDisplayScale(double scale) => new()
+    {
+        SchemaVersion = SchemaVersion,
+        Name = Name,
+        SpriteSheet = SpriteSheet,
+        SheetWidth = SheetWidth,
+        SheetHeight = SheetHeight,
+        FrameWidth = FrameWidth,
+        FrameHeight = FrameHeight,
+        SpriteScale = SpriteScale / scale,
+        Animations = Animations.Select(animation => new PetAnimation
+        {
+            Action = animation.Action,
+            Frames = animation.Frames,
+            FrameDurationMilliseconds = animation.FrameDurationMilliseconds,
+            Loops = animation.Loops,
+            MotionBounds = new PetBounds(animation.MotionBounds.X * scale, animation.MotionBounds.Y * scale,
+                animation.MotionBounds.Width * scale, animation.MotionBounds.Height * scale)
+        }).ToList()
+    };
+
     public static PetDefinition Parse(string json, int actualSheetWidth, int actualSheetHeight)
     {
         PetDefinition definition;
