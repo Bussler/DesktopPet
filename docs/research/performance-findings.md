@@ -1,5 +1,7 @@
 # Performance findings: RAM and Notes latency
 
+> Historical investigation from 2026-10-08, with an integration note from 2026-10-09. Measurements and acceptance status below describe those candidates; they have not been rerun for the current checkout. See [project overview](../project.md) and [build workflow](../build.md) for current development guidance.
+
 Investigation date: **2026-10-08**. Source snapshot: `067a6074c4924c5c716d382d3e5693f3b0472b5d`.
 
 This document consolidates the investigations into approximately 200 MB of reported RAM usage and sluggish typing/formatting in Notes. It records the original measurements, the ten performance changes implemented in this worktree, integrated Release results, and verification still required. Measurements describe these fixtures and this machine; they are not universal release limits or native frame-rate guarantees.
@@ -275,9 +277,9 @@ The original investigation below records the pre-change baseline and candidate p
 
 The session bundles are local and ignored by Git. They preserve detailed reports, raw data, and probe sources; the essential findings above remain readable without them.
 
-- [RAM investigation bundle](../.codex/memory-diagnosis-20261008/REPORT.md): `measurements.json`, raw scenario `.jsonl` files, `Program.cs`, and `MemoryProbe.csproj`.
-- [Notes latency investigation bundle](../.codex/notes-latency-20261008/REPORT.md): `matrix.json`, `components.json`, `formatting-pair.json`, `environment.json`, and probe source/project/runtime configuration.
-- [Integrated ticket 11 evidence](../.codex/performance-ticket-11-20261008.md) and raw paired runs in `.scratch/hood-performance/results-t11/`.
+- RAM investigation bundle (`.codex/memory-diagnosis-20261008/REPORT.md`): `measurements.json`, raw scenario `.jsonl` files, `Program.cs`, and `MemoryProbe.csproj`.
+- Notes latency investigation bundle (`.codex/notes-latency-20261008/REPORT.md`): `matrix.json`, `components.json`, `formatting-pair.json`, `environment.json`, and probe source/project/runtime configuration.
+- Integrated ticket 11 evidence (`.codex/performance-ticket-11-20261008.md`) and raw paired runs in `.scratch/hood-performance/results-t11/`.
 
 The original RAM probe was run in `C:\github\DesktopPet`; its records are copied into this worktree for reference. Latency measurements were made in this worktree. Both reports identify the same source commit. This consolidated document reuses those measurements; it does not claim a new benchmark run.
 
@@ -302,14 +304,14 @@ RAM probes used operational 150/200 MiB diagnostic markers during development. T
 
 ### Source locations
 
-- [HoodAssets.cs](../DesktopPet.Windows/HoodAssets.cs): atlas loading/decoding.
-- [HoodOverlayWindow.xaml.cs](../DesktopPet.Windows/HoodOverlayWindow.xaml.cs): timer, crop creation, rendering and visibility.
-- [NotesAppearance.cs](../DesktopPet.Windows/NotesAppearance.cs): stylesheet/theme resources.
-- [SettingsWindow.xaml.cs](../DesktopPet.Windows/SettingsWindow.xaml.cs): original/preview assets and rollback.
-- [NoteWindow.xaml.cs](../DesktopPet.Windows/NoteWindow.xaml.cs): edit/selection events, conversion, formatting, rebuilding, toolbar and offsets.
-- [App.xaml.cs](../DesktopPet.Windows/App.xaml.cs) and [NotesListWindow.xaml.cs](../DesktopPet.Windows/NotesListWindow.xaml.cs): editor ownership and content-driven list refresh.
-- [NotesApplication.cs](../DesktopPet.Core/NotesApplication.cs): snapshot updates, save flow, undo/redo and history accounting.
-- [JsonNotesStore.cs](../DesktopPet.Core/JsonNotesStore.cs) and [AtomicFile.cs](../DesktopPet.Core/AtomicFile.cs): JSON validation/serialization and file replacement.
+- [HoodAssets.cs](../../DesktopPet.Windows/HoodAssets.cs): atlas loading/decoding.
+- [HoodOverlayWindow.xaml.cs](../../DesktopPet.Windows/HoodOverlayWindow.xaml.cs): timer, crop creation, rendering and visibility.
+- [NotesAppearance.cs](../../DesktopPet.Windows/NotesAppearance.cs): stylesheet/theme resources.
+- [SettingsWindow.xaml.cs](../../DesktopPet.Windows/SettingsWindow.xaml.cs): original/preview assets and rollback.
+- [NoteWindow.xaml.cs](../../DesktopPet.Windows/NoteWindow.xaml.cs): edit/selection events, conversion, formatting, rebuilding, toolbar and offsets.
+- [App.xaml.cs](../../DesktopPet.Windows/App.xaml.cs) and [NotesListWindow.xaml.cs](../../DesktopPet.Windows/NotesListWindow.xaml.cs): editor ownership and content-driven list refresh.
+- [NotesApplication.cs](../../DesktopPet.Core/NotesApplication.cs): snapshot updates, save flow, undo/redo and history accounting.
+- [JsonNotesStore.cs](../../DesktopPet.Core/JsonNotesStore.cs) and [AtomicFile.cs](../../DesktopPet.Core/AtomicFile.cs): JSON validation/serialization and file replacement.
 
 ### Framework references
 

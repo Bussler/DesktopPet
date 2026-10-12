@@ -1,6 +1,6 @@
 # Pip, Crumb and Puddle animations
 
-Selected designs: Pip wears the approved forest-green wool shawl with fringed ends; Crumb wears a mustard hoodie with the hood down; Puddle has no accessory. Pip and Crumb hold a bowl in both paws while eating upright. Use this Pip design for future artwork.
+This source-project reference covers the alternate-pet assets and their regeneration. Pip wears a forest-green wool shawl with fringed ends; Crumb wears a mustard hoodie with the hood down; Puddle has no accessory. Pip and Crumb hold a bowl in both paws while eating upright.
 
 Each pet has a transparent **6144×4160** atlas, **145 pose cells** and **265 playback entries**, covering all ten Hood actions. The manifests preserve Hood's frame layout, timing, looping, idle hold, sprite scale and motion bounds; only the pet name differs. Movement and reactions remain controlled by the existing application.
 
@@ -28,4 +28,4 @@ This replaces the selected pet's atlas, manifest, packing record and contact she
 
 Walking uses compact legs and feet placed at each pet's lower-belly center, with a restrained stride and lift. Pip has broader paws; Crumb retains the smaller approved feet. Run `.\tools\Test-AlternatePetSprites.ps1` to check the repaired wave/sleep/wake frames for detached artifacts, foot proportions and placement, visibility and front/back alternation, stride continuity and exact running mirrors.
 
-Verification covered the current application manifest parser, equality with Hood's animation contract except name, occupied frames, transparent cell edges, exact running mirrors, transparency corners and all ten actions in the browser viewer. Native desktop animation acceptance is still pending.
+After regeneration, run `tools\Test.ps1` from the repository root, then build a package and inspect all actions in the app. The browser viewer checks pose/timing presentation; native acceptance also needs to cover movement, monitor scaling, and Settings preview/Cancel. See [build and development](../../build.md).

@@ -1,5 +1,7 @@
 # Desktop Pet implementation plan
 
+> Historical first-release plan. For the current repository structure and supported workflows, see the [project overview](../project.md) and [build guide](../build.md).
+
 Source of truth: [SPEC.md](SPEC.md). This plan covers the first Windows release featuring Hood. It defines implementation work; creating this plan does not begin that work or create tickets.
 
 ## Technical approach

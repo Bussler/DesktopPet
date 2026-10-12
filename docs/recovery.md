@@ -1,6 +1,35 @@
-# Configuration and session recovery
+# Local data and recovery
 
-Hood stores `config.yaml` and `state.json` in `%LOCALAPPDATA%\HoodDesktopPet`, separately from the installation and runtime files.
+Hood stores settings, pet progress, and Notes in `%LOCALAPPDATA%\HoodDesktopPet`, usually `C:\Users\<your-name>\AppData\Local\HoodDesktopPet`. Paste the `%LOCALAPPDATA%` path into File Explorer, or use **Open config folder** in Settings. The data folder is separate from the executable and artwork.
+
+| File | Contents |
+| --- | --- |
+| `config.yaml` | Shared settings, including pet, appearance, behavior, Notes preferences, and Windows startup. |
+| `state.json` | Pet needs, remaining timers, position, and roaming area. |
+| `notes.json` | Names, content, formatting, colors, bounds, open/hidden state, and Trash. |
+
+## Back up and restore
+
+Resolve any **Not saved** message, Quit through the pet or tray menu, and copy the entire data folder to your backup location. To restore, quit Hood and replace the data folder with your backup before relaunching. Keep a copy of the replaced folder until you have checked the restored workspace. Back up custom artwork separately from its folder under `app\Assets`.
+
+App updates reuse this data folder. Back up before upgrading or rolling back: newer versions can migrate files into formats an older executable cannot read. Removing the app folder does not remove your data; deleting the data folder removes settings, pet progress, all notes, and Trash.
+
+## Use a separate data folder
+
+`HOOD_DATA_DIRECTORY` overrides the directory for all three files. Set it before launching Hood; a missing configuration creates defaults there. For example, from PowerShell in an extracted package:
+
+```powershell
+$env:HOOD_DATA_DIRECTORY = Join-Path $env:TEMP 'HoodDesktopPet-test'
+& .\app\DesktopPet.Windows.exe
+```
+
+Choose a new folder for an isolated test workspace. After quitting that instance, remove the override from this shell before launching your normal copy:
+
+```powershell
+Remove-Item Env:HOOD_DATA_DIRECTORY
+```
+
+The override affects file storage. Windows startup registration still uses the shared per-user `HoodDesktopPet` entry; see [startup configuration](configuration.md#windows-startup). Avoid running copies against the same data folder at the same time.
 
 ## Configuration errors
 

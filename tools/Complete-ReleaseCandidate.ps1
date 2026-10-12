@@ -15,7 +15,7 @@ $docsDirectory = Join-Path $candidateRoot 'docs'
 New-Item -ItemType Directory -Path $docsDirectory -Force | Out-Null
 $appGuides = @(
     'changing-sprites.md', 'configuration.md', 'hood-animations.md', 'notes.md',
-    'placement.md', 'recovery.md', 'sleep-and-recovery.md', 'ui-styles.md',
+    'placement.md', 'recovery.md', 'sleep-and-recovery.md', 'ui-styles.md', 'third-party-notices.md',
     'previews\hood-actions.png'
 )
 foreach ($guide in $appGuides) {
@@ -24,6 +24,5 @@ foreach ($guide in $appGuides) {
     Copy-Item -LiteralPath (Join-Path $repositoryRoot "docs\$guide") -Destination $destination -Force
 }
 Copy-Item -LiteralPath (Join-Path $repositoryRoot 'README.md') -Destination $candidateRoot -Force
-Copy-Item -LiteralPath (Join-Path $repositoryRoot 'THIRD_PARTY_NOTICES.md') -Destination (Join-Path $docsDirectory 'third-party-notices.md') -Force
 
 Write-Output "App, README, and documentation are in $candidateRoot"

@@ -1,133 +1,88 @@
 # Hood desktop pet
 
-Hood is an animated Windows desktop companion with a built-in sticky notes workspace. He roams within an area you choose, reacts with small gestures, and tracks hunger, boredom, and sleep. Notes and settings stay on your computer; no account or network connection is needed to use the app.
-
-## What the app does
-
-- **Desktop companion:** feed Hood, let him nap, or leave him to roam and react. Needs and timers pause while the app is closed or Windows is suspended.
-- **Choose your pet:** switch between Hood the owl, Pip the fox with a green wool shawl, Crumb the mouse with a mustard hoodie, and Puddle the slime. Each uses the same controls, reactions, and movement.
-- **Flexible placement:** drag Hood between displays and move or resize his roaming area from any edge or corner. He can roam horizontally, vertically, or diagonally when the area has enough room.
-- **Local notes:** create and name notes, format text, make lists and checklists, and choose individual note colors. Search the Notes list, move notes to recoverable Trash, or restore them later.
-- **Appearance and behavior:** choose Sticky Notes, Minimal, Soft, or Studio styling; use light, dark, or system brightness; configure roaming, random reaction timing, and always-on-top behavior.
-- **Saved workspace:** restore pet progress, placement, notes, and settings on restart. Starting with Windows is optional and disabled by default.
+Hood is an animated Windows desktop companion with sticky notes. Choose Hood the owl, Pip the fox, Crumb the mouse, or Puddle the slime; feed your pet, let it nap, and give it room to roam. Use notes for reminders, formatted text, checklists, tables, code, and equations. Settings and notes stay on your computer, with no account or network connection needed to use the app.
 
 ## Install and run
 
-The current published build targets **64-bit Windows (`win-x64`)**. It includes the .NET runtime, so you do not need to install .NET separately to run it.
+1. Obtain a published build, or [build from source](#build-from-source) below.
+2. Extract the entire package to a folder you want to keep. Keep `README.md`, `app/`, and `docs/` together.
+3. Run `app\DesktopPet.Windows.exe`. The pet appears on your desktop and its icon appears in the Windows notification area.
 
-1. Obtain a published build, or create one using the build instructions below.
-2. If it is supplied as an archive, extract the entire archive into a folder where you want to keep Hood. Run the extracted copy rather than opening the executable inside the archive.
-3. Keep the package together: `README.md`, `app`, and `docs`. The executable needs the other files in `app`, including its runtime and artwork.
-4. Launch `app\DesktopPet.Windows.exe`. There is no separate installer. Hood appears near the bottom of your primary display on first launch, and his icon appears in the Windows notification area.
+The published app targets **64-bit Windows (`win-x64`)** and includes its .NET runtime. There is no separate installer or runtime installation. Create a shortcut to the executable if desired. Enable **Start Hood when I sign in** in Settings after placing the app in its intended folder.
 
-For convenient access, create a shortcut to the executable. To launch Hood when you sign in, enable **Start Hood when I sign in** in Settings after placing the app in its intended folder.
+## Use your pet
 
-### Basic controls
-
-| Action | Result |
+| Control | Action |
 | --- | --- |
-| Left-click Hood while awake | Show or hide your open notes. The first activation creates a blank note; if all notes are closed, it opens the Notes list. |
-| Left-click Hood while sleeping | Wake Hood; this click does not also toggle notes. |
-| Drag Hood | Move Hood and his roaming area together, including between displays. |
-| Right-click Hood | View his needs and access Feed, Sleep, Edit roaming area, Notes, Settings, and Quit. |
-| Right-click the tray icon | Open Settings or quit the app. Double-clicking the icon also opens Settings. |
+| Left-click an awake pet | Show or hide open notes. The first use creates a blank note; if all notes are closed, it opens the Notes list. |
+| Left-click a sleeping pet | Wake it. This click is used only for waking. |
+| Drag the pet | Move it and its roaming area, including between monitors. |
+| Right-click the pet | View needs; Feed, Sleep, Edit roaming area, open Notes or Settings, or Quit. |
+| Right-click the tray icon | Access Notes, Settings, Show Hood sprites, or Quit. Double-click opens Settings. |
 
-Use **Notes > New note** to create another note, **Notes > Notes list** to search or manage notes and Trash, and **Notes > Notes settings** to adjust shared note preferences. Closing a note saves it as closed; hiding the group keeps it available for the next show. See the [Notes guide](docs/notes.md) for formatting shortcuts, selection, saving, and recovery.
+**Edit roaming area** shows an outline: drag its top bar to move it, or its edges and corners to resize it. Needs and timers pause while the app is closed or Windows is suspended.
 
-Open **Settings > Appearance** to choose a pet or UI style. Each selection previews immediately while your current action, needs, nap, and placement continue. **Save** keeps the choices for the next launch; **Cancel** or closing Settings restores the appearance from before the menu opened.
+In **Settings > Appearance**, choose a pet, size (50%–200%), UI style, and System/Light/Dark theme. Changes preview immediately; **Save** keeps them, while **Cancel** or closing Settings restores the previous appearance. Behavior settings control roaming, animations, reactions, and always-on-top. Turn off **Show Hood sprites** to use notes alone; the pet pauses, and the tray menu can show it again.
 
-Use **Pet size** in the same section to resize any pet from **50% to 200%**. The slider previews immediately; **Save** keeps the size for every pet and the next launch. **Cancel** or closing Settings undoes sizing changes while retaining later movement and roaming-area edits.
+## Use notes
 
-## Saved data, updates, and removal
+- Create a note through **Notes > New note** in the pet or tray menu, or **+ New note** in a note header. Click its name to rename it, drag unused header space to move it, and drag an edge or corner to resize it.
+- Click the body to type. When the note has focus, its toolbar offers text formatting, bullets, numbering, and checklists. **Ctrl+B/I/U** applies bold/italic/underline; **Ctrl+Z/Y** undoes/redoes. Type `- `, `1) `, or `- [ ] ` to start a list. Markdown shortcuts also support headings, code, equations, and web links; right-click the editor to create a table or math block.
+- Use the **⋯ Note menu** for color, Notes settings, and **Delete note**. Closing a note keeps it in the Notes list; deleting moves it to recoverable **Trash**. **Notes > Notes list** searches names and content and lets you reopen, restore, or permanently delete notes.
+- Edits save immediately. If **Not saved** appears, fix the reported storage issue and choose **Retry save** before quitting. Open notes and their positions return on restart; hiding the group preserves which notes are open.
 
-Hood stores data under `%LOCALAPPDATA%\HoodDesktopPet`, separately from the app folder:
+See the [Notes guide](docs/notes.md) for all shortcuts and editing features.
 
-| File | Contents |
+## Your local data
+
+Open `%LOCALAPPDATA%\HoodDesktopPet` in File Explorer (usually `C:\Users\<your-name>\AppData\Local\HoodDesktopPet`), or click **Open config folder** in Settings. Data is separate from the app folder:
+
+| File | Stores |
 | --- | --- |
-| `config.yaml` | Selected pet, behavior, appearance, startup, and Notes settings. |
-| `state.json` | Pet needs, remaining timers, and placement. |
-| `notes.json` | Note names, text, formatting, colors, window positions, open/hidden state, and Trash. |
+| `config.yaml` | Pet choice, appearance, behavior, startup, and shared Notes settings. |
+| `state.json` | Pet needs, timers, position, and roaming area. |
+| `notes.json` | Note names, content, formatting, colors, positions, open/hidden state, and Trash. |
 
-Accepted note edits save immediately. Use **Quit** from Hood's menu or the tray menu to save the pet session and close the app. If a note reports **Not saved**, resolve the reported storage issue and use **Retry save** before quitting.
+**Back up:** Quit through the pet or tray menu, then copy the entire data folder. **Update:** back up first, quit the old copy, extract the new build into a separate folder, and launch it; it uses your existing data. With startup enabled, launching the new copy updates its startup location. Back up custom sprites separately. **Remove:** disable startup, quit, and delete the app folder and shortcuts. Delete the data folder only if you also want to erase settings, progress, and notes.
 
-To back up your workspace, quit Hood and copy the entire data folder. Before updating, quit the old copy and extract the new build into a separate folder. Launch the new executable to use the existing saved data; if startup is enabled, launching from the new location refreshes its registration. Keep any custom artwork backed up and copy it into the new build if needed.
-
-To remove the app, disable **Start Hood when I sign in**, quit Hood, and delete its app folder and shortcuts. Saved data remains in `%LOCALAPPDATA%\HoodDesktopPet`; delete that folder only if you also want to remove settings, progress, and all notes.
-
-Change ordinary options in Settings. For advanced YAML settings, quit Hood before editing `config.yaml`, then relaunch. The [configuration guide](docs/configuration.md) lists defaults and valid ranges; the [recovery guide](docs/recovery.md) explains configuration errors and damaged saved files.
-
-## Change the pet sprites
-
-For the included artwork, use the **Pet** dropdown in Settings. To replace a pet's artwork with custom sprites:
-
-1. Quit Hood from the tray menu.
-2. Back up `hood_spritesheet.png` and `hood.animations.json` from that pet's folder under `app\Assets` (`Hood`, `Pip`, `Crumb`, or `Puddle`) outside the app folder.
-3. Replace the PNG with your own transparent artwork. For a direct replacement, keep the 6144×4160 sheet, its 16×10 grid of 384×416 pixel cells, and the existing animation positions.
-4. For a different grid or frame sequence, also update `hood.animations.json`. Keep both filenames and all ten required actions. The [sprite guide](docs/changing-sprites.md) explains the layout, JSON fields, and recovery steps.
-5. Relaunch Hood to load the new artwork. The tray icon is embedded separately and stays the same.
-
-In the source project, edit the files under the corresponding `Assets` pet folder instead, then rebuild. Changes made only to a published copy are not included in later builds.
+For advanced settings, quit before editing YAML. See [configuration](docs/configuration.md) and [data recovery](docs/recovery.md), including how to use a different data folder with `HOOD_DATA_DIRECTORY`.
 
 ## Build from source
 
-Building requires Windows, PowerShell, the source checkout, and the **.NET SDK pinned by `global.json`** (currently `10.0.401`, with later patches in the same feature band allowed). A runtime-only installation is not enough. NuGet package restore requires access to the configured package feeds unless the packages are already cached.
+1. On Windows, install [Git for Windows](https://git-scm.com/downloads/win) and the **Windows x64 .NET SDK 10.0.401** from [Microsoft's .NET 10 download page](https://dotnet.microsoft.com/en-us/download/dotnet/10.0). `global.json` permits later `10.0.4xx` patches; a runtime alone or a different SDK feature band is insufficient. PowerShell is also required; Visual Studio is optional.
+2. Open a new PowerShell window, clone the repository into your chosen parent folder, and enter it (repository access is required):
 
-Open PowerShell in the repository root and run:
+   ```powershell
+   git clone https://github.com/Bussler/DesktopPet.git
+   Set-Location DesktopPet
+   dotnet --version
+   ```
 
-```powershell
-.\tools\Build-AndPublish.ps1
-```
+3. Build and package from the repository root. The script restores locked dependencies from NuGet, compiles the app, and publishes it with its runtime, assets, and user guides. Internet access is needed for uncached dependencies.
 
-The script restores locked app dependencies, builds and publishes a self-contained Windows app, and adds the release documentation. It stops if a step fails. By default, it selects `%USERPROFILE%\.dotnet\dotnet.exe` when present, otherwise `dotnet` from your PATH. It does not run tests or build test projects.
+   ```powershell
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Build-AndPublish.ps1
+   ```
 
-Output goes to a new `artifacts\hood-build-yyyyMMdd-HHmmss` folder:
+4. Run the executable path printed by the script: `artifacts\hood-build-yyyyMMdd-HHmmss\app\DesktopPet.Windows.exe`. Keep the whole output folder together.
 
-```text
-README.md
-app/
-  DesktopPet.Windows.exe
-  ... runtime files and assets
-docs/
-```
-
-The script prints the executable path when it finishes. Run validation separately before distributing a release:
+To validate a source change, run the separate test workflow; packaging does not run tests:
 
 ```powershell
-.\tools\Test.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test.ps1
 ```
 
-This restores locked solution dependencies, checks sprite transparency and walking animations, and builds and runs all Release tests. Test results remain in `DesktopPet.Tests\TestResults` in the source checkout. It accepts the same `-DotnetExe` override and produces no release package.
+The scripts prefer `%USERPROFILE%\.dotnet\dotnet.exe` if present, otherwise `dotnet` on PATH. Add `-DotnetExe C:\path\to\dotnet.exe` to select the installed SDK explicitly. The process-only execution-policy option above avoids changing your PowerShell configuration. Developer commands, output options, and troubleshooting are in `docs/build.md` in the source checkout.
 
-To choose an output folder, run:
+## More help
 
-```powershell
-.\tools\Build-AndPublish.ps1 -CandidateDirectory .\artifacts\my-build
-```
-
-The output folder must not already exist. Relative paths are resolved from the repository root. Use `-DotnetExe C:\path\to\dotnet.exe` to select a different SDK installation.
-
-If PowerShell blocks the script because of its execution policy, you can run it in a separate process with:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Build-AndPublish.ps1
-```
-
-This command also works from Command Prompt and applies the policy override only to that process. Additional build and project details are in `docs/build.md` in the source checkout; that developer guide is not included in published builds.
-
-## Documentation
-
-These guides are available in both the source checkout and the published build:
-
-| Guide | More information |
+| Guide | Covers |
 | --- | --- |
-| [Notes](docs/notes.md) | Creating and naming notes, formatting shortcuts, search, bulk actions, Trash, and save recovery. |
-| [Third-party notices](docs/third-party-notices.md) | Licenses and notices for the bundled renderer, fonts, and runtime. |
-| [Configuration](docs/configuration.md) | Settings, YAML defaults and ranges, reaction timing, and Windows startup. |
-| [UI styles](docs/ui-styles.md) | Appearance styles, light/dark/system brightness, and note colors. |
-| [Placement](docs/placement.md) | Dragging, resizing the roaming area, display scaling, and monitor changes. |
-| [Sleep and recovery](docs/sleep-and-recovery.md) | Automatic naps, manual sleep, early waking, and paused timers. |
-| [Data recovery](docs/recovery.md) | Invalid configuration, damaged session or notes files, and save failures. |
-| [Changing sprites](docs/changing-sprites.md) | Replacing artwork, animation manifest fields, and changing the tray icon. |
-| [Hood animations](docs/hood-animations.md) | Animation actions, spontaneous reactions, and the sprite preview. |
+| [Notes](docs/notes.md) | Editing, Markdown, math, links, tables, settings, and Trash. |
+| [Configuration](docs/configuration.md) and [UI styles](docs/ui-styles.md) | Settings, appearance, and startup. |
+| [Placement](docs/placement.md) and [Sleep](docs/sleep-and-recovery.md) | Roaming areas, monitors, naps, and timers. |
+| [Data recovery](docs/recovery.md) | Backups, save failures, and damaged files. |
+| [Changing sprites](docs/changing-sprites.md) and [Animations](docs/hood-animations.md) | Custom artwork and animation previews. |
+| [Third-party notices](docs/third-party-notices.md) | Bundled dependency notices. |
 
-For development, the source checkout also contains `docs/build.md`, `docs/ui-style-development.md`, and architecture decisions under `docs/adr/`.
+These guides accompany published builds. The source checkout also has the documentation index at `docs/README.md`, with build instructions, architecture, specifications, and development references.

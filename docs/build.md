@@ -1,49 +1,91 @@
-# Build from source
+# Build and development workflow
 
-These commands require a source checkout and the .NET 10 SDK pinned by `global.json`. From the repository root, run:
+This guide requires a source checkout. For installation, initial cloning, and the first packaged build, start with the [README](../README.md#build-from-source).
+
+## Requirements
+
+- Windows and PowerShell. Windows PowerShell 5.1 runs the build and test workflows; artwork regeneration requires PowerShell 7.
+- Git and repository access, or an extracted source archive.
+- The Windows x64 .NET SDK specified by [global.json](../global.json): `10.0.401`, with `latestPatch` roll-forward within the `10.0.4xx` feature band and no prerelease SDKs. A runtime-only install cannot compile the project. Visual Studio is optional.
+- Access to NuGet feeds for dependencies not already cached. Versions are central in [Directory.Packages.props](../Directory.Packages.props); checked-in `packages.lock.json` files make locked restore reproducible.
+
+Run commands from the repository root. The scripts choose `%USERPROFILE%\.dotnet\dotnet.exe` when present, otherwise `dotnet` on PATH. They accept `-DotnetExe C:\path\to\dotnet.exe`; use this when a per-user SDK differs from the one your shell finds.
+
+## Compile and run during development
 
 ```powershell
-.\tools\Build-AndPublish.ps1
+dotnet --version
+dotnet restore .\DesktopPet.sln --locked-mode
+dotnet build .\DesktopPet.sln --configuration Release --no-restore
+dotnet run --project .\DesktopPet.Windows\DesktopPet.Windows.csproj --configuration Release --no-build
 ```
 
-The script selects the per-user SDK when available, restores locked app dependencies, builds and publishes a self-contained `win-x64` app, and adds release documentation. It stops on failure and prints the executable path on success. Test projects and sprite checks are excluded from this path; publishing performs the app build itself.
+The development executable is under `DesktopPet.Windows\bin\Release\net10.0-windows`. This output uses the installed runtime; use the publish workflow below for a self-contained app. Both copies use your normal local data unless you set `HOOD_DATA_DIRECTORY`. See [isolated data](recovery.md#use-a-separate-data-folder) before testing recovery or destructive Notes actions.
 
-Run validation separately before distributing a release:
+## Automated validation
 
 ```powershell
-.\tools\Test.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test.ps1
 ```
 
-This restores locked solution dependencies, checks Hood sprite transparency and walking animations plus Pip/Crumb artwork and strides, and builds and runs all Release tests. Results stay in `DesktopPet.Tests\TestResults` in the source checkout. Use `-DotnetExe C:\path\to\dotnet.exe` to select an SDK installation. Validation stops on failure and produces no release package. If execution policy blocks either script, use `powershell.exe -NoProfile -ExecutionPolicy Bypass -File` followed by its path.
+This restores the solution in locked mode, checks sprite transparency and walking animations, then builds and runs all Release tests. It stops on failure and writes TRX results under `DesktopPet.Tests\TestResults`; it produces no release package.
 
-Output goes to a new `artifacts\hood-build-yyyyMMdd-HHmmss` folder with only:
+For a focused iteration after restore:
+
+```powershell
+dotnet test .\DesktopPet.Tests\DesktopPet.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~NotesApplicationTests"
+```
+
+Use `DesktopPet.Windows.Tests\DesktopPet.Windows.Tests.csproj` for frontend tests. Run the complete workflow before handing off a behavior change. Automated results do not establish native visual quality, physical keyboard/clipboard behavior, tray interaction, or mixed-DPI monitor behavior. Relevant checklists live in [tools/manual-acceptance](../tools/manual-acceptance); run them against the packaged executable with a separate data folder.
+
+## Publish a runnable package
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Build-AndPublish.ps1
+```
+
+The script restores only the app project in locked mode, builds through `dotnet publish`, and packages a self-contained `win-x64` app. Tests and sprite checks run separately. The default output is a new `artifacts\hood-build-yyyyMMdd-HHmmss` folder:
 
 ```text
 README.md
 app/
+  DesktopPet.Windows.exe
+  ... runtime files and Assets/
 docs/
+  ... user guides and third-party notices
 ```
 
-Run `app\DesktopPet.Windows.exe` from that folder. The app includes its .NET runtime, sprite sheet, animation manifest, and embedded tray icon. Use `-CandidateDirectory .\artifacts\my-build` to choose another new output folder, or `-DotnetExe C:\path\to\dotnet.exe` to select an SDK installation. Relative output paths are resolved from the repository root; existing output folders are rejected.
+The script prints the executable path. Run that copy to check a release. To choose a different output directory or SDK:
 
-The solution contains the portable `DesktopPet.Core`, Windows `DesktopPet.Windows`, behavior-test `DesktopPet.Tests`, and frontend-test `DesktopPet.Windows.Tests` projects. NuGet versions are pinned centrally and restore lock files are checked in. To include custom artwork in future builds, edit the source assets as described in [changing sprites](changing-sprites.md).
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Build-AndPublish.ps1 -CandidateDirectory .\artifacts\my-build -DotnetExe C:\path\to\dotnet.exe
+```
 
-Settings and saved progress stay under `%LOCALAPPDATA%\HoodDesktopPet`. See [configuration](configuration.md) and [recovery](recovery.md). To update the bundled runtime, update the pinned SDK and locked dependencies, then rebuild.
+The output directory must not already exist; relative paths resolve from the repository root. [Complete-ReleaseCandidate.ps1](../tools/Complete-ReleaseCandidate.ps1) checks the executable and copies an explicit list of user guides. Developer documentation, specifications, research, and manual checklists stay in the source checkout. Keep generated output and verification evidence out of Git.
 
-Published `docs` contains only app usage, configuration, placement, sleep, recovery, sprite guides, the sprite preview, and third-party notices. Build instructions, architecture decisions, UI development references, and test checklists are excluded. The package guides are listed explicitly in `tools\Complete-ReleaseCandidate.ps1`. Manual Windows checklists live in [tools/manual-acceptance](../tools/manual-acceptance). For manual recovery checks without touching your normal data, set `HOOD_DATA_DIRECTORY` to a new temporary folder before launching the executable.
+The bundled runtime does not receive updates from an installed runtime. To service it, update the pinned SDK and any affected dependency locks deliberately, validate, and publish a new package.
 
-## Tool scripts
+## Troubleshooting
 
-Only the first two scripts are routine entry points. The helpers remain separate so asset checks and regeneration can run independently.
-
-| Script under `tools` | Purpose and when needed |
+| Symptom | Check |
 | --- | --- |
-| `Build-AndPublish.ps1` | Build and package the app without running tests. |
-| `Test.ps1` | Run all automated validation without packaging. |
-| `Complete-ReleaseCandidate.ps1` | Called by the build script to check the executable and copy the explicit documentation list. Also usable after a manual publish. |
-| `Test-HoodSpriteTransparency.ps1` | Called by the test script; checks transparent frame corners. Accepts `-AssetsDirectory` for another pet. |
-| `Test-HoodRunSprites.ps1` | Called by the test script; checks Hood foot visibility, clipping, mirror parity, and stride continuity. |
-| `Test-AlternatePetSprites.ps1` | Called by the test script; checks Pip/Crumb artifacts, foot proportions, stride continuity, and exact mirrors. Also exercised by the Windows PowerShell compatibility test. |
-| `Generate-HoodTrayIcon.ps1` | Regenerate `hood.ico` when its source artwork changes. Not needed for ordinary builds. |
-| `Pack-AlternatePetSprites.ps1` | Repack Pip, Crumb, or Puddle source art and previews. Requires PowerShell 7 on Windows; not needed for ordinary builds. See [animation previews](previews/pet-animations/README.md). |
-| `manual-acceptance/` | Native Windows checklists for behavior that automated tests cannot establish. |
+| `git clone` is denied | Confirm repository access and GitHub authentication, or obtain a source archive. |
+| `dotnet` is missing or the SDK is incompatible | Reopen PowerShell after installation; run `dotnet --list-sdks` and compare with `global.json`. Check the per-user SDK or pass `-DotnetExe`. |
+| PowerShell blocks a script | Use the `powershell.exe -NoProfile -ExecutionPolicy Bypass -File` commands above; the override lasts only for that process. |
+| Restore fails | Check feed access and the full restore error. Keep locked mode; do not delete lock files to hide a mismatch. |
+| Output already exists | Choose a new `-CandidateDirectory`. |
+| Sprite validation fails | Inspect the reported asset and restore or correct it; see [changing sprites](changing-sprites.md). |
+| Windows tests fail | Read the TRX failure and check native prerequisites such as clipboard availability and window activation. |
+
+## Maintenance helpers
+
+| Script | Purpose |
+| --- | --- |
+| `tools\Complete-ReleaseCandidate.ps1` | Assemble documentation after publishing; requires `app\DesktopPet.Windows.exe`. |
+| `tools\Test-HoodSpriteTransparency.ps1` | Validate transparent frame corners; accepts `-AssetsDirectory`. |
+| `tools\Test-HoodRunSprites.ps1` | Validate Hood foot visibility, clipping, mirrors, and stride continuity. |
+| `tools\Test-AlternatePetSprites.ps1` | Validate Pip/Crumb artwork, feet, strides, and mirrors. |
+| `tools\Generate-HoodTrayIcon.ps1` | Regenerate the embedded icon after changing its source artwork. |
+| `tools\Pack-AlternatePetSprites.ps1` | Repack alternate-pet art with PowerShell 7; see [animation assets](previews/pet-animations/README.md). |
+
+See the [project overview](project.md) for code ownership and persisted contracts, and the [documentation index](README.md) for specifications and architecture decisions.
