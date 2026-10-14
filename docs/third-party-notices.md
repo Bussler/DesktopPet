@@ -18,7 +18,7 @@ The self-contained Windows publish includes Microsoft .NET and Windows Desktop r
 
 The runtime is self-contained, so it does not receive updates from an installed .NET runtime. See Microsoft's [self-contained deployment guidance](https://learn.microsoft.com/en-us/dotnet/core/deploying/) and [.NET support policy](https://dotnet.microsoft.com/en-us/platform/support/policy/dotnet-core) for servicing requirements.
 
-The packaged Hood artwork was generated with AI.
+The packaged pet and headphone artwork was generated with AI.
 ## WPF-Math and XamlMath.Shared 2.1.0
 
 The application uses the `WpfMath` and `XamlMath.Shared` NuGet packages at version 2.1.0. Package metadata declares `MIT AND OFL-1.1`. The upstream source is [ForNeVeR/xaml-math at the package commit](https://github.com/ForNeVeR/xaml-math/tree/d6f576345998777dcf7ad112da1add9bd7ad9674); see its [license](https://github.com/ForNeVeR/xaml-math/blob/d6f576345998777dcf7ad112da1add9bd7ad9674/LICENSE.md) and [release notes](https://github.com/ForNeVeR/xaml-math/releases/tag/v2.1.0). The library code and resources are MIT-licensed; the bundled font files have their own licenses, reproduced below from the package's `FONT-LICENSES.md`.

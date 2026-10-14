@@ -9,7 +9,7 @@ These files ship with the app, together with the Hood animation preview and thir
 | Guide | Purpose |
 | --- | --- |
 | [Notes](notes.md) | Create, edit, format, search, close, and restore notes. |
-| [Configuration](configuration.md) | Settings, YAML defaults and bounds, and Windows startup. |
+| [Configuration](configuration.md) | Settings, audio-following headphones, YAML defaults and bounds, and Windows startup. |
 | [UI styles](ui-styles.md) | Appearance, theme, and preview behavior. |
 | [Placement](placement.md) | Dragging, roaming areas, monitors, and scaling. |
 | [Sleep](sleep-and-recovery.md) | Needs, naps, waking, and paused timers. |
@@ -42,6 +42,8 @@ Specifications record agreed behavior and refinements. They preserve their origi
 | [Notes specification](specs/Notes-SPEC.md) | Notes lifecycle, editing, management, and persistence. |
 | [Markdown, math, and links](specs/Notes-Markdown-Math-Links-SPEC.md) | Rich Notes input, rendering, and clipboard contracts. |
 | [UI styles specification](specs/UI-Styles-SPEC.md) | Shared appearance and preview/rollback behavior. |
+| [Media headphones specification](specs/Media-Headphones-SPEC.md) | Audible Spotify/browser detection and headphones across all pet animations. |
+| [Media headphones acceptance](specs/Media-Headphones-ACCEPTANCE.md) | Automated evidence, native acceptance gaps, and the candidate package identity. |
 | [Performance specification](specs/Performance-SPEC.md) | Measured optimization requirements and acceptance. |
 | [First-release implementation plan](specs/IMPLEMENTATION_PLAN.md) | Original milestones and story coverage. |
 | [Performance investigation](research/performance-findings.md) | Dated measurements, methods, limitations, and local evidence pointers. |

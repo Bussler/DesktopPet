@@ -17,6 +17,12 @@
         MouseMove="OnMouseMove"
         MouseLeftButtonUp="OnMouseLeftButtonUp"
         LostMouseCapture="OnLostMouseCapture">
-    <Image x:Name="PetImage" Width="192" Height="208" Stretch="Fill"
-           RenderOptions.BitmapScalingMode="HighQuality" />
+    <Grid>
+        <Image x:Name="HeadphoneBandImage" IsHitTestVisible="False" Stretch="Fill"
+               RenderOptions.BitmapScalingMode="HighQuality" />
+        <Image x:Name="PetImage" Width="192" Height="208" Stretch="Fill"
+               RenderOptions.BitmapScalingMode="HighQuality" />
+        <Image x:Name="HeadphoneCupsImage" IsHitTestVisible="False" Stretch="Fill"
+               RenderOptions.BitmapScalingMode="HighQuality" />
+    </Grid>
 </Window>

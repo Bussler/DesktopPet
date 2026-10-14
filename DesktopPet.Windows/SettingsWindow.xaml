@@ -70,6 +70,7 @@
                     <CheckBox x:Name="RoamingCheckBox" Content="Let Hood roam within his area" IsChecked="True" />
                     <CheckBox x:Name="IdleAnimationsCheckBox" Content="Play idle animations" IsChecked="True" />
                     <CheckBox x:Name="RandomEventsCheckBox" Content="Allow occasional reactions" IsChecked="True" Margin="0" />
+                    <CheckBox x:Name="MediaHeadphonesCheckBox" Content="Show headphones during audio playback" IsChecked="True" />
                 </StackPanel>
             </GroupBox>
 

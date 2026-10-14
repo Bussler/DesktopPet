@@ -378,6 +378,43 @@ public sealed class SettingsAndStatsTests
     }
 
     [TestMethod]
+    public void MediaHeadphonesSettingUsesTheBehaviorSaveAndCancelWorkflow()
+    {
+        using var fixture = new Fixture("light");
+        fixture.Store.LoadOrCreate();
+        var pet = fixture.Pet();
+        SettingsWindow? settings = null;
+
+        try
+        {
+            settings = fixture.HoodSettings(pet, UiStyleCatalog.StickyNotes);
+            var checkBox = (CheckBox)settings.FindName("MediaHeadphonesCheckBox");
+            Assert.AreEqual("Show headphones during audio playback", checkBox.Content);
+            Assert.IsTrue(checkBox.IsChecked);
+            checkBox.IsChecked = false;
+            settings.Close();
+            Assert.IsTrue(fixture.Controller.Current.Behavior.MediaHeadphones);
+            Assert.IsTrue(fixture.Store.LoadOrCreate().Behavior.MediaHeadphones);
+
+            settings = fixture.HoodSettings(pet, UiStyleCatalog.StickyNotes);
+            ((CheckBox)settings.FindName("MediaHeadphonesCheckBox")).IsChecked = false;
+            typeof(SettingsWindow).GetMethod("OnSaveClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(settings, [settings, new RoutedEventArgs(Button.ClickEvent)]);
+            Assert.IsFalse(fixture.Controller.Current.Behavior.MediaHeadphones);
+            Assert.IsFalse(fixture.Store.LoadOrCreate().Behavior.MediaHeadphones);
+
+            settings = fixture.HoodSettings(pet, UiStyleCatalog.StickyNotes);
+            Assert.IsFalse(((CheckBox)settings.FindName("MediaHeadphonesCheckBox")).IsChecked);
+            settings.Close();
+        }
+        finally
+        {
+            settings?.Close();
+            pet.Close();
+        }
+    }
+
+    [TestMethod]
     public void PetAndTrayTogglesStopTimerRevealOpenNotesAndCancelPendingHide()
     {
         using var fixture = new Fixture("light");

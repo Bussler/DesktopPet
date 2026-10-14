@@ -2,6 +2,8 @@
 
 Use **Settings > Appearance > Pet** to choose Hood the owl, Pip the fox with a green wool shawl, Crumb the mouse with a mustard hoodie, or Puddle the slime. Each selection previews immediately. **Save** keeps the choice; **Cancel** or closing Settings restores the previous pet and UI style. All pets share the same reactions and movement, and previewing or restoring them preserves the current action, needs, nap, and placement. A saved choice is stored as `pet` in `config.yaml` and restored at startup.
 
+When **Show headphones during audio playback** is enabled, Hood, Pip, and Puddle wear shaded over-ear headphone sprites, and Crumb wears small in-ear earbuds suited to his large ears. Accessories follow the existing poses; walking and head turns show the visible earpiece behind the face. Hood's curved headband is visible over his detective hat. The accessory uses a separate layer, so it does not add cells or change animation manifests. Replacing a built-in sprite sheet leaves its accessory layer in place; custom artwork with a different head shape or pose may need its own fit and is not covered by the built-in artwork guarantee.
+
 Hood loads `hood_spritesheet.png` and `hood.animations.json` from the selected pet's folder under `app\Assets` (`Hood`, `Pip`, `Crumb`, or `Puddle`). Quit Hood before replacing them and relaunch afterward. Back up both files outside the app folder first.
 
 ## Replace artwork with the same layout

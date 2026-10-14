@@ -53,6 +53,39 @@ public sealed class HoodConfigurationTests
     }
 
     [TestMethod]
+    public void MediaHeadphonesDefaultForLegacyConfigurationAndRoundTripToggle()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new YamlConfigurationStore(Path.Combine(directory.Path, "config.yaml"));
+        var initial = store.LoadOrCreate();
+        Assert.IsTrue(initial.Behavior.MediaHeadphones);
+        StringAssert.Contains(File.ReadAllText(store.Path), "media_headphones: true");
+
+        File.WriteAllText(store.Path, Regex.Replace(File.ReadAllText(store.Path), @"(?m)^  media_headphones:.*\r?\n", string.Empty));
+        var legacy = store.LoadOrCreate();
+        Assert.IsTrue(legacy.Behavior.MediaHeadphones);
+
+        store.Save(legacy with { Behavior = legacy.Behavior with { MediaHeadphones = false } });
+        Assert.IsFalse(store.LoadOrCreate().Behavior.MediaHeadphones);
+
+        store.Save(legacy with { Behavior = legacy.Behavior with { MediaHeadphones = true } });
+        Assert.IsTrue(store.LoadOrCreate().Behavior.MediaHeadphones);
+    }
+
+    [TestMethod]
+    public void MediaHeadphonesRejectsNonBooleanConfigurationValue()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new YamlConfigurationStore(Path.Combine(directory.Path, "config.yaml"));
+        store.LoadOrCreate();
+        var original = File.ReadAllText(store.Path);
+        File.WriteAllText(store.Path, original.Replace("media_headphones: true", "media_headphones: maybe", StringComparison.Ordinal));
+
+        Assert.Throws<HoodConfigurationException>(() => store.LoadOrCreate());
+        Assert.AreNotEqual(original, File.ReadAllText(store.Path), "Invalid configuration must remain available for correction.");
+    }
+
+    [TestMethod]
     public void LoadOrCreate_WritesDocumentedDefaultsAndReloadsManualEdits()
     {
         using var directory = new TemporaryDirectory();

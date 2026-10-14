@@ -18,6 +18,8 @@ public partial class HoodOverlayWindow : Window
     private const int WmMouseActivate = 0x0021;
     private const int MaNoActivate = 3;
     private readonly HoodSession _session;
+    private readonly IMediaAudioProbe _mediaAudioProbe;
+    private readonly MediaHeadphonePolicy _mediaHeadphonePolicy = new();
     private HoodAssetSource _assetSource;
     private LoadedHoodAssets? _assets;
     private readonly Action _showSettings;
@@ -30,6 +32,11 @@ public partial class HoodOverlayWindow : Window
     private readonly DispatcherTimer _frameTimer = new() { Interval = TimeSpan.FromMilliseconds(33) };
     private long _lastTick;
     private int _suspended;
+    private int _mediaObserverGeneration;
+    private bool _mediaHeadphonesVisible;
+    private bool _mediaHeadphonesEnabled;
+    private bool _mediaObservationStopped;
+    private MediaHeadphoneObserver? _mediaHeadphoneObserver;
     private BitmapSource? _renderedSpriteSheet;
     private Int32Rect? _renderedRectangle;
     private readonly WpfMenuItem _hungerMenuItem = new() { IsEnabled = false };
@@ -87,8 +94,27 @@ public partial class HoodOverlayWindow : Window
         Action showNotesList,
         Action showNotesSettings,
         string uiStyle)
+        : this(session, assetSource, assets, showSettings, quitApplication, activateNotes, createNote,
+            showNotesList, showNotesSettings, uiStyle, new WindowsMediaAudioProbe())
+    {
+    }
+
+    internal HoodOverlayWindow(
+        HoodSession session,
+        HoodAssetSource assetSource,
+        LoadedHoodAssets? assets,
+        Action showSettings,
+        Action quitApplication,
+        Action activateNotes,
+        Action createNote,
+        Action showNotesList,
+        Action showNotesSettings,
+        string uiStyle,
+        IMediaAudioProbe mediaAudioProbe)
     {
         _session = session;
+        _mediaAudioProbe = mediaAudioProbe;
+        _mediaHeadphonesEnabled = session.Configuration.Behavior.MediaHeadphones;
         _assetSource = assetSource;
         _assets = assets;
         _uiStyle = UiStyleCatalog.Canonicalize(uiStyle);
@@ -170,6 +196,7 @@ public partial class HoodOverlayWindow : Window
     {
         _lastTick = Stopwatch.GetTimestamp();
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
+        ApplyMediaHeadphones(_session.Configuration.Behavior.MediaHeadphones);
         UpdateTimerInterval();
         if (_session.Configuration.Behavior.ShowSprites)
         {
@@ -180,7 +207,9 @@ public partial class HoodOverlayWindow : Window
     private void OnClosed(object? sender, EventArgs e)
     {
         _frameTimer.Stop();
+        _mediaObservationStopped = true;
         SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+        StopMediaHeadphoneObservation();
     }
 
     private void OnOverlayClosed(object? sender, EventArgs e)
@@ -221,15 +250,31 @@ public partial class HoodOverlayWindow : Window
 
     private void OnPowerModeChanged(object? sender, PowerModeChangedEventArgs e)
     {
-        if (e.Mode == PowerModes.Suspend)
+        var mode = e.Mode;
+        Dispatcher.BeginInvoke(new Action(() => ApplyPowerMode(mode)), DispatcherPriority.Send);
+    }
+
+    private void ApplyPowerMode(PowerModes mode)
+    {
+        if (_mediaObservationStopped) return;
+
+        if (mode == PowerModes.Suspend)
         {
+            StopMediaHeadphoneObservation();
             Interlocked.Exchange(ref _suspended, 1);
             Interlocked.Exchange(ref _lastTick, Stopwatch.GetTimestamp());
+            _mediaHeadphonePolicy.Reset();
+            _mediaHeadphonesVisible = false;
+            RenderPresentation();
         }
-        else if (e.Mode == PowerModes.Resume)
+        else if (mode == PowerModes.Resume)
         {
             Interlocked.Exchange(ref _lastTick, Stopwatch.GetTimestamp());
             Interlocked.Exchange(ref _suspended, 0);
+            _mediaHeadphonePolicy.Reset();
+            _mediaHeadphonesVisible = false;
+            RenderPresentation();
+            if (_mediaHeadphonesEnabled) StartMediaHeadphoneObservation();
         }
     }
 
@@ -458,6 +503,7 @@ public partial class HoodOverlayWindow : Window
     {
         if (!_session.Configuration.Behavior.ShowSprites || _assets is not { } assets)
         {
+            HeadphoneBandImage.Source = HeadphoneCupsImage.Source = null;
             return;
         }
 
@@ -466,16 +512,72 @@ public partial class HoodOverlayWindow : Window
         var animation = assets.Definition.GetAnimation(presentation.Action);
         var frame = animation.Frames[presentation.FrameIndex];
         var rectangle = assets.GetFrameRectangle(frame);
-        if (ReferenceEquals(_renderedSpriteSheet, assets.SpriteSheet) && _renderedRectangle == rectangle)
+        if (!ReferenceEquals(_renderedSpriteSheet, assets.SpriteSheet) || _renderedRectangle != rectangle)
         {
+            var cropped = new CroppedBitmap(assets.SpriteSheet, rectangle);
+            cropped.Freeze();
+            PetImage.Source = cropped;
+            _renderedSpriteSheet = assets.SpriteSheet;
+            _renderedRectangle = rectangle;
+        }
+
+        if (!_mediaHeadphonesEnabled || !_mediaHeadphonesVisible)
+        {
+            HeadphoneBandImage.Source = HeadphoneCupsImage.Source = null;
             return;
         }
 
-        var cropped = new CroppedBitmap(assets.SpriteSheet, rectangle);
-        cropped.Freeze();
-        PetImage.Source = cropped;
-        _renderedSpriteSheet = assets.SpriteSheet;
-        _renderedRectangle = rectangle;
+        var headphoneArt = MediaHeadphoneArtwork.Get(
+            assets.Definition.Name, presentation.Action, frame);
+        if (!ReferenceEquals(HeadphoneBandImage.Source, headphoneArt.Behind)) HeadphoneBandImage.Source = headphoneArt.Behind;
+        if (!ReferenceEquals(HeadphoneCupsImage.Source, headphoneArt.InFront)) HeadphoneCupsImage.Source = headphoneArt.InFront;
+    }
+
+    internal void ApplyMediaHeadphones(bool enabled)
+    {
+        if (_mediaObservationStopped) return;
+        if (_mediaHeadphonesEnabled == enabled)
+        {
+            if (enabled) StartMediaHeadphoneObservation();
+            return;
+        }
+
+        _mediaHeadphonesEnabled = enabled;
+        if (enabled) StartMediaHeadphoneObservation();
+        else StopMediaHeadphoneObservation();
+
+        _mediaHeadphonePolicy.Reset();
+        _mediaHeadphonesVisible = false;
+        RenderPresentation();
+    }
+
+    private void StartMediaHeadphoneObservation()
+    {
+        if (_mediaHeadphoneObserver is not null) return;
+        var generation = ++_mediaObserverGeneration;
+        _mediaHeadphoneObserver = new MediaHeadphoneObserver(Dispatcher, _mediaAudioProbe,
+            (observation, elapsed) =>
+            {
+                if (generation != _mediaObserverGeneration || !_mediaHeadphonesEnabled) return;
+                ApplyMediaAudioObservation(observation, elapsed);
+            });
+        _mediaHeadphoneObserver.Start();
+    }
+
+    private void StopMediaHeadphoneObservation()
+    {
+        ++_mediaObserverGeneration;
+        _mediaHeadphoneObserver?.Dispose();
+        _mediaHeadphoneObserver = null;
+    }
+
+    internal void ApplyMediaAudioObservation(MediaAudioObservation observation, TimeSpan elapsed)
+    {
+        var visible = _mediaHeadphonePolicy.Update(
+            observation, elapsed, _mediaHeadphonesEnabled && Volatile.Read(ref _suspended) == 0);
+        if (_mediaHeadphonesVisible == visible) return;
+        _mediaHeadphonesVisible = visible;
+        RenderPresentation();
     }
 
     internal void ApplyAlwaysOnTop(bool enabled) => Topmost = enabled;
@@ -560,6 +662,7 @@ public partial class HoodOverlayWindow : Window
     internal void ReleaseSpriteAssets()
     {
         PetImage.Source = null;
+        HeadphoneBandImage.Source = HeadphoneCupsImage.Source = null;
         _renderedSpriteSheet = null;
         _renderedRectangle = null;
         _assets = null;
@@ -569,6 +672,7 @@ public partial class HoodOverlayWindow : Window
 
     internal void RefreshBehaviorSettings()
     {
+        ApplyMediaHeadphones(_session.Configuration.Behavior.MediaHeadphones);
         ApplyPlacement();
         UpdateTimerInterval();
         RenderPresentation();
@@ -593,8 +697,8 @@ public partial class HoodOverlayWindow : Window
 
     internal void ApplyPlacement()
     {
-        Width = PetImage.Width = _session.PetWidth;
-        Height = PetImage.Height = _session.PetHeight;
+        Width = PetImage.Width = HeadphoneBandImage.Width = HeadphoneCupsImage.Width = _session.PetWidth;
+        Height = PetImage.Height = HeadphoneBandImage.Height = HeadphoneCupsImage.Height = _session.PetHeight;
         WindowsDisplayProvider.ApplyPosition(this, _session.Presentation.Position);
         _areaEditor?.ApplyPlacement();
     }

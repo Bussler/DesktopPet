@@ -65,6 +65,7 @@ public static class UiStyleCatalog
 public sealed record BehaviorSettings
 {
     public bool ShowSprites { get; init; } = true;
+    public bool MediaHeadphones { get; init; } = true;
     public bool Roaming { get; init; } = true;
     public bool IdleAnimations { get; init; } = true;
     public bool RandomEvents { get; init; } = true;

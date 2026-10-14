@@ -15,6 +15,9 @@
   <ItemGroup>
     <ProjectReference Include="..\DesktopPet.Core\DesktopPet.Core.csproj" />
     <EmbeddedResource Include="..\Assets\Hood\hood.ico" LogicalName="DesktopPet.Hood.ico" />
+    <EmbeddedResource Include="..\Assets\Headphones\headphones.png" LogicalName="DesktopPet.Headphones.png" />
+    <EmbeddedResource Include="..\Assets\Headphones\crumb-earbuds.png" LogicalName="DesktopPet.CrumbEarbuds.png" />
+    <EmbeddedResource Include="..\Assets\Headphones\poses.json" LogicalName="DesktopPet.HeadphonePoses.json" />
     <Content Include="..\Assets\**\hood_spritesheet.png;..\Assets\**\hood.animations.json" Link="Assets\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 

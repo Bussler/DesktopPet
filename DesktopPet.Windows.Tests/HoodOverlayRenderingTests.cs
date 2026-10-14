@@ -4,7 +4,9 @@ using System.IO;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using Microsoft.Win32;
 using DesktopPet.Core;
 using DesktopPet.Windows;
 
@@ -56,6 +58,315 @@ public sealed class HoodOverlayRenderingTests
         finally
         {
             descriptor.RemoveValueChanged(image, sourceChanged);
+            pet.Close();
+        }
+    }
+
+    [TestMethod]
+    public void ValidCustomManifestNameRetainsOrdinaryArtworkDuringPlayback()
+    {
+        var builtIn = HoodAssets.LoadPet(Path.Combine(AppContext.BaseDirectory, "Assets"), "hood");
+        var manifest = System.Text.Json.Nodes.JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(builtIn.Definition))!;
+        manifest["Name"] = "Custom grid";
+        var definition = PetDefinition.Parse(manifest.ToJsonString(), builtIn.Definition.SheetWidth, builtIn.Definition.SheetHeight);
+        var assets = builtIn with { Definition = definition, Source = builtIn.Source! with { Definition = definition } };
+        var session = CreateIdleSession(definition);
+        var pet = CreatePet(session, assets, new UnavailableMediaAudioProbe());
+        var image = (Image)pet.FindName("PetImage");
+        var ordinary = image.Source;
+        try
+        {
+            pet.ApplyMediaAudioObservation(new(true, [new("spotify", "spotify", 0.1f, false, 1, false, 1)]), TimeSpan.Zero);
+            Assert.AreSame(ordinary, image.Source);
+            var accessory = (DrawingImage)((Image)pet.FindName("HeadphoneCupsImage")).Source;
+            Assert.AreEqual(1, ((DrawingGroup)accessory.Drawing).Children.Count, "Unknown custom names use transparent accessory fallback.");
+        }
+        finally { pet.Close(); }
+    }
+
+    [TestMethod]
+    [DataRow(PetCatalog.Hood)]
+    [DataRow(PetCatalog.Pip)]
+    [DataRow(PetCatalog.Crumb)]
+    [DataRow(PetCatalog.Puddle)]
+    public void EveryOverlayPosePreservesItsSessionThroughMuteHandoffSilenceAndRecovery(string petName)
+    {
+        var assets = HoodAssets.LoadPet(Path.Combine(AppContext.BaseDirectory, "Assets"), petName);
+        foreach (var animation in assets.Definition.Animations)
+        for (var index = 0; index < animation.Frames.Count; index++)
+        {
+            var action = Enum.Parse<PetAction>(animation.Action, true);
+            var snapshot = new HoodSessionSnapshot
+            {
+                Position = new(500, 400), Action = action, FrameIndex = index,
+                Mode = action == PetAction.Sleep ? HoodSessionMode.Sleeping : HoodSessionMode.Awake,
+                Needs = new(25, 40, 30), RemainingRandomInterval = TimeSpan.FromSeconds(30),
+                RemainingNap = action == PetAction.Sleep ? TimeSpan.FromSeconds(20) : TimeSpan.Zero,
+                NapRecoveryPointsPerSecond = action == PetAction.Sleep ? 1.5 : 0
+            };
+            var configuration = HoodConfiguration.Defaults with
+            { Pet = petName, Behavior = HoodConfiguration.Defaults.Behavior with { RandomEvents = false } };
+            var session = HoodSession.Start(assets.Definition, [new DisplayInfo("Primary", new(0, 0, 1920, 1080), true)],
+                new FixedRandomSource(), new NoopSessionStore(), configuration, snapshot);
+            var reference = HoodSession.Start(assets.Definition, [new DisplayInfo("Primary", new(0, 0, 1920, 1080), true)],
+                new FixedRandomSource(), new NoopSessionStore(), configuration, snapshot);
+            var pet = CreatePet(session, assets, new UnavailableMediaAudioProbe());
+            var cups = (Image)pet.FindName("HeadphoneCupsImage");
+            var ordinary = ((Image)pet.FindName("PetImage")).Source;
+            var expected = State();
+            try
+            {
+                Observe(new(true, [Source("a", "spotify", 0.1f), Source("b", "chrome", 0.1f)]), 0, true);
+                Observe(new(true, [Source("a", "spotify", 0, muted: true), Source("b", "chrome", 0)]), 500, true);
+                Observe(new(true, [], [new("b", true, 1)]), 1000, false);
+                Observe(new(true, [Source("c", "firefox", 0.1f)]), 1500, true);
+                Observe(MediaAudioObservation.Unavailable, 2000, false);
+                Observe(new(true, [Source("c", "firefox", 0.1f)]), 2500, true);
+                Observe(new(true, [Source("c", "firefox", 0)]), 5499, true);
+                Observe(new(true, [Source("c", "firefox", 0)]), 5500, false);
+                pet.ApplyMediaHeadphones(false);
+                Observe(new(true, [Source("c", "firefox", 0.1f)]), 6000, false);
+                var step = TimeSpan.FromMilliseconds(animation.FrameDurationMilliseconds);
+                session.Advance(step);
+                reference.Advance(step);
+                Assert.AreEqual(reference.Presentation, session.Presentation, "The next frame and movement must continue at the original timing.");
+                Assert.AreEqual(reference.Needs, session.Needs);
+                Assert.AreEqual(reference.RemainingNap, session.RemainingNap);
+            }
+            finally { pet.Close(); }
+
+            object State() => new
+            {
+                session.Presentation, session.Needs, session.Mode, session.Position,
+                session.RemainingNap, session.NapRecoveryPointsPerSecond, session.RemainingEarlyWakeGrace,
+                session.RemainingRandomInterval,
+                session.RoamingArea, session.MinimumRoamingArea, session.PetWidth, session.PetHeight
+            };
+            void Observe(MediaAudioObservation observation, int milliseconds, bool visible)
+            {
+                pet.ApplyMediaAudioObservation(observation, TimeSpan.FromMilliseconds(milliseconds));
+                Assert.AreEqual(visible, cups.Source is not null, $"{petName} {action} frame {index}, t={milliseconds}");
+                Assert.AreEqual(expected, State(), "Audio must preserve action/frame, needs, naps, timers and bounds.");
+                Assert.AreSame(ordinary, ((Image)pet.FindName("PetImage")).Source);
+                Assert.AreEqual(session.PetWidth, pet.Width);
+                Assert.AreEqual(session.PetHeight, pet.Height);
+                if (visible)
+                {
+                    var art = MediaHeadphoneArtwork.Get(petName, action, animation.Frames[index]);
+                    Assert.AreSame(art.InFront, cups.Source, "The actual overlay must use the current pet/action/frame artwork.");
+                }
+            }
+        }
+        static MediaAudioSample Source(string endpoint, string process, float peak, bool muted = false) =>
+            new($"{endpoint}:{process}", process, peak, muted, 1, false, 1, endpoint);
+    }
+
+    [TestMethod]
+    public void AllAvailablePetHeadphonesCoverEveryAnimationFrameAndPreserveTheSession()
+    {
+        var assets = LoadAssets("hood");
+        var definition = (PetDefinition)assets.GetType().GetProperty("Definition")!.GetValue(assets)!;
+        foreach (var petName in new[] { "hood", "pip", "crumb", "puddle" })
+        {
+            var petAssets = LoadAssets(petName);
+            var petDefinition = (PetDefinition)petAssets.GetType().GetProperty("Definition")!.GetValue(petAssets)!;
+            foreach (var animation in petDefinition.Animations)
+            {
+                var action = Enum.Parse<PetAction>(animation.Action, ignoreCase: true);
+                for (var index = 0; index < animation.Frames.Count; index++)
+                {
+                    var art = MediaHeadphoneArtwork.Get(petDefinition.Name, action, animation.Frames[index]);
+                    Assert.AreEqual(new Rect(0, 0, 192, 208), art.Behind.Drawing.Bounds, $"{petName} {action} frame {index} band canvas");
+                    Assert.AreEqual(new Rect(0, 0, 192, 208), art.InFront.Drawing.Bounds, $"{petName} {action} frame {index} cup canvas");
+                    var bandDrawing = petName is "hood" or "puddle" ? art.InFront.Drawing : art.Behind.Drawing;
+                    Assert.IsTrue(((DrawingGroup)bandDrawing).Children.Count > 1, $"{petName} {action} frame {index} band art");
+                    Assert.IsTrue(((DrawingGroup)art.InFront.Drawing).Children.Count > 1, $"{petName} {action} frame {index} cup art");
+                }
+            }
+        }
+
+        var session = CreateIdleSession(definition);
+        var pet = CreatePet(session, assets);
+        var band = (Image)pet.FindName("HeadphoneBandImage");
+        var cups = (Image)pet.FindName("HeadphoneCupsImage");
+        var presentation = session.Presentation;
+        var needs = session.Needs;
+        var position = session.Position;
+        var audible = new MediaAudioObservation(true,
+            [new MediaAudioSample("device:spotify", "spotify", 0.02f, false, 1, false, 1)]);
+
+        try
+        {
+            pet.ApplyMediaAudioObservation(audible, TimeSpan.Zero);
+            Assert.IsInstanceOfType<DrawingImage>(band.Source);
+            Assert.IsInstanceOfType<DrawingImage>(cups.Source);
+            Assert.AreEqual(presentation, session.Presentation);
+            Assert.AreEqual(needs, session.Needs);
+            Assert.AreEqual(position, session.Position);
+
+            pet.ApplyMediaAudioObservation(new MediaAudioObservation(true, []), TimeSpan.FromMilliseconds(2_999));
+            Assert.IsNotNull(cups.Source, "Recent sound remains visible during the quiet grace.");
+            pet.ApplyMediaAudioObservation(new MediaAudioObservation(true, []), TimeSpan.FromSeconds(3));
+            Assert.IsNull(band.Source);
+            Assert.IsNull(cups.Source);
+
+            pet.ApplyMediaAudioObservation(audible, TimeSpan.FromSeconds(4));
+            Assert.IsNotNull(cups.Source);
+            pet.ApplyMediaHeadphones(false);
+            Assert.IsNull(band.Source, "Disabling the preference clears the accessory immediately.");
+            Assert.IsNull(cups.Source);
+            pet.ApplyMediaAudioObservation(audible, TimeSpan.FromSeconds(4.2));
+            Assert.IsNull(cups.Source, "Disabled headphones remain hidden even if audio continues.");
+        }
+        finally { pet.Close(); }
+    }
+
+    [TestMethod]
+    [DataRow(PetCatalog.Pip)]
+    [DataRow(PetCatalog.Crumb)]
+    [DataRow(PetCatalog.Puddle)]
+    public void AlternatePetPreviewUsesCurrentAudioStateWhenCancelRestoresHood(string selectedPet)
+    {
+        var assets = LoadAssets("hood");
+        var definition = (PetDefinition)assets.GetType().GetProperty("Definition")!.GetValue(assets)!;
+        var session = CreateIdleSession(definition);
+        var pet = CreatePet(session, assets);
+        var controller = new HoodConfigurationController(session,
+            new YamlConfigurationStore(Path.Combine(Path.GetTempPath(), $"HoodMediaPreview-{Guid.NewGuid():N}.yaml")));
+        var settings = (Window)typeof(HoodOverlayWindow).Assembly.GetType("DesktopPet.Windows.SettingsWindow")!
+            .GetConstructors(PrivateInstance).Single(candidate => candidate.GetParameters().Length == 6)
+            .Invoke([controller, pet, UiStyleCatalog.StickyNotes, null, "system", null]);
+        var presentation = session.Presentation;
+        var needs = session.Needs;
+        var audible = new MediaAudioObservation(true,
+            [new MediaAudioSample("device:chrome", "chrome", 0.02f, false, 1, false, 1)]);
+
+        try
+        {
+            pet.ApplyMediaAudioObservation(audible, TimeSpan.Zero);
+            ((ComboBox)settings.FindName("PetComboBox")!).SelectedValue = selectedPet;
+            var alternateArt = MediaHeadphoneArtwork.Get(selectedPet, presentation.Action,
+                definition.GetAnimation(presentation.Action).Frames[presentation.FrameIndex]);
+            Assert.AreSame(alternateArt.Behind, ((Image)pet.FindName("HeadphoneBandImage")).Source);
+            Assert.AreSame(alternateArt.InFront, ((Image)pet.FindName("HeadphoneCupsImage")).Source);
+
+            pet.ApplyMediaAudioObservation(new MediaAudioObservation(true, []), TimeSpan.FromSeconds(3));
+            Assert.IsNull(((Image)pet.FindName("HeadphoneCupsImage")).Source);
+            typeof(SettingsWindow).GetMethod("OnCancelClick", PrivateInstance)!
+                .Invoke(settings, [settings, new RoutedEventArgs(Button.ClickEvent)]);
+
+            Assert.AreEqual(PetCatalog.Hood, controller.Current.Pet);
+            Assert.IsNull(((Image)pet.FindName("HeadphoneBandImage")).Source,
+                "Cancel restores Hood with the current silent state, not the audio status at preview start.");
+            Assert.AreEqual(presentation, session.Presentation);
+            Assert.AreEqual(needs, session.Needs);
+        }
+        finally { settings.Close(); pet.Close(); }
+    }
+
+    [TestMethod]
+    public void SuspendClearsHeadphonesAndResumeStartsFreshObservationWithoutChangingPetState()
+    {
+        var assets = LoadAssets("hood");
+        var definition = (PetDefinition)assets.GetType().GetProperty("Definition")!.GetValue(assets)!;
+        var session = CreateIdleSession(definition);
+        var pet = CreatePet(session, assets, new UnavailableMediaAudioProbe());
+        var presentation = session.Presentation;
+        var needs = session.Needs;
+        var position = session.Position;
+        var observer = typeof(HoodOverlayWindow).GetField("_mediaHeadphoneObserver", PrivateInstance)!;
+        var suspended = typeof(HoodOverlayWindow).GetField("_suspended", PrivateInstance)!;
+        var band = (Image)pet.FindName("HeadphoneBandImage");
+        var cups = (Image)pet.FindName("HeadphoneCupsImage");
+        var audible = new MediaAudioObservation(true,
+            [new MediaAudioSample("device:spotify", "spotify", 0.02f, false, 1, false, 1)]);
+        var applyPowerMode = typeof(HoodOverlayWindow).GetMethod("ApplyPowerMode", PrivateInstance)!;
+
+        try
+        {
+            pet.ApplyMediaAudioObservation(audible, TimeSpan.Zero);
+            Assert.IsNotNull(cups.Source);
+
+            applyPowerMode.Invoke(pet, [PowerModes.Suspend]);
+            Assert.AreEqual(1, suspended.GetValue(pet));
+            Assert.IsNull(observer.GetValue(pet));
+            Assert.IsNull(band.Source);
+            Assert.IsNull(cups.Source);
+
+            applyPowerMode.Invoke(pet, [PowerModes.Resume]);
+            Assert.AreEqual(0, suspended.GetValue(pet));
+            Assert.IsNotNull(observer.GetValue(pet), "Enabled detection starts a new observation after resume.");
+            Assert.IsNull(cups.Source, "Pre-suspend sound does not survive the resume reset.");
+
+            pet.ApplyMediaAudioObservation(audible, TimeSpan.Zero);
+            Assert.IsNotNull(cups.Source, "A fresh post-resume observation can activate headphones again.");
+            Assert.AreEqual(presentation, session.Presentation);
+            Assert.AreEqual(needs, session.Needs);
+            Assert.AreEqual(position, session.Position);
+
+        }
+        finally { pet.Close(); }
+
+        applyPowerMode.Invoke(pet, [PowerModes.Resume]);
+        Assert.IsNull(observer.GetValue(pet), "A queued resume cannot restart observation after the overlay closes.");
+    }
+
+    [TestMethod]
+    public void HiddenSpritesKeepObservationActiveAndRevealUsesTheCurrentAudioState()
+    {
+        var source = LoadSource(Path.Combine(AppContext.BaseDirectory, "Assets"), "hood");
+        var definition = (PetDefinition)source.GetType().GetProperty("Definition")!.GetValue(source)!;
+        var session = CreateIdleSession(definition, showSprites: false);
+        var pet = CreateMetadataPet(session, source, new UnavailableMediaAudioProbe());
+        pet.Opacity = 0;
+        pet.ShowInTaskbar = false;
+        var observer = typeof(HoodOverlayWindow).GetField("_mediaHeadphoneObserver", PrivateInstance)!;
+        var band = (Image)pet.FindName("HeadphoneBandImage");
+        var cups = (Image)pet.FindName("HeadphoneCupsImage");
+        var audible = new MediaAudioObservation(true,
+            [new MediaAudioSample("device:chrome", "chrome", 0.02f, false, 1, false, 1)]);
+
+        try
+        {
+            pet.ApplyMediaHeadphones(true);
+            pet.ApplyMediaAudioObservation(audible, TimeSpan.Zero);
+            Assert.IsNotNull(observer.GetValue(pet));
+            Assert.IsFalse(pet.IsVisible);
+            Assert.IsNull(band.Source);
+            Assert.IsNull(cups.Source);
+
+            ApplyConfiguration(session, session.Configuration with
+            {
+                Behavior = session.Configuration.Behavior with { ShowSprites = true }
+            });
+            typeof(HoodOverlayWindow).GetMethod("EnsureSpriteAssetsLoaded", PrivateInstance)!.Invoke(pet, null);
+            typeof(HoodOverlayWindow).GetMethod("RefreshBehaviorSettings", PrivateInstance)!.Invoke(pet, null);
+            Assert.IsTrue(pet.IsVisible);
+            Assert.IsNotNull(cups.Source, "Reveal uses the latest audible state.");
+            var activeObserver = observer.GetValue(pet);
+
+            ApplyConfiguration(session, session.Configuration with
+            {
+                Behavior = session.Configuration.Behavior with { ShowSprites = false }
+            });
+            typeof(HoodOverlayWindow).GetMethod("RefreshBehaviorSettings", PrivateInstance)!.Invoke(pet, null);
+            Assert.IsNull(band.Source);
+            Assert.IsNull(cups.Source);
+            Assert.AreSame(activeObserver, observer.GetValue(pet), "Hiding art leaves audio observation active.");
+
+            pet.ApplyMediaAudioObservation(audible, TimeSpan.FromMilliseconds(200));
+            ApplyConfiguration(session, session.Configuration with
+            {
+                Behavior = session.Configuration.Behavior with { ShowSprites = true }
+            });
+            typeof(HoodOverlayWindow).GetMethod("EnsureSpriteAssetsLoaded", PrivateInstance)!.Invoke(pet, null);
+            typeof(HoodOverlayWindow).GetMethod("RefreshBehaviorSettings", PrivateInstance)!.Invoke(pet, null);
+            Assert.IsNotNull(cups.Source, "Sound observed while hidden appears when sprites are revealed.");
+            Assert.AreSame(activeObserver, observer.GetValue(pet));
+        }
+        finally
+        {
+            pet.ApplyMediaHeadphones(false);
             pet.Close();
         }
     }
@@ -401,6 +712,16 @@ public sealed class HoodOverlayRenderingTests
             [session, assets, noop, noop, noop, noop, noop, noop, UiStyleCatalog.StickyNotes]);
     }
 
+    private static HoodOverlayWindow CreatePet(HoodSession session, object assets, IMediaAudioProbe mediaAudioProbe)
+    {
+        Action noop = () => { };
+        var constructor = typeof(HoodOverlayWindow).GetConstructors(PrivateInstance)
+            .Single(candidate => candidate.GetParameters().Length == 11);
+        var source = assets.GetType().GetProperty("Source")!.GetValue(assets);
+        return (HoodOverlayWindow)constructor.Invoke(
+            [session, source, assets, noop, noop, noop, noop, noop, noop, UiStyleCatalog.StickyNotes, mediaAudioProbe]);
+    }
+
     private static object LoadSource(string assetsDirectory, string pet) => typeof(HoodOverlayWindow).Assembly
         .GetType("DesktopPet.Windows.HoodAssets")!
         .GetMethod("LoadPetSource", BindingFlags.Static | BindingFlags.Public)!
@@ -413,6 +734,15 @@ public sealed class HoodOverlayRenderingTests
             .Single(candidate => candidate.GetParameters().Length == 10);
         return (HoodOverlayWindow)constructor.Invoke(
             [session, source, null, noop, noop, noop, noop, noop, noop, UiStyleCatalog.StickyNotes]);
+    }
+
+    private static HoodOverlayWindow CreateMetadataPet(HoodSession session, object source, IMediaAudioProbe mediaAudioProbe)
+    {
+        Action noop = () => { };
+        var constructor = typeof(HoodOverlayWindow).GetConstructors(PrivateInstance)
+            .Single(candidate => candidate.GetParameters().Length == 11);
+        return (HoodOverlayWindow)constructor.Invoke(
+            [session, source, null, noop, noop, noop, noop, noop, noop, UiStyleCatalog.StickyNotes, mediaAudioProbe]);
     }
 
     private static object? GetCurrentAssets(HoodOverlayWindow pet) =>
@@ -438,5 +768,10 @@ public sealed class HoodOverlayRenderingTests
         public HoodSessionSnapshot? Load() => null;
         public void Save(HoodSessionSnapshot snapshot) { }
         public string? ResetAfterAcknowledgement() => null;
+    }
+
+    private sealed class UnavailableMediaAudioProbe : IMediaAudioProbe
+    {
+        public MediaAudioObservation Read() => MediaAudioObservation.Unavailable;
     }
 }

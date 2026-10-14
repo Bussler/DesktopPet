@@ -279,6 +279,7 @@ public partial class SettingsWindow : Window
         RoamingCheckBox.IsChecked = configuration.Behavior.Roaming;
         IdleAnimationsCheckBox.IsChecked = configuration.Behavior.IdleAnimations;
         RandomEventsCheckBox.IsChecked = configuration.Behavior.RandomEvents;
+        MediaHeadphonesCheckBox.IsChecked = configuration.Behavior.MediaHeadphones;
         StartWithWindowsCheckBox.IsChecked = configuration.Behavior.StartWithWindows;
         AlwaysOnTopCheckBox.IsChecked = configuration.Behavior.AlwaysOnTop;
         MinimumReactionMinutesTextBox.Text = configuration.RandomInterval.MinimumMinutes.ToString(CultureInfo.CurrentCulture);
@@ -321,7 +322,8 @@ public partial class SettingsWindow : Window
                 IdleAnimations = IdleAnimationsCheckBox.IsChecked == true,
                 RandomEvents = RandomEventsCheckBox.IsChecked == true,
                 StartWithWindows = StartWithWindowsCheckBox.IsChecked == true,
-                AlwaysOnTop = AlwaysOnTopCheckBox.IsChecked == true
+                AlwaysOnTop = AlwaysOnTopCheckBox.IsChecked == true,
+                MediaHeadphones = MediaHeadphonesCheckBox.IsChecked == true
             }
         };
 

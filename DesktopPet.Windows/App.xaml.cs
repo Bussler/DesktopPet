@@ -129,6 +129,7 @@ public partial class App : System.Windows.Application
                 ShowNotesList,
                 ShowNotesSettings,
                 _effectiveUiStyle);
+            _petWindow.ApplyMediaHeadphones(configuration.Behavior.MediaHeadphones);
             _petWindow.Closed += (_, _) => RequestQuit();
             _petWindow.ToggleSpritesRequested += ToggleSprites;
             _petWindow.SpritesVisibilityChanged += () => RestoreOpenNotes();

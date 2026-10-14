@@ -7,6 +7,9 @@ Hood stores settings, pet progress, and Notes in `%LOCALAPPDATA%\HoodDesktopPet`
 | `config.yaml` | Shared settings, including pet, appearance, behavior, Notes preferences, and Windows startup. |
 | `state.json` | Pet needs, remaining timers, position, and roaming area. |
 | `notes.json` | Names, content, formatting, colors, bounds, open/hidden state, and Trash. |
+| `media-headphones.log` | Headphone artwork/audio-detection failures and recovery, with UTC timestamps. Old entries are cleared once the log reaches 256 KiB. |
+
+If headphones stop working, use **Open config folder** in Settings and read `media-headphones.log`. Audio failures retry automatically; check or reconnect the Windows output device. For an artwork-load failure, restore the app files and relaunch. The log contains diagnostics, not audio recordings or media titles. A log-write failure leaves the pet usable.
 
 ## Back up and restore
 
