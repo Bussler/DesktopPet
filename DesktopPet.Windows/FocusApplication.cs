@@ -15,6 +15,7 @@ internal sealed class FocusApplication : IDisposable
     private readonly Func<long> _timestamp;
     private readonly Func<string?> _openSettings;
     private readonly Func<Window, bool> _activateWindow;
+    private readonly Action _playCompletionSound;
     private long _lastTick;
     private FocusWindow? _window;
     private bool _topmost;
@@ -24,7 +25,7 @@ internal sealed class FocusApplication : IDisposable
     internal FocusSession Session { get; } = new();
 
     internal FocusApplication(Dispatcher dispatcher, string theme, string style, Func<long>? timestamp = null,
-        Func<string?>? openSettings = null, Func<Window, bool>? activateWindow = null)
+        Func<string?>? openSettings = null, Func<Window, bool>? activateWindow = null, Action? playCompletionSound = null)
     {
         _dispatcher = dispatcher;
         _theme = theme;
@@ -32,6 +33,7 @@ internal sealed class FocusApplication : IDisposable
         _timestamp = timestamp ?? Stopwatch.GetTimestamp;
         _openSettings = openSettings ?? OpenNotificationSettings;
         _activateWindow = activateWindow ?? (window => window.Activate());
+        _playCompletionSound = playCompletionSound ?? System.Media.SystemSounds.Asterisk.Play;
         _lastTick = _timestamp();
         _timer.Tick += OnTick;
         Session.RestoreRequested += Show;
@@ -71,7 +73,10 @@ internal sealed class FocusApplication : IDisposable
         var now = _timestamp();
         var elapsed = Stopwatch.GetElapsedTime(_lastTick, now);
         _lastTick = now;
+        var wasRunning = Session.IsRunning;
         Session.Advance(elapsed);
+        if (wasRunning && Session.Phase is FocusPhase.FocusFinished or FocusPhase.BreakFinished)
+            _playCompletionSound();
     }
 
     internal void ApplyTheme(string theme, string style)

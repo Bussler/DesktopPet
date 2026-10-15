@@ -21,46 +21,61 @@ public sealed class FocusInteractionTests
     public void WindowControlsPreserveCountdownOnMinimizeAndReuseAndStopOnClose()
     {
         long clock = 0;
-        using var focus = new FocusApplication(System.Windows.Threading.Dispatcher.CurrentDispatcher, "light", UiStyleCatalog.StickyNotes, () => clock);
+        using var focus = new FocusApplication(System.Windows.Threading.Dispatcher.CurrentDispatcher, "light", UiStyleCatalog.StickyNotes, () => clock,
+            playCompletionSound: () => { });
         focus.Show();
         var window = GetWindow(focus);
         Assert.IsFalse(window.Topmost);
         Assert.AreEqual("25:00", Text(window, "CountdownText"));
+        Assert.AreEqual("_Start focus", Button(window, "PrimaryButton").Content);
+        Assert.AreEqual(Visibility.Collapsed, Button(window, "StopButton").Visibility);
+        Assert.AreEqual(Visibility.Collapsed, Button(window, "SkipButton").Visibility);
         Input(window, "FocusInput").Text = "1";
         Input(window, "BreakInput").Text = "2";
-        Click(window, "StartButton");
+        Click(window, "PrimaryButton");
+        Assert.AreEqual("_Pause", Button(window, "PrimaryButton").Content);
+        Assert.AreEqual(Visibility.Visible, Button(window, "StopButton").Visibility);
         clock += Stopwatch.Frequency * 10 + Stopwatch.Frequency / 2;
         focus.Tick();
         Assert.AreEqual("00:50", Text(window, "CountdownText"));
-        Click(window, "PauseButton");
+        Click(window, "PrimaryButton");
         var paused = focus.Session.Remaining;
         clock += Stopwatch.Frequency * 500;
         focus.Tick();
         Assert.AreEqual(paused, focus.Session.Remaining);
         Assert.AreEqual("Focus paused", Text(window, "PhaseText"));
+        Assert.AreEqual("_Resume", Button(window, "PrimaryButton").Content);
         ((CheckBox)window.FindName("TopmostCheckBox")).IsChecked = true;
         window.WindowState = WindowState.Minimized;
         focus.Show();
         Assert.AreSame(window, GetWindow(focus));
         Assert.AreEqual(WindowState.Normal, window.WindowState);
         Assert.IsTrue(window.Topmost);
-        Click(window, "PauseButton");
+        Click(window, "PrimaryButton");
         window.WindowState = WindowState.Minimized;
         clock += Stopwatch.Frequency * 50;
         focus.Tick();
         Assert.AreEqual(FocusPhase.FocusFinished, focus.Session.Phase);
+        Assert.AreEqual("_Take break", Button(window, "PrimaryButton").Content);
+        Assert.AreEqual(Visibility.Collapsed, Button(window, "SkipButton").Visibility);
         Assert.AreEqual(WindowState.Minimized, window.WindowState, "Focus completion only waves.");
         focus.Show();
-        Click(window, "BreakButton");
+        Click(window, "PrimaryButton");
         Assert.AreEqual(TimeSpan.FromMinutes(2), focus.Session.Remaining);
-        Click(window, "PauseButton");
+        Assert.AreEqual("_Pause", Button(window, "PrimaryButton").Content);
+        Assert.AreEqual(Visibility.Visible, Button(window, "SkipButton").Visibility);
+        Click(window, "PrimaryButton");
+        Assert.AreEqual("_Resume", Button(window, "PrimaryButton").Content);
+        Assert.AreEqual(Visibility.Visible, Button(window, "SkipButton").Visibility);
         Click(window, "SkipButton");
         Assert.AreEqual("Break finished", Text(window, "PhaseText"));
+        Assert.AreEqual("_Start focus", Button(window, "PrimaryButton").Content);
+        Assert.AreEqual(Visibility.Collapsed, Button(window, "SkipButton").Visibility);
         Assert.AreEqual(PetAction.Sleep, focus.Session.PetActionOverride);
-        Click(window, "StartButton");
+        Click(window, "PrimaryButton");
         Click(window, "StopButton");
         Assert.AreEqual(FocusPhase.Idle, focus.Session.Phase);
-        Click(window, "StartButton");
+        Click(window, "PrimaryButton");
         window.Close();
         Assert.AreEqual(FocusPhase.Idle, focus.Session.Phase);
         focus.Show();
@@ -80,25 +95,64 @@ public sealed class FocusInteractionTests
         focus.Show();
         var window = GetWindow(focus);
         Input(window, "FocusInput").Text = invalid;
-        Assert.IsFalse(Button(window, "StartButton").IsEnabled);
+        Assert.IsFalse(Button(window, "PrimaryButton").IsEnabled);
         StringAssert.Contains(Text(window, "ValidationText"), "whole minutes");
         Assert.AreEqual(25, focus.Session.FocusMinutes);
         Input(window, "FocusInput").Text = "3";
-        Assert.IsTrue(Button(window, "StartButton").IsEnabled);
-        Click(window, "StartButton");
+        Assert.IsTrue(Button(window, "PrimaryButton").IsEnabled);
+        Click(window, "PrimaryButton");
         var remaining = focus.Session.Remaining;
         Input(window, "FocusInput").Text = "4";
         Assert.AreEqual(remaining, focus.Session.Remaining);
         Assert.AreEqual(4, focus.Session.FocusMinutes);
         Input(window, "BreakInput").Text = invalid;
-        Assert.IsFalse(Button(window, "BreakButton").IsEnabled);
+        Assert.IsTrue(Button(window, "PrimaryButton").IsEnabled, "Invalid future settings must not prevent Pause or Resume.");
+        Click(window, "PrimaryButton");
+        Assert.IsTrue(focus.Session.IsPaused);
+        Click(window, "PrimaryButton");
+        Assert.IsFalse(focus.Session.IsPaused);
+        Assert.AreEqual(remaining, focus.Session.Remaining);
+        focus.Session.Advance(remaining);
+        Assert.IsFalse(Button(window, "PrimaryButton").IsEnabled);
+        Input(window, "BreakInput").Text = "2";
+        Click(window, "PrimaryButton");
+        Assert.AreEqual(FocusPhase.Break, focus.Session.Phase);
+        Assert.AreEqual(TimeSpan.FromMinutes(2), focus.Session.Remaining);
     }
 
     [TestMethod]
-    public void BreakExpiryRestoresSilentlyWithoutChangingTopmostAndLifecycleResetCancels()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void PrimaryPauseAtExpiryCannotStartTheNextPhase(bool duringBreak)
     {
         long clock = 0;
-        using var focus = new FocusApplication(System.Windows.Threading.Dispatcher.CurrentDispatcher, "dark", UiStyleCatalog.StickyNotes, () => clock);
+        using var focus = new FocusApplication(System.Windows.Threading.Dispatcher.CurrentDispatcher, "light", UiStyleCatalog.StickyNotes,
+            () => clock, playCompletionSound: () => { });
+        focus.Show();
+        focus.Session.Configure(1, 1);
+        var window = GetWindow(focus);
+        Click(window, "PrimaryButton");
+        if (duringBreak)
+        {
+            clock += Stopwatch.Frequency * 60;
+            focus.Tick();
+            Click(window, "PrimaryButton");
+        }
+        Assert.AreEqual("_Pause", Button(window, "PrimaryButton").Content);
+        clock += Stopwatch.Frequency * 60;
+        Click(window, "PrimaryButton");
+        Assert.AreEqual(duringBreak ? FocusPhase.BreakFinished : FocusPhase.FocusFinished, focus.Session.Phase);
+        Assert.AreEqual(TimeSpan.Zero, focus.Session.Remaining);
+        Assert.IsFalse(focus.Session.IsPaused);
+        Assert.AreEqual(duringBreak ? "_Start focus" : "_Take break", Button(window, "PrimaryButton").Content);
+    }
+
+    [TestMethod]
+    public void BreakExpiryRestoresWithoutChangingTopmostAndLifecycleResetCancels()
+    {
+        long clock = 0;
+        using var focus = new FocusApplication(System.Windows.Threading.Dispatcher.CurrentDispatcher, "dark", UiStyleCatalog.StickyNotes, () => clock,
+            playCompletionSound: () => { });
         focus.Show();
         focus.Session.Configure(1, 1);
         focus.Execute(focus.Session.StartFocus);
@@ -133,6 +187,76 @@ public sealed class FocusInteractionTests
     }
 
     [TestMethod]
+    [DataRow(1)]
+    [DataRow(2)]
+    public void NaturalExpirySoundsOnceForEachPhaseIncludingWhileMinimized(int finalSeconds)
+    {
+        long clock = 0;
+        var sounds = 0;
+        using var focus = new FocusApplication(System.Windows.Threading.Dispatcher.CurrentDispatcher, "light", UiStyleCatalog.StickyNotes,
+            () => clock, playCompletionSound: () => sounds++);
+        focus.Show();
+        focus.Session.Configure(1, 1);
+        focus.Execute(focus.Session.StartFocus);
+        var window = GetWindow(focus);
+        foreach (var phase in new[] { FocusPhase.Focus, FocusPhase.Break })
+        {
+            window.WindowState = WindowState.Minimized;
+            var before = sounds;
+            clock += Stopwatch.Frequency * 59;
+            focus.Tick();
+            Assert.AreEqual(before, sounds);
+            focus.Execute(focus.Session.TogglePause);
+            clock += Stopwatch.Frequency * 200;
+            focus.Tick();
+            Assert.AreEqual(before, sounds, "Paused time cannot produce a completion sound.");
+            focus.Execute(focus.Session.TogglePause);
+            clock += Stopwatch.Frequency * finalSeconds;
+            focus.Tick();
+            Assert.AreEqual(before + 1, sounds);
+            Assert.AreEqual(phase == FocusPhase.Focus ? FocusPhase.FocusFinished : FocusPhase.BreakFinished, focus.Session.Phase);
+            Assert.AreEqual(phase == FocusPhase.Focus ? WindowState.Minimized : WindowState.Normal, window.WindowState);
+            clock += Stopwatch.Frequency * 200;
+            focus.Tick();
+            focus.Session.HandlePetClick();
+            focus.Show();
+            Assert.AreEqual(before + 1, sounds, "Waiting, acknowledging and reopening must not repeat the sound.");
+            if (phase == FocusPhase.Focus) focus.Execute(focus.Session.TakeBreak);
+        }
+        Assert.AreEqual(2, sounds);
+    }
+
+    [TestMethod]
+    public void StoppingClosingResettingAndSkippingDoNotPlayCompletionSounds()
+    {
+        long clock = 0;
+        var sounds = 0;
+        using var focus = new FocusApplication(System.Windows.Threading.Dispatcher.CurrentDispatcher, "light", UiStyleCatalog.StickyNotes,
+            () => clock, playCompletionSound: () => sounds++);
+        focus.Show();
+        focus.Session.Configure(1, 1);
+        focus.Execute(focus.Session.StartFocus);
+        focus.Execute(focus.Session.Stop);
+        focus.Execute(focus.Session.StartFocus);
+        focus.Reset();
+        focus.Execute(focus.Session.StartFocus);
+        GetWindow(focus).Close();
+        Assert.AreEqual(0, sounds);
+        focus.Show();
+        focus.Execute(focus.Session.StartFocus);
+        clock += Stopwatch.Frequency * 60;
+        focus.Tick();
+        Assert.AreEqual(1, sounds);
+        focus.Execute(focus.Session.TakeBreak);
+        focus.Execute(focus.Session.TogglePause);
+        focus.Execute(focus.Session.SkipBreak);
+        clock += Stopwatch.Frequency * 200;
+        focus.Tick();
+        focus.Dispose();
+        Assert.AreEqual(1, sounds, "Skip break and cleanup are not natural countdown completions.");
+    }
+
+    [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
     public void BreakExpiryComesAboveCoveringWindowWhenActivationIsDenied(bool topmost)
@@ -152,7 +276,7 @@ public sealed class FocusInteractionTests
                 Assert.IsTrue(IsAbove(cover, window), "The denial must leave Focus covered before the fallback.");
                 deniedAttempts++;
                 return false;
-            });
+            }, playCompletionSound: () => { });
         try
         {
             focus.Show();
@@ -192,10 +316,10 @@ public sealed class FocusInteractionTests
     {
         var requests = 0;
         using var focus = new FocusApplication(System.Windows.Threading.Dispatcher.CurrentDispatcher, "light", UiStyleCatalog.StickyNotes,
-            openSettings: () => { requests++; return "Settings unavailable; open Windows Settings manually."; });
+            openSettings: () => { requests++; return "Settings unavailable; open Windows Settings manually."; }, playCompletionSound: () => { });
         focus.Show();
         var window = GetWindow(focus);
-        Click(window, "StartButton");
+        Click(window, "PrimaryButton");
         Click(window, "NotificationSettingsButton");
         Assert.AreEqual(1, requests);
         StringAssert.Contains(Text(window, "NotificationErrorText"), "Settings unavailable");
@@ -209,7 +333,8 @@ public sealed class FocusInteractionTests
     public void BothActualMenuRoutesReuseFocusWhileHiddenPetTimerIsStopped()
     {
         long clock = 0;
-        using var focus = new FocusApplication(System.Windows.Threading.Dispatcher.CurrentDispatcher, "light", UiStyleCatalog.StickyNotes, () => clock);
+        using var focus = new FocusApplication(System.Windows.Threading.Dispatcher.CurrentDispatcher, "light", UiStyleCatalog.StickyNotes, () => clock,
+            playCompletionSound: () => { });
         var app = System.Windows.Application.Current as App ?? new TestApp { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         var fields = new[] { "_focus", "_trayIconImage" }.Select(name => typeof(App).GetField(name, Private)!).ToArray();
         var old = fields.Select(field => field.GetValue(app)).ToArray();
@@ -228,7 +353,7 @@ public sealed class FocusInteractionTests
             var menuItem = pet.ContextMenu!.Items.OfType<MenuItem>().Single(item => (string)item.Header == "_Focus");
             menuItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
             var first = GetWindow(focus);
-            Click(first, "StartButton");
+            Click(first, "PrimaryButton");
             first.WindowState = WindowState.Minimized;
             clock += Stopwatch.Frequency * 30;
             focus.Tick();
@@ -264,11 +389,21 @@ public sealed class FocusInteractionTests
         focus.Show();
         focus.ApplyTheme(theme, style);
         var window = GetWindow(focus);
+        window.UpdateLayout();
+        var options = (Expander)window.FindName("OptionsExpander");
+        Assert.IsFalse(options.IsExpanded);
+        Assert.IsTrue(window.ActualWidth <= 300 && window.ActualHeight <= 280, "The default timer must stay compact in every theme/style.");
+        SavePreview(window, $"focus-{theme}-{style}-compact");
+        options.IsExpanded = true;
+        window.UpdateLayout();
+        SavePreview(window, $"focus-{theme}-{style}-options");
+        window.SizeToContent = SizeToContent.Manual;
         window.Width = window.MinWidth;
         window.Height = window.MinHeight;
         window.UpdateLayout();
+        Assert.AreEqual(window.MinHeight, window.ActualHeight, 1, "Exercise the actual minimum height, with automatic sizing disabled as it is on manual resize.");
         Assert.AreEqual(window.FindResource("NotesSurfaceBrush"), window.Background);
-        foreach (var name in new[] { "StartButton", "BreakButton", "PauseButton", "StopButton", "SkipButton", "NotificationSettingsButton" })
+        foreach (var name in new[] { "PrimaryButton", "NotificationSettingsButton" })
         {
             var button = Button(window, name);
             Assert.IsTrue(button.Focusable);
@@ -277,23 +412,48 @@ public sealed class FocusInteractionTests
         }
         Assert.AreEqual("Focus minutes", System.Windows.Automation.AutomationProperties.GetName(Input(window, "FocusInput")));
         Assert.AreEqual("Break minutes", System.Windows.Automation.AutomationProperties.GetName(Input(window, "BreakInput")));
-        // Optional rendered artifact for local visual review; never part of the shipped package.
+        Assert.IsTrue(((ScrollViewer)window.Content).ScrollableHeight > 0, "Expanded options must remain reachable at minimum size.");
+        options.IsExpanded = false;
+        window.Width = 300;
+        window.SizeToContent = SizeToContent.Height;
+        focus.Session.StartFocus();
+        focus.Session.Advance(focus.Session.Remaining);
+        Click(window, "PrimaryButton");
+        Click(window, "PrimaryButton");
+        Assert.AreEqual("_Resume", Button(window, "PrimaryButton").Content);
+        Assert.AreEqual(Visibility.Visible, Button(window, "SkipButton").Visibility);
+        window.UpdateLayout();
+        SavePreview(window, $"focus-{theme}-{style}-break");
+    }
+
+    // Optional WPF-rendered artifacts for local visual review; never shipped in the package.
+    private static void SavePreview(Window window, string name)
+    {
         if (Environment.GetEnvironmentVariable("HOOD_FOCUS_PREVIEW_DIRECTORY") is { Length: > 0 } directory)
         {
-            window.Width = 410; window.Height = 650; window.UpdateLayout();
-            var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap(410, 650, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+            // Let the Fluent expander's visual transition finish for optional screenshots only.
+            var frame = new System.Windows.Threading.DispatcherFrame();
+            var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+            timer.Tick += (_, _) => frame.Continue = false;
+            timer.Start();
+            try { System.Windows.Threading.Dispatcher.PushFrame(frame); }
+            finally { timer.Stop(); }
+            window.UpdateLayout();
+            var content = (FrameworkElement)window.Content;
+            var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap((int)Math.Ceiling(content.ActualWidth),
+                (int)Math.Ceiling(content.ActualHeight), 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
             bitmap.Render(window);
             var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
             encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bitmap));
             Directory.CreateDirectory(directory);
-            using var output = File.Create(Path.Combine(directory, $"focus-{theme}-{style}.png"));
+            using var output = File.Create(Path.Combine(directory, name + ".png"));
             encoder.Save(output);
         }
     }
 
     [TestMethod]
     [DataRow("hood")] [DataRow("pip")] [DataRow("crumb")] [DataRow("puddle")]
-    public void PetWaveAndSleepOverrideCareAnimationWithoutReactNotesOrPersistedOverrides(string petName)
+    public void PetRemindersPreserveCareAndBreakClicksRestoreFocusAndToggleNotes(string petName)
     {
         var assets = HoodAssets.LoadPet(Path.Combine(AppContext.BaseDirectory, "Assets"), petName);
         var store = new RecordingStore();
@@ -355,6 +515,13 @@ public sealed class FocusInteractionTests
             Assert.AreEqual(TimeSpan.Zero, session.RemainingNap);
             // Legitimate care naps can recover underneath the visual override and finish normally.
             session.Sleep();
+            var remainingNap = session.RemainingNap;
+            PetClick(pet, session);
+            Assert.AreEqual(2, notesClicks);
+            Assert.AreEqual(2, restores);
+            Assert.AreEqual(HoodSessionMode.Sleeping, session.Mode);
+            Assert.AreEqual(remainingNap, session.RemainingNap, "A break click must not wake an underlying care nap.");
+            Assert.AreEqual(sleepNeed, session.Needs.Sleep);
             session.Advance(session.RemainingNap / 2);
             Assert.AreEqual(sleepNeed / 2, session.Needs.Sleep, 0.001);
             Assert.AreEqual(PetAction.Sleep, pet.CurrentPresentation.Action);
@@ -362,12 +529,17 @@ public sealed class FocusInteractionTests
             Assert.AreEqual(PetAction.Sleep, pet.CurrentPresentation.Action);
             Assert.AreEqual(HoodSessionMode.Awake, session.Mode);
             PetClick(pet, session);
+            Assert.AreEqual(3, notesClicks);
+            Assert.AreEqual(3, restores);
             focus.TogglePause();
             Assert.AreEqual(PetAction.Sleep, pet.CurrentPresentation.Action);
             PetClick(pet, session);
+            Assert.AreEqual(4, notesClicks);
+            Assert.AreEqual(4, restores);
             focus.SkipBreak();
             PetClick(pet, session);
-            Assert.AreEqual(1, notesClicks);
+            Assert.AreEqual(5, notesClicks);
+            Assert.AreEqual(5, restores);
             Assert.AreEqual(PetAction.Sleep, pet.CurrentPresentation.Action);
             session.SaveCurrentState();
             Assert.AreEqual(HoodSessionMode.Awake, store.Snapshot!.Mode);
@@ -376,7 +548,7 @@ public sealed class FocusInteractionTests
             var restoreCount = restores;
             PetClick(pet, session, dragged: true);
             Assert.AreEqual(restoreCount, restores);
-            Assert.AreEqual(1, notesClicks);
+            Assert.AreEqual(5, notesClicks);
             focus.StartFocus();
             Assert.AreEqual(session.Presentation, pet.CurrentPresentation);
             focus.Advance(focus.Remaining);
@@ -386,7 +558,8 @@ public sealed class FocusInteractionTests
         finally { pet.Close(); }
     }
 
-    private static FocusApplication NewFocus() => new(System.Windows.Threading.Dispatcher.CurrentDispatcher, "light", UiStyleCatalog.StickyNotes, () => 0);
+    private static FocusApplication NewFocus() => new(System.Windows.Threading.Dispatcher.CurrentDispatcher, "light", UiStyleCatalog.StickyNotes, () => 0,
+        playCompletionSound: () => { });
     private static FocusWindow GetWindow(FocusApplication focus) => (FocusWindow)typeof(FocusApplication).GetField("_window", Private)!.GetValue(focus)!;
     private static TextBox Input(Window window, string name) => (TextBox)window.FindName(name);
     private static Button Button(Window window, string name) => (Button)window.FindName(name);

@@ -364,6 +364,10 @@ public partial class HoodOverlayWindow : Window
                 RunSessionCommand(_session.React);
                 _activateNotes();
             }
+            else if (_focus.PetActionOverride == PetAction.Sleep)
+            {
+                _activateNotes();
+            }
         }
 
         _dragged = false;

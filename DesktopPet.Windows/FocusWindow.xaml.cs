@@ -45,12 +45,9 @@ public partial class FocusWindow : Window
     private void OnDurationChanged(object sender, TextChangedEventArgs e)
     {
         if (_loading) return;
-        if (StartButton is null || !ValidateDurations())
-        {
-            if (StartButton is not null) StartButton.IsEnabled = BreakButton.IsEnabled = false;
-            return;
-        }
-        _session.Configure(int.Parse(FocusInput.Text, CultureInfo.CurrentCulture), int.Parse(BreakInput.Text, CultureInfo.CurrentCulture));
+        if (ValidateDurations())
+            _session.Configure(int.Parse(FocusInput.Text, CultureInfo.CurrentCulture), int.Parse(BreakInput.Text, CultureInfo.CurrentCulture));
+        else Refresh();
     }
 
     private void Refresh()
@@ -67,17 +64,25 @@ public partial class FocusWindow : Window
         var seconds = (long)Math.Ceiling(remaining.TotalSeconds);
         CountdownText.Text = $"{seconds / 60:00}:{seconds % 60:00}";
         var valid = ValidateDurations();
-        StartButton.IsEnabled = valid && _session.CanStartFocus;
-        BreakButton.IsEnabled = valid && _session.Phase == FocusPhase.FocusFinished;
-        PauseButton.IsEnabled = _session.Phase is FocusPhase.Focus or FocusPhase.Break;
-        PauseButton.Content = _session.IsPaused ? "_Resume" : "_Pause";
-        StopButton.IsEnabled = _session.Phase != FocusPhase.Idle;
-        SkipButton.IsEnabled = _session.Phase == FocusPhase.Break;
+        var timedPhase = _session.Phase is FocusPhase.Focus or FocusPhase.Break;
+        PrimaryButton.Content = timedPhase ? (_session.IsPaused ? "_Resume" : "_Pause")
+            : _session.Phase == FocusPhase.FocusFinished ? "_Take break" : "_Start focus";
+        PrimaryButton.IsEnabled = timedPhase || valid;
+        StopButton.Visibility = _session.Phase == FocusPhase.Idle ? Visibility.Collapsed : Visibility.Visible;
+        SkipButton.Visibility = _session.Phase == FocusPhase.Break ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private void OnStart(object sender, RoutedEventArgs e) => _execute(_session.StartFocus);
-    private void OnBreak(object sender, RoutedEventArgs e) => _execute(_session.TakeBreak);
-    private void OnPause(object sender, RoutedEventArgs e) => _execute(_session.TogglePause);
+    private void OnPrimary(object sender, RoutedEventArgs e)
+    {
+        // Capture the displayed action before Execute accounts for elapsed time at a phase boundary.
+        Action command = _session.Phase switch
+        {
+            FocusPhase.Focus or FocusPhase.Break => _session.TogglePause,
+            FocusPhase.FocusFinished => _session.TakeBreak,
+            _ => _session.StartFocus
+        };
+        _execute(command);
+    }
     private void OnStop(object sender, RoutedEventArgs e) => _execute(_session.Stop);
     private void OnSkip(object sender, RoutedEventArgs e) => _execute(_session.SkipBreak);
     private void OnTopmostChanged(object sender, RoutedEventArgs e)
