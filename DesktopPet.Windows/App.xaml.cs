@@ -355,7 +355,7 @@ public partial class App : System.Windows.Application
             ContextMenuStrip = menu,
             Visible = true
         };
-        icon.DoubleClick += (_, _) => ShowSettings();
+        icon.DoubleClick += (_, _) => ActivateNotes();
         return icon;
     }
 

@@ -22,6 +22,53 @@ namespace DesktopPet.Windows.Tests;
 public sealed class SettingsAndStatsTests
 {
     [TestMethod]
+    public void TrayDoubleClickCreatesThenHidesAndRestoresNotes()
+    {
+        const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+        var notesPath = Path.Combine(Path.GetTempPath(), $"HoodTrayNotesTest-{Guid.NewGuid():N}.json");
+        var notes = NotesApplication.Start(new JsonNotesStore(notesPath));
+        var app = System.Windows.Application.Current as App ?? new TestApp { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        var fields = new[] { "_notes", "_session", "_trayIconImage", "_effectiveNotesSettings" }
+            .Select(name => typeof(App).GetField(name, flags)!).ToArray();
+        var originalValues = fields.Select(field => field.GetValue(app)).ToArray();
+        object?[] values = [notes, null, null, HoodConfiguration.Defaults.Notes with { AnimateShowHide = false }];
+        for (var index = 0; index < fields.Length; index++) fields[index].SetValue(app, values[index]);
+        var windows = (Dictionary<Guid, NoteWindow>)typeof(App).GetField("_noteWindows", flags)!.GetValue(app)!;
+        Forms.NotifyIcon? icon = null;
+        try
+        {
+            icon = (Forms.NotifyIcon)typeof(App).GetMethod("CreateTrayIcon", flags)!.Invoke(app, null)!;
+            var doubleClick = typeof(Forms.NotifyIcon).GetMethod("OnDoubleClick", flags)!;
+            doubleClick.Invoke(icon, [EventArgs.Empty]);
+            var id = notes.Notes.Single().Id;
+            var window = windows[id];
+            Assert.IsTrue(notes.GroupVisible);
+            Assert.IsTrue(window.IsVisible);
+
+            doubleClick.Invoke(icon, [EventArgs.Empty]);
+            Assert.IsFalse(notes.GroupVisible);
+            Assert.IsFalse(window.IsVisible);
+            CollectionAssert.AreEqual(new[] { id }, notes.OpenNoteIds.ToArray(), "Hiding must preserve open-note membership.");
+
+            doubleClick.Invoke(icon, [EventArgs.Empty]);
+            Assert.IsTrue(notes.GroupVisible);
+            Assert.IsTrue(window.IsVisible);
+            Assert.AreEqual(id, notes.Notes.Single().Id, "Showing again must reuse the existing note.");
+            Assert.AreSame(window, windows[id]);
+            Assert.IsNull(typeof(App).GetField("_settingsWindow", flags)!.GetValue(app));
+        }
+        finally
+        {
+            icon?.Dispose();
+            (fields[2].GetValue(app) as System.Drawing.Icon)?.Dispose();
+            foreach (var window in windows.Values.ToArray()) window.CloseWithoutMembershipChange();
+            windows.Clear();
+            for (var index = 0; index < fields.Length; index++) fields[index].SetValue(app, originalValues[index]);
+            File.Delete(notesPath);
+        }
+    }
+
+    [TestMethod]
     [DataRow(50d, false, false)]
     [DataRow(150d, false, false)]
     [DataRow(200d, false, false)]
