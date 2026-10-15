@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using System.IO;
+using System.Media;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -184,6 +186,21 @@ public sealed class FocusInteractionTests
         Assert.AreEqual(25, fresh.Session.FocusMinutes);
         Assert.AreEqual(5, fresh.Session.BreakMinutes);
         Assert.IsFalse(GetWindow(fresh).Topmost);
+    }
+
+    [TestMethod]
+    public void DefaultCompletionSoundLoadsTheApprovedRippleForAsynchronousPlayback()
+    {
+        using var focus = new FocusApplication(System.Windows.Threading.Dispatcher.CurrentDispatcher, "light", UiStyleCatalog.StickyNotes, () => 0);
+        var play = (Action)typeof(FocusApplication).GetField("_playCompletionSound", Private)!.GetValue(focus)!;
+        Assert.IsInstanceOfType<SoundPlayer>(play.Target);
+        var player = (SoundPlayer)play.Target!;
+        Assert.AreEqual(nameof(SoundPlayer.Play), play.Method.Name);
+        Assert.IsTrue(player.IsLoadCompleted);
+        Assert.IsNotNull(player.Stream);
+        player.Stream.Position = 0;
+        Assert.AreEqual("ACA352C92003E0687BA2B270F508D838F64E3612C5A09A8E28AAB0AB9743CDBA",
+            Convert.ToHexString(SHA256.HashData(player.Stream)), "Ship the exact approved happier Little Ripple WAV.");
     }
 
     [TestMethod]

@@ -100,3 +100,19 @@ Current compact candidate: `C:\github\DesktopPet\artifacts\hood-focus-compact-20
 | `DesktopPet.Windows.exe` | `FF1A08B127D65F9AAF371F30F7F6A6928F105EFEEDFB08A29E284DD2CED23B74` |
 | `DesktopPet.Windows.dll` | `33E69D2543FEB92C460C433DC12913A4A33D4567AAF52658CE396FE34C8276F5` |
 | `DesktopPet.Core.dll` | `4C26010454D553712873C342FC349D372363301328E922C91F488093D859A775` |
+
+## Selected Little Ripple sound
+
+The user selected `01b-little-ripple-happier.wav` on 2026-10-15. The exact approved WAV is embedded in the Windows assembly, preloaded once and played asynchronously on the existing natural focus/break expiry path. It replaces the Windows information sound and follows playback volume rather than the Windows sound scheme. The player is disposed with the Focus application; no new dependency or preference was added.
+
+The new default-player regression failed against the previous SystemSound implementation, then passed with the embedded SoundPlayer. It verifies successful loading, asynchronous Play selection and the approved WAV's SHA-256 without playing audio. All **33 Focus interaction cases** passed. The full `tools/Test.ps1` workflow passed with SDK 10.0.401: **440 Core + 650 Windows = 1,090 tests**, zero failures/skips, locked restore and sprite validators passed. Full-run TRX files have timestamp `2026-10-15_22_00_42` (`net10.0.trx` and `net10.0[1].trx`).
+
+`tools/Build-AndPublish.ps1 -CandidateDirectory artifacts/hood-focus-little-ripple-20261015` passed separately. Package verification found the exact WAV embedded once, all **29 local links** valid, and source/test/scratch files excluded. `git diff --check` passed.
+
+Latest candidate: `C:\github\DesktopPet\artifacts\hood-focus-little-ripple-20261015\app\DesktopPet.Windows.exe`. Use this package for the pending native checks above, including hearing Little Ripple once at each natural completion and verifying Windows/app volume and mute. No packaged playback or native acceptance is claimed by automated tests.
+
+| Candidate file | SHA-256 |
+| --- | --- |
+| `DesktopPet.Windows.exe` | `35C49BF586F462B01EF7C98BF588A94EC8E1ABF354B1C63B6E89100EAF916EB3` |
+| `DesktopPet.Windows.dll` | `06236733619848A5D7682754B8B315A485CE6070810A936897B5DEDCBB17CF82` |
+| `DesktopPet.Core.dll` | `E20584EAB395DA19BD62D4375D834155A070927E4C7F2D2B6DA4C2F9C1177E80` |

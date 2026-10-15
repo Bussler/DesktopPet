@@ -24,7 +24,7 @@ Keep any unperformed item pending. Native acceptance is complete only after all 
 
 Use the follow-up candidate identified in the acceptance record. Original results above do not claim these new behaviors have been manually verified.
 
-- [ ] Set 1/1 minutes. With Windows sounds audible, minimize Focus and finish each countdown: hear one small chime at each zero. Focus completion still waves without reopening; break completion still reopens Focus. Waiting, acknowledging the wave, Pause/Resume, Skip break, Stop, close and sleep/reset do not add completion sounds. Confirm the chime follows Windows sound scheme/volume.
+- [ ] Set 1/1 minutes. With Hood audible in the Windows volume mixer, minimize Focus and finish each countdown: hear the selected happier Little Ripple chime once at each zero. Focus completion still waves without reopening; break completion still reopens Focus. Waiting, acknowledging the wave, Pause/Resume, Skip break, Stop, close and sleep/reset do not add completion sounds. Confirm Windows and Hood's app volume/mute control the built-in chime, independently of the Windows sound scheme.
 - [ ] During a running break, paused break, natural Break finished and skipped break, click sleeping Hood repeatedly: each click reopens Focus and shows/hides Notes while Hood stays asleep. Existing note content is preserved. Dragging does neither. The waving focus-completion click still only reopens Focus/acknowledges, leaving Notes alone.
 
 ## Compact window follow-up: pending

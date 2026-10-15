@@ -15,6 +15,7 @@
   <ItemGroup>
     <ProjectReference Include="..\DesktopPet.Core\DesktopPet.Core.csproj" />
     <EmbeddedResource Include="..\Assets\Hood\hood.ico" LogicalName="DesktopPet.Hood.ico" />
+    <EmbeddedResource Include="..\Assets\Sounds\01b-little-ripple-happier.wav" LogicalName="DesktopPet.FocusCompletion.wav" />
     <EmbeddedResource Include="..\Assets\Headphones\headphones.png" LogicalName="DesktopPet.Headphones.png" />
     <EmbeddedResource Include="..\Assets\Headphones\crumb-earbuds.png" LogicalName="DesktopPet.CrumbEarbuds.png" />
     <EmbeddedResource Include="..\Assets\Headphones\poses.json" LogicalName="DesktopPet.HeadphonePoses.json" />

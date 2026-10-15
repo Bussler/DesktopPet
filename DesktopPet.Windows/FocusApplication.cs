@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Media;
 using System.Windows;
 using System.Windows.Threading;
 using DesktopPet.Core;
@@ -16,6 +17,7 @@ internal sealed class FocusApplication : IDisposable
     private readonly Func<string?> _openSettings;
     private readonly Func<Window, bool> _activateWindow;
     private readonly Action _playCompletionSound;
+    private readonly SoundPlayer? _completionSound;
     private long _lastTick;
     private FocusWindow? _window;
     private bool _topmost;
@@ -33,7 +35,13 @@ internal sealed class FocusApplication : IDisposable
         _timestamp = timestamp ?? Stopwatch.GetTimestamp;
         _openSettings = openSettings ?? OpenNotificationSettings;
         _activateWindow = activateWindow ?? (window => window.Activate());
-        _playCompletionSound = playCompletionSound ?? System.Media.SystemSounds.Asterisk.Play;
+        if (playCompletionSound is null)
+        {
+            _completionSound = new SoundPlayer(typeof(FocusApplication).Assembly.GetManifestResourceStream("DesktopPet.FocusCompletion.wav")
+                ?? throw new InvalidOperationException("The focus completion sound is missing."));
+            _completionSound.Load();
+        }
+        _playCompletionSound = playCompletionSound ?? _completionSound!.Play;
         _lastTick = _timestamp();
         _timer.Tick += OnTick;
         Session.RestoreRequested += Show;
@@ -121,5 +129,6 @@ internal sealed class FocusApplication : IDisposable
         Session.RestoreRequested -= Show;
         Reset();
         _window?.Close();
+        _completionSound?.Dispose();
     }
 }
