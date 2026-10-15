@@ -417,7 +417,8 @@ public partial class HoodOverlayWindow : Window
         _editAreaMenuItem.Click += (_, _) => OpenAreaEditor();
         menu.Items.Add(_editAreaMenuItem);
         menu.Items.Add(new WpfSeparator());
-        var notes = new WpfMenuItem { Header = "_Notes" };
+        // Match the icon gutter reserved by ordinary Fluent menu items.
+        var notes = new WpfMenuItem { Header = "_Notes", Padding = new Thickness(26, 0, 0, 0) };
         var newNote = new WpfMenuItem { Header = "_New note" };
         newNote.Click += (_, _) => _createNote();
         var notesList = new WpfMenuItem { Header = "_Notes list" };

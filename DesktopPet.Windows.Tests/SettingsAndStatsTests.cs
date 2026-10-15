@@ -1068,6 +1068,38 @@ public sealed class SettingsAndStatsTests
     [DataRow("soft", "dark")]
     [DataRow("studio", "light")]
     [DataRow("studio", "dark")]
+    public void HoodMenuNotesTextAlignsWithOtherItems(string style, string theme)
+    {
+        using var fixture = new Fixture(theme, style);
+        var hood = fixture.Pet(style);
+        var menu = hood.ContextMenu!;
+        try
+        {
+            menu.Opacity = 0;
+            menu.Placement = PlacementMode.Absolute;
+            menu.HorizontalOffset = menu.VerticalOffset = -10000;
+            menu.IsOpen = true;
+            menu.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            var notes = menu.Items.OfType<MenuItem>().Single(item => (string)item.Header == "_Notes");
+            var feed = menu.Items.OfType<MenuItem>().Single(item => (string)item.Header == "Feed");
+            var notesText = Descendants(notes).OfType<ContentPresenter>().Single(presenter => Equals(presenter.Content, notes.Header));
+            var feedText = Descendants(feed).OfType<ContentPresenter>().Single(presenter => Equals(presenter.Content, feed.Header));
+            Assert.AreEqual(feedText.TransformToAncestor(menu).Transform(new Point()).X,
+                notesText.TransformToAncestor(menu).Transform(new Point()).X, 0.1,
+                "The Notes submenu header must use the same text indentation as ordinary menu items.");
+        }
+        finally { menu.IsOpen = false; hood.Close(); }
+    }
+
+    [TestMethod]
+    [DataRow("sticky-notes", "light")]
+    [DataRow("sticky-notes", "dark")]
+    [DataRow("minimal", "light")]
+    [DataRow("minimal", "dark")]
+    [DataRow("soft", "light")]
+    [DataRow("soft", "dark")]
+    [DataRow("studio", "light")]
+    [DataRow("studio", "dark")]
     public void OpeningHoodMenuShowsCurrentStats(string style, string theme)
     {
         using var fixture = new Fixture(theme, style);
