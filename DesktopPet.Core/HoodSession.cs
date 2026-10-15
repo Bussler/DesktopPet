@@ -151,6 +151,7 @@ public sealed class HoodSession
     private bool _quitRequested;
     private bool _editingArea;
     private bool _dragging;
+    private bool _focusPresentation;
     private PetAction? _dragAction;
     private TimeSpan _dragAnimationElapsed;
     private PetPosition _roamingDirection;
@@ -232,6 +233,8 @@ public sealed class HoodSession
     public TimeSpan RemainingEarlyWakeGrace { get; private set; }
     public bool IsEditingArea => _editingArea;
     public bool IsDragging => _dragging;
+    // Presentation only: ordinary needs and legitimate naps continue; this flag is never saved.
+    public void SetFocusPresentation(bool active) => _focusPresentation = active;
     public bool RequiresAnimationFrames =>
         _configuration.Behavior.ShowSprites &&
         (_dragAction is not null ||
@@ -860,10 +863,7 @@ public sealed class HoodSession
     private static TimeSpan Min(TimeSpan left, TimeSpan right) => left <= right ? left : right;
 
     private bool CanRoam =>
-        Mode == HoodSessionMode.Awake &&
-        _configuration.Behavior.Roaming &&
-        !_dragging &&
-        !_editingArea &&
+        !IsRoamingPaused &&
         (CanRoamHorizontally || CanRoamVertically);
 
     // Avoid pacing, including microscopic rounding gaps, with less than one second of travel space.
@@ -888,6 +888,7 @@ public sealed class HoodSession
     private bool IsRoamingPaused =>
         Mode != HoodSessionMode.Awake ||
         !_configuration.Behavior.Roaming ||
+        _focusPresentation ||
         _dragging ||
         _editingArea;
 

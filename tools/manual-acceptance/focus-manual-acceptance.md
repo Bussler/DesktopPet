@@ -1,0 +1,17 @@
+# Focus native acceptance
+
+Use the candidate executable and SHA-256 in [Focus acceptance](../../docs/specs/Focus-Mode-ACCEPTANCE.md). Run as a normal user with an isolated HOOD_DATA_DIRECTORY; do not change ordinary notes. Record Windows build, display scales, theme/style, pet, result (passed/failed/pending), and observed failures for each check. Automated window assertions do not replace these checks.
+
+- [ ] Launch without elevation. Open Focus from Hood and the physical tray. Repeated opening restores one window with the same state. Hide sprites and repeat through the tray; time still advances and Hood stays hidden.
+- [ ] Confirm 25/5 defaults, idle on open, useful validation, independent durations, editable future settings, and a readable countdown. Set 1/1 minutes for the native cycle.
+- [ ] Start focus. Hood roams/animates normally and ordinary clicks/Notes work. Minimize/cover Focus; after one minute Hood continuously waves with no sound and Focus stays minimized.
+- [ ] Click waving Hood: Focus comes forward, the wave stops, and Notes visibility/content stay unchanged. No jump or wake. Wait: the break does not start itself. Repeat with direct Take break from an already visible window.
+- [ ] Take break: full countdown, stationary looping sleep. Click Hood, Feed, and allow ambient actions; appearance remains asleep and Notes do not toggle. Drag still works without acknowledging as a click.
+- [ ] Pause/Resume each phase: time freezes then continues; paused break stays asleep. Stop from running, paused, and completed phases returns normal pet behavior. Skip break waits for manual Start focus while remaining asleep.
+- [ ] Minimize break with always-on-top off. Keep another ordinary application over the timer's location and actively type in it across expiry. Focus must appear above it silently with 00:00 and Break finished. Hood stays asleep until Start focus. Repeat with always-on-top on and verify the preference is retained, including after closing/reopening Focus.
+- [ ] Toggle always-on-top both ways against another app. Hood/Notes topmost are unchanged. Close Focus: cycle stops, rest of app remains. Reopen: idle with current durations/topmost. Minimize: cycle continues.
+- [ ] Check keyboard tab order, access keys, visible focus, labels, scroll access at small window sizes, all app themes/styles, and supported display scales/multiple monitors. Edit Notes while timer runs; confirm responsive interaction.
+- [ ] Manual notifications: exact Open Windows notification settings button opens System > Notifications without elevation. Status clearly says manual. Record prior DND/priority exceptions; manually enable DND and send representative Teams/Discord Windows notifications. Observe banners/notification center under those settings, then restore original settings. Pause, break, Stop, close, and exit must not alter manual DND or another app's Focus session. Record app/OS exceptions rather than promising all custom notifications/audio are suppressed. Automatic acquisition/release is not delivered and is not a passing native test.
+- [ ] Sleep the PC during a cycle; wake to idle with no lingering wave/sleep override or automatic restart. Quit/relaunch: idle, 25/5, always-on-top off; existing notes, pet selection/size/visibility and legitimate care state preserved.
+
+Keep any unperformed item pending. Native acceptance is complete only after all applicable checks pass against the identified candidate.

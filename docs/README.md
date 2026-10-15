@@ -9,6 +9,7 @@ These files ship with the app, together with the Hood animation preview and thir
 | Guide | Purpose |
 | --- | --- |
 | [Notes](notes.md) | Create, edit, format, search, close, and restore notes. |
+| [Focus](focus.md) | Manual focus/break timers, pet reminders, and Windows notification settings. |
 | [Configuration](configuration.md) | Settings, audio-following headphones, YAML defaults and bounds, and Windows startup. |
 | [UI styles](ui-styles.md) | Appearance, theme, and preview behavior. |
 | [Placement](placement.md) | Dragging, roaming areas, monitors, and scaling. |
@@ -44,6 +45,8 @@ Specifications record agreed behavior and refinements. They preserve their origi
 | [UI styles specification](specs/UI-Styles-SPEC.md) | Shared appearance and preview/rollback behavior. |
 | [Media headphones specification](specs/Media-Headphones-SPEC.md) | Audible Spotify/browser detection and headphones across all pet animations. |
 | [Media headphones acceptance](specs/Media-Headphones-ACCEPTANCE.md) | Automated evidence, native acceptance gaps, and the candidate package identity. |
+| [Focus mode specification](specs/Focus-Mode-SPEC.md) | Manual focus/break cycles, pet reminders, a timer window, and Windows notification-control fallback. |
+| [Focus mode acceptance](specs/Focus-Mode-ACCEPTANCE.md) | Delivered mode, automated evidence, package identity, and pending native checks. |
 | [Performance specification](specs/Performance-SPEC.md) | Measured optimization requirements and acceptance. |
 | [First-release implementation plan](specs/IMPLEMENTATION_PLAN.md) | Original milestones and story coverage. |
 | [Performance investigation](research/performance-findings.md) | Dated measurements, methods, limitations, and local evidence pointers. |

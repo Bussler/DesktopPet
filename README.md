@@ -17,8 +17,8 @@ The published app targets **64-bit Windows (`win-x64`)** and includes its .NET r
 | Left-click an awake pet | Show or hide open notes. The first use creates a blank note; if all notes are closed, it opens the Notes list. |
 | Left-click a sleeping pet | Wake it. This click is used only for waking. |
 | Drag the pet | Move it and its roaming area, including between monitors. |
-| Right-click the pet | View needs; Feed, Sleep, Edit roaming area, open Notes or Settings, or Quit. |
-| Right-click the tray icon | Access Notes, Settings, Show Hood sprites, or Quit. Double-click opens Settings. |
+| Right-click the pet | View needs; Feed, Sleep, Edit roaming area, open Focus, Notes or Settings, or Quit. |
+| Right-click the tray icon | Access Focus, Notes, Settings, Show Hood sprites, or Quit. Double-click opens Settings. |
 
 **Edit roaming area** shows an outline: drag its top bar to move it, or its edges and corners to resize it. Needs and timers pause while the app is closed or Windows is suspended.
 
@@ -32,6 +32,10 @@ In **Settings > Appearance**, choose a pet, size (50%–200%), UI style, and Sys
 - Edits save immediately. If **Not saved** appears, fix the reported storage issue and choose **Retry save** before quitting. Open notes and their positions return on restart; hiding the group preserves which notes are open.
 
 See the [Notes guide](docs/notes.md) for all shortcuts and editing features.
+
+## Focus and breaks
+
+Open **Focus** from either menu for a quiet 25/5-minute timer with configurable durations, Pause/Resume, Stop, Skip break, and always-on-top. Hood waves when focus finishes; click him to reopen the timer, then choose **Take break**. During breaks he looks asleep; **Break finished** silently restores the window and waits for **Start focus**. These special pet clicks leave Notes alone. Closing stops the cycle; minimizing keeps it running. Windows notification control is manual through **Open Windows notification settings**. See the [Focus guide](docs/focus.md).
 
 ## Your local data
 
@@ -79,6 +83,7 @@ The scripts prefer `%USERPROFILE%\.dotnet\dotnet.exe` if present, otherwise `dot
 | Guide | Covers |
 | --- | --- |
 | [Notes](docs/notes.md) | Editing, Markdown, math, links, tables, settings, and Trash. |
+| [Focus](docs/focus.md) | Work/break timers, quiet pet reminders, and manual notification control. |
 | [Configuration](docs/configuration.md) and [UI styles](docs/ui-styles.md) | Settings, appearance, and startup. |
 | [Placement](docs/placement.md) and [Sleep](docs/sleep-and-recovery.md) | Roaming areas, monitors, naps, and timers. |
 | [Data recovery](docs/recovery.md) | Backups, save failures, and damaged files. |
