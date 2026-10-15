@@ -1,0 +1,48 @@
+<Window x:Class="DesktopPet.Windows.FocusWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Focus" Width="300" MinWidth="280" MinHeight="210" MaxHeight="600" SizeToContent="Height"
+        WindowStartupLocation="CenterScreen"
+        FontFamily="{DynamicResource AppFontFamily}" FontSize="{DynamicResource AppBodyFontSize}"
+        Background="{DynamicResource NotesSurfaceBrush}" Foreground="{DynamicResource NotesTextBrush}">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries><ResourceDictionary Source="NotesStyles.xaml" /></ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Window.Resources>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="16">
+            <TextBlock x:Name="PhaseText" TextAlignment="Center" FontSize="14" AutomationProperties.LiveSetting="Polite" />
+            <TextBlock x:Name="CountdownText" Text="25:00" FontSize="48" TextAlignment="Center" AutomationProperties.Name="Time remaining" />
+            <TextBlock x:Name="ValidationText" TextWrapping="Wrap" Foreground="{DynamicResource NotesSecondaryTextBrush}" AutomationProperties.LiveSetting="Polite" />
+            <Grid Margin="0,10,0,0">
+                <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <Button x:Name="PrimaryButton" Content="_Start focus" Click="OnPrimary" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" />
+                <Button x:Name="StopButton" Grid.Column="1" Content="St_op" Click="OnStop" Margin="8,0,0,0" />
+            </Grid>
+            <Button x:Name="SkipButton" Content="S_kip break" Click="OnSkip" Margin="0,8,0,0" />
+            <Expander x:Name="OptionsExpander" Header="Opt_ions" Margin="0,12,0,0">
+                <StackPanel>
+                    <Grid Margin="0,8">
+                        <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition Width="12" /><ColumnDefinition /></Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <Label Content="_Focus minutes" Target="{Binding ElementName=FocusInput}" />
+                            <TextBox x:Name="FocusInput" Text="25" TextChanged="OnDurationChanged" AutomationProperties.Name="Focus minutes" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <Label Content="_Break minutes" Target="{Binding ElementName=BreakInput}" />
+                            <TextBox x:Name="BreakInput" Text="5" TextChanged="OnDurationChanged" AutomationProperties.Name="Break minutes" />
+                        </StackPanel>
+                    </Grid>
+                    <CheckBox x:Name="TopmostCheckBox" Content="_Always on top" Checked="OnTopmostChanged" Unchecked="OnTopmostChanged" Margin="0,4,0,12" />
+                    <TextBlock Text="Do not disturb is manual. Turn it on for focus and off for breaks in Windows; Hood leaves it unchanged. Windows priority exceptions apply."
+                               TextWrapping="Wrap" Margin="0,0,0,8" Foreground="{DynamicResource NotesSecondaryTextBrush}" />
+                    <Button x:Name="NotificationSettingsButton" Click="OnNotificationSettings" HorizontalContentAlignment="Center">
+                        <TextBlock Text="Open Windows notification settings" TextWrapping="Wrap" />
+                    </Button>
+                    <TextBlock x:Name="NotificationErrorText" TextWrapping="Wrap" Margin="0,6,0,0" AutomationProperties.LiveSetting="Polite" />
+                </StackPanel>
+            </Expander>
+        </StackPanel>
+    </ScrollViewer>
+</Window>

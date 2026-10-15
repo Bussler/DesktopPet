@@ -14,7 +14,7 @@ if (-not (Test-Path (Join-Path $appDirectory 'DesktopPet.Windows.exe'))) {
 $docsDirectory = Join-Path $candidateRoot 'docs'
 New-Item -ItemType Directory -Path $docsDirectory -Force | Out-Null
 $appGuides = @(
-    'changing-sprites.md', 'configuration.md', 'hood-animations.md', 'notes.md',
+    'changing-sprites.md', 'configuration.md', 'focus.md', 'hood-animations.md', 'notes.md',
     'placement.md', 'recovery.md', 'sleep-and-recovery.md', 'ui-styles.md', 'third-party-notices.md',
     'previews\hood-actions.png'
 )

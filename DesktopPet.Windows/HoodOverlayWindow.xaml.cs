@@ -47,6 +47,10 @@ public partial class HoodOverlayWindow : Window
     private readonly WpfMenuItem _showSpritesMenuItem = new() { Header = "Show Hood sprites", IsCheckable = true };
     internal event Action? ToggleSpritesRequested;
     internal event Action? SpritesVisibilityChanged;
+    internal event Action? FocusRequested;
+    private FocusSession? _focus;
+    private PetAction? _focusAction;
+    private long _focusAnimationTicks;
     private RoamingAreaEditorWindow? _areaEditor;
     private System.Windows.Point _mouseDownScreen;
     private System.Windows.Point _lastPointerScreen;
@@ -214,6 +218,8 @@ public partial class HoodOverlayWindow : Window
 
     private void OnOverlayClosed(object? sender, EventArgs e)
     {
+        if (_focus is not null) _focus.Changed -= SyncFocusPresentation;
+        _session.SetFocusPresentation(false);
         _session.EndDragging();
         _session.EndAreaEditing();
         _areaEditor?.Close();
@@ -229,6 +235,7 @@ public partial class HoodOverlayWindow : Window
         }
 
         var elapsed = Stopwatch.GetElapsedTime(previous, now);
+        AdvanceFocusAnimation(elapsed);
         var oldPosition = _session.Position;
         try
         {
@@ -352,8 +359,15 @@ public partial class HoodOverlayWindow : Window
         }
         else
         {
-            RunSessionCommand(_session.React);
-            _activateNotes();
+            if (_focus?.HandlePetClick() != true)
+            {
+                RunSessionCommand(_session.React);
+                _activateNotes();
+            }
+            else if (_focus.PetActionOverride == PetAction.Sleep)
+            {
+                _activateNotes();
+            }
         }
 
         _dragged = false;
@@ -414,6 +428,9 @@ public partial class HoodOverlayWindow : Window
         notes.Items.Add(notesList);
         notes.Items.Add(notesSettings);
         menu.Items.Add(notes);
+        var focus = new WpfMenuItem { Header = "_Focus" };
+        focus.Click += (_, _) => FocusRequested?.Invoke();
+        menu.Items.Add(focus);
         menu.Items.Add(new WpfSeparator());
         var settings = new WpfMenuItem { Header = "Settings" };
         _showSpritesMenuItem.Click += (_, _) =>
@@ -507,7 +524,7 @@ public partial class HoodOverlayWindow : Window
             return;
         }
 
-        var presentation = _session.Presentation;
+        var presentation = CurrentPresentation;
         WindowsDisplayProvider.ApplyPosition(this, presentation.Position);
         var animation = assets.Definition.GetAnimation(presentation.Action);
         var frame = animation.Frames[presentation.FrameIndex];
@@ -670,6 +687,44 @@ public partial class HoodOverlayWindow : Window
 
     internal System.Windows.Point PresentationCenter => new(Left + ActualWidth / 2, Top + ActualHeight / 2);
 
+    internal void AttachFocus(FocusSession focus)
+    {
+        if (_focus is not null) _focus.Changed -= SyncFocusPresentation;
+        _focus = focus;
+        focus.Changed += SyncFocusPresentation;
+        SyncFocusPresentation();
+    }
+
+    private void SyncFocusPresentation()
+    {
+        var action = _focus?.PetActionOverride;
+        if (action == _focusAction) return;
+        _focusAction = action;
+        _focusAnimationTicks = 0;
+        _session.SetFocusPresentation(action is not null);
+        RenderPresentation();
+        UpdateTimerInterval();
+    }
+
+    internal void AdvanceFocusAnimation(TimeSpan elapsed)
+    {
+        if (_focusAction is not { } action) return;
+        var animation = _assetSource.Definition.GetAnimation(action);
+        var cycle = TimeSpan.FromMilliseconds(animation.FrameDurationMilliseconds).Ticks * animation.Frames.Count;
+        _focusAnimationTicks = (_focusAnimationTicks + elapsed.Ticks % cycle) % cycle;
+    }
+
+    internal HoodPresentation CurrentPresentation
+    {
+        get
+        {
+            if (_focusAction is not { } action) return _session.Presentation;
+            var animation = _assetSource.Definition.GetAnimation(action);
+            var duration = TimeSpan.FromMilliseconds(animation.FrameDurationMilliseconds);
+            return new(action, (int)(_focusAnimationTicks / duration.Ticks % animation.Frames.Count), _session.Position, _session.QuitRequested);
+        }
+    }
+
     internal void RefreshBehaviorSettings()
     {
         ApplyMediaHeadphones(_session.Configuration.Behavior.MediaHeadphones);
@@ -699,12 +754,12 @@ public partial class HoodOverlayWindow : Window
     {
         Width = PetImage.Width = HeadphoneBandImage.Width = HeadphoneCupsImage.Width = _session.PetWidth;
         Height = PetImage.Height = HeadphoneBandImage.Height = HeadphoneCupsImage.Height = _session.PetHeight;
-        WindowsDisplayProvider.ApplyPosition(this, _session.Presentation.Position);
+        WindowsDisplayProvider.ApplyPosition(this, CurrentPresentation.Position);
         _areaEditor?.ApplyPlacement();
     }
 
     private void UpdateTimerInterval() => _frameTimer.Interval = TimeSpan.FromMilliseconds(
-        _session.RequiresAnimationFrames ? 33 : 1000);
+        _focusAction is not null || _session.RequiresAnimationFrames ? 33 : 1000);
 
     private static IntPtr WindowMessageHook(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
     {

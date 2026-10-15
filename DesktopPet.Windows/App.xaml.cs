@@ -16,6 +16,7 @@ public partial class App : System.Windows.Application
     private HoodSession? _session;
     private NotesApplication? _notes;
     private HoodOverlayWindow? _petWindow;
+    private FocusApplication? _focus;
     private SettingsWindow? _settingsWindow;
     private NotesSettingsWindow? _notesSettingsWindow;
     private NotesListWindow? _notesListWindow;
@@ -130,6 +131,9 @@ public partial class App : System.Windows.Application
                 ShowNotesSettings,
                 _effectiveUiStyle);
             _petWindow.ApplyMediaHeadphones(configuration.Behavior.MediaHeadphones);
+            _focus = new FocusApplication(Dispatcher, _effectiveNotesSettings.Theme, _effectiveUiStyle);
+            _petWindow.AttachFocus(_focus.Session);
+            _petWindow.FocusRequested += ShowFocus;
             _petWindow.Closed += (_, _) => RequestQuit();
             _petWindow.ToggleSpritesRequested += ToggleSprites;
             _petWindow.SpritesVisibilityChanged += () => RestoreOpenNotes();
@@ -212,6 +216,7 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _focus?.Dispose();
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
         SystemEvents.UserPreferenceChanged -= OnUserPreferenceChanged;
         _trayIcon?.Dispose();
@@ -329,6 +334,7 @@ public partial class App : System.Windows.Application
         notes.DropDownItems.Add("Notes list", null, (_, _) => ShowNotesList());
         notes.DropDownItems.Add("Notes settings", null, (_, _) => ShowNotesSettings());
         menu.Items.Add(notes);
+        menu.Items.Add("Focus", null, (_, _) => ShowFocus());
         menu.Items.Add(new Forms.ToolStripSeparator());
         var settings = new Forms.ToolStripMenuItem("Settings");
         settings.Click += (_, _) => ShowSettings();
@@ -349,7 +355,7 @@ public partial class App : System.Windows.Application
             ContextMenuStrip = menu,
             Visible = true
         };
-        icon.DoubleClick += (_, _) => ShowSettings();
+        icon.DoubleClick += (_, _) => ActivateNotes();
         return icon;
     }
 
@@ -418,6 +424,8 @@ public partial class App : System.Windows.Application
         _settingsWindow.Activate();
     }
 
+    private void ShowFocus() => _focus?.Show();
+
     private void ShowNotesSettings()
     {
         if (_session is null)
@@ -456,6 +464,7 @@ public partial class App : System.Windows.Application
         _notesListWindow?.ApplyTheme(settings.Theme, _effectiveUiStyle);
         _notesSettingsWindow?.ApplyEffectiveSettings(settings, _effectiveUiStyle);
         _settingsWindow?.ApplyTheme(settings.Theme, _effectiveUiStyle);
+        _focus?.ApplyTheme(settings.Theme, _effectiveUiStyle);
         if (_trayIcon?.ContextMenuStrip is { } trayMenu)
         {
             TrayMenuAppearance.Apply(trayMenu, settings.Theme, _effectiveUiStyle);
@@ -573,6 +582,7 @@ public partial class App : System.Windows.Application
         // Closing Settings restores unsaved appearance and geometry before the final snapshot.
         _settingsWindow?.Close();
         if (_settingsWindow is not null) return false;
+        _focus?.Dispose();
         if (_session is { QuitRequested: false })
         {
             try
