@@ -107,7 +107,7 @@ public sealed class HoodConfigurationTests
         StringAssert.Contains(yaml, "line_spacing: 2");
         StringAssert.Contains(yaml, "theme: system");
         StringAssert.Contains(yaml, "always_on_top: false");
-        StringAssert.Contains(yaml, "animate_show_hide: true");
+        StringAssert.Contains(yaml, "animate_show_hide: false");
         Assert.AreEqual(0, Directory.GetFiles(directory.Path, "*.tmp").Length);
 
         File.WriteAllText(store.Path, ReplaceSetting(yaml, "hunger_points_per_hour", "37.25"));
@@ -214,6 +214,16 @@ public sealed class HoodConfigurationTests
     }
 
     [TestMethod]
+    public void NotesAnimationDefaultsOffWhenSettingIsMissing()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new YamlConfigurationStore(Path.Combine(directory.Path, "config.yaml"));
+        Assert.IsFalse(store.LoadOrCreate().Notes.AnimateShowHide);
+        File.WriteAllText(store.Path, Regex.Replace(File.ReadAllText(store.Path), @"(?m)^  animate_show_hide:.*\r?\n", string.Empty));
+        Assert.IsFalse(store.LoadOrCreate().Notes.AnimateShowHide);
+    }
+
+    [TestMethod]
     public void NotesAppearanceSettings_RoundTripWithoutChangingHoodsIndependentTopmostSetting()
     {
         using var directory = new TemporaryDirectory();
@@ -228,7 +238,7 @@ public sealed class HoodConfigurationTests
                 LineSpacing = 1.75,
                 Theme = "dark",
                 AlwaysOnTop = true,
-                AnimateShowHide = false
+                AnimateShowHide = true
             }
         };
 
@@ -237,11 +247,11 @@ public sealed class HoodConfigurationTests
 
         Assert.AreEqual(candidate, restored);
         Assert.IsTrue(restored.Notes.AlwaysOnTop);
-        Assert.IsFalse(restored.Notes.AnimateShowHide);
+        Assert.IsTrue(restored.Notes.AnimateShowHide);
         Assert.IsTrue(restored.Behavior.AlwaysOnTop);
         StringAssert.Contains(File.ReadAllText(store.Path), "default_color: blue");
         StringAssert.Contains(File.ReadAllText(store.Path), "theme: dark");
-        StringAssert.Contains(File.ReadAllText(store.Path), "animate_show_hide: false");
+        StringAssert.Contains(File.ReadAllText(store.Path), "animate_show_hide: true");
     }
 
     [TestMethod]
@@ -267,12 +277,12 @@ public sealed class HoodConfigurationTests
                 AlwaysOnTop = true,
                 TextSize = 20,
                 Theme = "dark",
-                AnimateShowHide = false
+                AnimateShowHide = true
             }
         });
         Assert.IsTrue(controller.Current.Behavior.AlwaysOnTop);
         Assert.IsTrue(controller.Current.Notes.AlwaysOnTop);
-        Assert.IsFalse(controller.Current.Notes.AnimateShowHide);
+        Assert.IsTrue(controller.Current.Notes.AnimateShowHide);
         Assert.AreEqual(position, session.Position);
         Assert.AreEqual(needs, session.Needs);
         Assert.AreEqual(action, session.Presentation.Action);

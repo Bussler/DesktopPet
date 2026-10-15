@@ -110,7 +110,7 @@ public sealed record NotesConfiguration
     public double LineSpacing { get; init; } = 2;
     public string Theme { get; init; } = "system";
     public bool AlwaysOnTop { get; init; }
-    public bool AnimateShowHide { get; init; } = true;
+    public bool AnimateShowHide { get; init; }
 }
 
 public enum NoteColor

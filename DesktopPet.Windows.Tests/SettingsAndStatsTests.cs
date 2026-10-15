@@ -1722,8 +1722,8 @@ public sealed class SettingsAndStatsTests
             Assert.AreEqual(LineStackingStrategy.BlockLineHeight, document.LineStackingStrategy);
             ((CheckBox)settings.FindName("AlwaysOnTopCheckBox")).IsChecked = true;
             Assert.IsTrue(note.Topmost);
-            ((CheckBox)settings.FindName("AnimateShowHideCheckBox")).IsChecked = false;
-            Assert.IsFalse(Effective().AnimateShowHide);
+            ((CheckBox)settings.FindName("AnimateShowHideCheckBox")).IsChecked = true;
+            Assert.IsTrue(Effective().AnimateShowHide);
             Assert.AreEqual(original, fixture.Controller.Current.Notes);
             Assert.AreEqual(configBaseline, File.ReadAllText(fixture.ConfigPath));
             Assert.AreEqual(notesBaseline, File.ReadAllText(notesPath));
