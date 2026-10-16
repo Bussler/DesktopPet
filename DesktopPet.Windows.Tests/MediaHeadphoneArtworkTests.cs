@@ -53,9 +53,9 @@ public sealed class MediaHeadphoneArtworkTests
     [DataRow("hood", PetAction.Idle, 94)]
     [DataRow("hood", PetAction.RunRight, 89)]
     [DataRow("hood", PetAction.RunLeft, 89)]
-    [DataRow("pip", PetAction.Idle, 83)]
-    [DataRow("pip", PetAction.RunRight, 76)]
-    [DataRow("pip", PetAction.RunLeft, 76)]
+    [DataRow("pip", PetAction.Idle, 94)]
+    [DataRow("pip", PetAction.RunRight, 116)]
+    [DataRow("pip", PetAction.RunLeft, 116)]
     public void CupsStayAtAnimalEarHeightInsteadOfTheCheeks(string name, PetAction action, int earBottom)
     {
         var assets = HoodAssets.LoadPet(Path.Combine(AppContext.BaseDirectory, "Assets"), name);
@@ -163,8 +163,6 @@ public sealed class MediaHeadphoneArtworkTests
     [TestMethod]
     [DataRow("hood", PetAction.RunRight, 45, 120)]
     [DataRow("hood", PetAction.RunLeft, 103, 25)]
-    [DataRow("pip", PetAction.RunRight, 78, 128)]
-    [DataRow("pip", PetAction.RunLeft, 75, 14)]
     public void WalkingShowsTheVisibleCupBehindTheFace(string name, PetAction action, int earX, int faceX)
     {
         var assets = HoodAssets.LoadPet(Path.Combine(AppContext.BaseDirectory, "Assets"), name);
@@ -200,11 +198,59 @@ public sealed class MediaHeadphoneArtworkTests
         foreach (var frame in assets.Definition.GetAnimation(PetAction.Idle).Frames.Distinct())
         {
             var pixels = Render(MediaHeadphoneArtwork.Get("pip", PetAction.Idle, frame).InFront);
-            Assert.AreEqual(0, CountOpaque(pixels, new Int32Rect(75, 50, 85, 30)),
+            Assert.AreEqual(0, CountOpaque(pixels, new Int32Rect(124, 60, 23, 50)),
                 "Pip's cups must not lie flat across the upper forehead.");
-            Assert.IsTrue(CountOpaque(pixels, new Int32Rect(35, 65, 34, 52)) > 100);
-            Assert.IsTrue(CountOpaque(pixels, new Int32Rect(155, 65, 35, 52)) > 100);
+            Assert.IsTrue(CountOpaque(pixels, new Int32Rect(94, 53, 31, 40)) > 100);
+            Assert.IsTrue(CountOpaque(pixels, new Int32Rect(146, 50, 30, 40)) > 100);
         }
+    }
+
+    [TestMethod]
+    [DataRow(PetAction.RunRight, 131, 154)]
+    [DataRow(PetAction.RunLeft, 40, 3)]
+    public void PipsWalkingCupFollowsTheQuadrupedalEarAndLeavesTheFaceClear(PetAction action, int earX, int faceX)
+    {
+        var assets = HoodAssets.LoadPet(Path.Combine(AppContext.BaseDirectory, "Assets"), "pip");
+        foreach (var frame in assets.Definition.GetAnimation(action).Frames.Distinct())
+        {
+            var pixels = Render(MediaHeadphoneArtwork.Get("pip", action, frame).InFront);
+            var total = CountOpaque(pixels, new Int32Rect(0, 0, 192, 208));
+            Assert.IsTrue(total > 100);
+            Assert.AreEqual(total, CountOpaque(pixels, new Int32Rect(earX, 90, 22, 28)),
+                $"{action} {frame}: the visible cup must stay over the new profile ear.");
+            Assert.AreEqual(0, CountOpaque(pixels, new Int32Rect(faceX, 114, 35, 40)),
+                $"{action} {frame}: leave the eye and muzzle clear.");
+        }
+    }
+
+    [TestMethod]
+    public void PipsCupsFollowTheEarsAcrossEveryQuadrupedalPose()
+    {
+        var assets = HoodAssets.LoadPet(Path.Combine(AppContext.BaseDirectory, "Assets"), "pip");
+        var failures = new List<string>();
+        foreach (var animation in assets.Definition.Animations)
+        foreach (var frame in animation.Frames.Distinct())
+        {
+            var action = Enum.Parse<PetAction>(animation.Action, true);
+            var art = MediaHeadphoneArtwork.Get("pip", action, frame);
+            var cups = Render(art.InFront);
+            var fox = Render(new CroppedBitmap(assets.SpriteSheet, assets.GetFrameRectangle(frame)));
+            var total = 0;
+            var onEar = 0;
+            for (var i = 0; i < cups.Length; i += 4)
+            {
+                if (cups[i + 3] <= 128) continue;
+                total++;
+                var (b, g, r) = (fox[i], fox[i + 1], fox[i + 2]);
+                if (fox[i + 3] > 180 && r > 170 && g > 115 && b > 70 && r < g * 1.6 && g < b * 1.8)
+                    onEar++;
+            }
+            if (total <= 100 || onEar < total * 0.5)
+                failures.Add($"{action} {frame}: only {onEar}/{total} cup pixels overlap the pale ear fur.");
+            Assert.IsTrue(CountOpaque(Render(art.Behind), new Int32Rect(0, 0, 192, 208)) > 0,
+                $"{action} {frame}: retain the band behind the head.");
+        }
+        Assert.IsEmpty(failures, string.Join(Environment.NewLine, failures));
     }
 
     private static byte[] Render(ImageSource image)

@@ -31,7 +31,7 @@ public sealed class ScriptCompatibilityTests
         }
         Assert.AreEqual(0, process.ExitCode, await error);
         var result = await output;
-        StringAssert.Contains(result, "Pip: no side artifacts");
+        StringAssert.Contains(result, "Pip: no side artifacts; horizontal quadruped");
         StringAssert.Contains(result, "Crumb: no side artifacts");
     }
 }

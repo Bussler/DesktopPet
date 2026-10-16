@@ -78,7 +78,7 @@ function Frame-Bitmap($frame) {
     [System.Windows.Media.Imaging.BitmapSource]::Create($frame.Bounds[2],$frame.Bounds[3],96,96,
         [System.Windows.Media.PixelFormats]::Bgra32,$null,$frame.Pixels,$frame.Bounds[2] * 4)
 }
-function Draw-BipedFrame($drawing, $frames, [int]$index, [int]$row, [bool]$left, [double]$hipFraction, [double]$pawWidthScale) {
+function Draw-BipedFrame($drawing, $frames, [int]$index, [int]$row, [bool]$left, [double]$hipFraction) {
     $body = Frame-Bitmap $frames[0]
     $leg = Frame-Bitmap $frames[1]
     $phase = 2 * [Math]::PI * $index / 16
@@ -86,7 +86,7 @@ function Draw-BipedFrame($drawing, $frames, [int]$index, [int]$row, [bool]$left,
     $bodyHeight = 300
     $bodyWidth = $body.PixelWidth * $bodyHeight / $body.PixelHeight
     $legHeight = 48
-    $legWidth = $leg.PixelWidth * $legHeight / $leg.PixelHeight * $pawWidthScale
+    $legWidth = $leg.PixelWidth * $legHeight / $leg.PixelHeight
     $bodyX = (384 - $bodyWidth) / 2
     $hipX = $bodyX + $bodyWidth * $hipFraction
     $hipY = 342 - $bounce
@@ -122,7 +122,7 @@ foreach ($animation in $manifest.animations) {
     $sourceAction = if ($action -eq 'runLeft') { 'runRight' } else { $action }
     $count = @($animation.frames | Select-Object row,column -Unique).Count
     $columns = if ($count -eq 15) { 5 } else { 4 }
-    $biped = $sourceAction -eq 'runRight' -and $Pet -ne 'Puddle'
+    $biped = $sourceAction -eq 'runRight' -and $Pet -eq 'Crumb'
     if ($biped) { $sourceAction = 'run-parts'; $columns = 2 }
     $sourcePath = Join-Path $directory "source\$sourceAction.png"
     if ($InspectOnly -and -not (Test-Path -LiteralPath $sourcePath)) { continue }
@@ -146,10 +146,7 @@ foreach ($animation in $manifest.animations) {
     $row = $animation.frames[0].row
     for ($i = 0; $i -lt $count; $i++) {
         if ($biped) {
-            # Lower-belly center differs because the tail changes each body's bounds.
-            $hipFraction = if ($Pet -eq 'Crumb') { 0.54 } else { 0.664 }
-            $pawWidthScale = if ($Pet -eq 'Pip') { 1.35 } else { 1 }
-            Draw-BipedFrame $drawing $frames $i $row ($action -eq 'runLeft') $hipFraction $pawWidthScale
+            Draw-BipedFrame $drawing $frames $i $row ($action -eq 'runLeft') 0.54
             continue
         }
         $x,$y,$width,$height = $bounds[$i]

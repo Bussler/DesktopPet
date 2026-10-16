@@ -47,6 +47,28 @@ public static class AlternateSpritePixels {
         if (bottom<372) throw new InvalidOperationException("Walking foot is held too high.");
         return sum/count;
     }
+    public static double[] QuadrupedFeet(byte[] p, int stride, int frame) {
+        int[] count = new int[2], min = {384,384}, max = {0,0}, bottom = {0,0};
+        double[] sum = new double[2];
+        int minX=384,maxX=0,minY=416,maxY=0;
+        for (int y=0;y<416;y++) for (int x=0;x<384;x++) {
+            int i=(416+y)*stride+(frame*384+x)*4;
+            int b=p[i],g=p[i+1],r=p[i+2],a=p[i+3];
+            if (a<32) continue;
+            if (x==0 || x==383 || y==0 || y==415) throw new InvalidOperationException("Clipped quadruped frame.");
+            minX=Math.Min(minX,x); maxX=Math.Max(maxX,x); minY=Math.Min(minY,y); maxY=Math.Max(maxY,y);
+            if (y<330 || a<200 || r<=35 || r>=160 || g>=105 || b>=85 || r<=g*1.25) continue;
+            int pair=x<220 ? 0 : 1;
+            count[pair]++; sum[pair]+=x; min[pair]=Math.Min(min[pair],x); max[pair]=Math.Max(max[pair],x); bottom[pair]=Math.Max(bottom[pair],y);
+        }
+        if (maxX-minX < (maxY-minY)*1.25) throw new InvalidOperationException("Walking fox must have a horizontal animal silhouette.");
+        for (int pair=0;pair<2;pair++) {
+            if (count[pair]<100 || bottom[pair]<372) throw new InvalidOperationException("Forepaws and hind paws must remain visible near the ground.");
+            // A pair includes two separated paws, each with the original 68px paw allowance.
+            if (max[pair]-min[pair]>2*68) throw new InvalidOperationException("Quadruped paw pair is oversized.");
+        }
+        return new double[] {sum[0]/count[0],sum[1]/count[1]};
+    }
     public static void Mirror(byte[] p,int stride,int frame) {
         for (int y=0;y<416;y++) for (int x=0;x<384;x++) {
             int a=(416+y)*stride+(frame*384+x)*4,b=(832+y)*stride+(frame*384+383-x)*4;
@@ -75,6 +97,19 @@ foreach ($pet in 'Pip','Crumb') {
                 try { [AlternateSpritePixels]::Fragments($pixels,$data.Stride,$frame.column,$frame.row) }
                 catch { throw "$pet $action frame $($frame.column): $_" }
             }
+        }
+        if ($pet -eq 'Pip') {
+            $pairs = @(0..15 | ForEach-Object {
+                [AlternateSpritePixels]::Mirror($pixels,$data.Stride,$_)
+                ,[AlternateSpritePixels]::QuadrupedFeet($pixels,$data.Stride,$_)
+            })
+            for ($i=0;$i -lt 16;$i++) {
+                for ($pair=0;$pair -lt 2;$pair++) {
+                    if ([Math]::Abs($pairs[$i][$pair] - $pairs[($i+1)%16][$pair]) -gt 30) { throw "Pip paw pair jumps at frame $i." }
+                }
+            }
+            Write-Output 'Pip: no side artifacts; horizontal quadruped; visible fore/hind paws; continuous loop; exact left/right mirrors.'
+            continue
         }
         $positions = @(0..15 | ForEach-Object {
             [AlternateSpritePixels]::Mirror($pixels,$data.Stride,$_)
