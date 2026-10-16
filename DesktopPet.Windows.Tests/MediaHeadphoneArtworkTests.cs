@@ -99,9 +99,9 @@ public sealed class MediaHeadphoneArtworkTests
     }
 
     [TestMethod]
-    [DataRow(PetAction.RunRight, 65)]
-    [DataRow(PetAction.RunLeft, 109)]
-    public void CrumbsWalkingEarbudStaysAtTheInnerEarBase(PetAction action, int earX)
+    [DataRow(PetAction.RunRight, 75)]
+    [DataRow(PetAction.RunLeft, 93)]
+    public void CrumbsWalkingEarbudsSitAtTheLowerEarEntrance(PetAction action, int earX)
     {
         var assets = HoodAssets.LoadPet(Path.Combine(AppContext.BaseDirectory, "Assets"), "crumb");
         foreach (var frame in assets.Definition.GetAnimation(action).Frames.Distinct())
@@ -109,28 +109,55 @@ public sealed class MediaHeadphoneArtworkTests
             var pixels = Render(MediaHeadphoneArtwork.Get("crumb", action, frame).InFront);
             var total = CountOpaque(pixels, new Int32Rect(0, 0, 192, 208));
             Assert.IsTrue(total > 100);
-            Assert.AreEqual(total, CountOpaque(pixels, new Int32Rect(earX, 70, 19, 24)),
-                $"{action} {frame}: the earbud belongs at the inner ear base, below the middle of the ear.");
-            var innerTipX = action == PetAction.RunRight ? 74 : 110;
-            var outerShellX = action == PetAction.RunRight ? 66 : 118;
-            Assert.IsTrue(CountRose(pixels, new Int32Rect(innerTipX, 70, 8, 24)) >
-                CountRose(pixels, new Int32Rect(outerShellX, 70, 8, 24)) + 5,
+            Assert.AreEqual(total, CountOpaque(pixels, new Int32Rect(earX, 56, 24, 25)),
+                $"{action} {frame}: the bud belongs lower, beside the inner ear entrance.");
+        }
+    }
+
+    [TestMethod]
+    [DataRow(PetAction.RunRight)]
+    [DataRow(PetAction.RunLeft)]
+    public void CrumbsWalkingEarbudTipPointsInward(PetAction action)
+    {
+        var assets = HoodAssets.LoadPet(Path.Combine(AppContext.BaseDirectory, "Assets"), "crumb");
+        foreach (var frame in assets.Definition.GetAnimation(action).Frames.Distinct())
+        {
+            var pixels = Render(MediaHeadphoneArtwork.Get("crumb", action, frame).InFront);
+            var total = CountOpaque(pixels, new Int32Rect(0, 0, 192, 208));
+            Assert.IsTrue(total > 100);
+            var tipX = AverageColourX(pixels, true);
+            var shellX = AverageColourX(pixels, false);
+            Assert.IsTrue(action == PetAction.RunRight ? tipX > shellX + 1 : tipX < shellX - 1,
                 $"{action} {frame}: the small rose tip must point toward the inner ear, with the gold shell outside.");
         }
     }
 
     [TestMethod]
-    public void CrumbsSleepingEarbudsSitOutwardInsideBothEars()
+    public void CrumbsEarbudsStayInsideThePinkEarsAcrossEveryPose()
     {
         var assets = HoodAssets.LoadPet(Path.Combine(AppContext.BaseDirectory, "Assets"), "crumb");
-        foreach (var frame in assets.Definition.GetAnimation(PetAction.Sleep).Frames.Distinct())
+        var failures = new List<string>();
+        foreach (var animation in assets.Definition.Animations)
+        foreach (var frame in animation.Frames.Distinct())
         {
-            var pixels = Render(MediaHeadphoneArtwork.Get("crumb", PetAction.Sleep, frame).InFront);
-            Assert.IsTrue(CountOpaque(pixels, new Int32Rect(45, 125, 21, 27)) > 25);
-            Assert.IsTrue(CountOpaque(pixels, new Int32Rect(106, 110, 20, 26)) > 25);
-            Assert.AreEqual(0, CountOpaque(pixels, new Int32Rect(66, 0, 40, 208)),
-                $"{frame}: the sleeping earbuds must sit outward in the ears, clear of the head between them.");
+            var action = Enum.Parse<PetAction>(animation.Action, true);
+            var buds = Render(MediaHeadphoneArtwork.Get("crumb", action, frame).InFront);
+            var mouse = Render(new CroppedBitmap(assets.SpriteSheet, assets.GetFrameRectangle(frame)));
+            var total = 0;
+            var inside = 0;
+            for (var i = 0; i < buds.Length; i += 4)
+            {
+                if (buds[i + 3] <= 128) continue;
+                total++;
+                var (b, g, r) = (mouse[i], mouse[i + 1], mouse[i + 2]);
+                // Include the ear's pale pink highlights as well as its saturated shading.
+                if (mouse[i + 3] > 200 && r > 160 && g > 60 && b > 60 &&
+                    r > g * 1.18 && r > b * 1.12 && b > g * 0.7) inside++;
+            }
+            if (total <= 50 || inside < total * 0.85)
+                failures.Add($"{action} {frame}: only {inside}/{total} earbud pixels sit inside the actual pink ears.");
         }
+        Assert.IsEmpty(failures, string.Join(Environment.NewLine, failures));
     }
 
     [TestMethod]
@@ -200,16 +227,22 @@ public sealed class MediaHeadphoneArtworkTests
         return count;
     }
 
-    private static int CountRose(byte[] pixels, Int32Rect region)
+    private static double AverageColourX(byte[] pixels, bool rose)
     {
         var count = 0;
-        for (var y = region.Y; y < region.Y + region.Height; y++)
-        for (var x = region.X; x < region.X + region.Width; x++)
+        var sum = 0;
+        for (var y = 0; y < 208; y++)
+        for (var x = 0; x < 192; x++)
         {
             var offset = (y * 192 + x) * 4;
-            if (pixels[offset + 3] > 16 && pixels[offset] > pixels[offset + 1] * 0.8 &&
-                pixels[offset + 2] > pixels[offset + 1] * 1.15) count++;
+            var (b, g, r) = (pixels[offset], pixels[offset + 1], pixels[offset + 2]);
+            if (pixels[offset + 3] > 128 && (rose ? b > g * 0.8 && r > g * 1.15 : g > 80 && b < g * 0.7))
+            {
+                count++;
+                sum += x;
+            }
         }
-        return count;
+        Assert.IsTrue(count > 5, "The earbud must show both its rose tip and gold shell.");
+        return (double)sum / count;
     }
 }

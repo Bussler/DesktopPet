@@ -1,12 +1,16 @@
 # Painted headphone sprite parts
 
-The original pet atlases and animation manifests are unchanged. `headphones.png` is an original AI-generated transparent part atlas (built-in image-generation tool, 2026-10-12). It contains three parts per pet: oblique exterior cup, profile exterior cup, and band. The four rows are Hood, Pip, Crumb, and Puddle. The supplied owl image informed headphone anatomy; its character, coffee cup, and watermark are not included in this asset.
+`headphones.png` is an original AI-generated transparent part atlas (built-in image-generation tool, 2026-10-12). It contains three parts per pet: oblique exterior cup, profile exterior cup, and band. The four rows are Hood, Pip, Crumb, and Puddle. The supplied owl image informed headphone anatomy; its character, coffee cup, and watermark are not included in this asset.
 
 `poses.json` supplies native-pixel crop rectangles and calibrated placement for each source animation column. Runtime layers are clipped to the existing 192 x 208 logical canvas. Front cups sit outside the facial features; side views show the cup behind the face and occlude the far side. Hood's full curved band is drawn in front of his hat, with its crown fitted just above the cap, following the user's later marked reference. This replaces his initial under-hat layering.
 
 The fitted poses place Hood's and Pip's cups higher at their animal ears, with additional lift while walking. Crumb now uses small wireless in-ear buds, positioned near the inner ear bases with no band. His two sprite parts come from `crumb-earbuds.png`; the Crumb over-ear row in the original atlas is retained as source history and is not used at runtime.
 
 To regenerate placement after deliberately changing the built-in atlases, run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Generate-HeadphonePoses.ps1`. The generator measures the actual opaque top of each frame and combines that with the explicit hand-fitted rig tuples. Update those tuples and inspect all rendered poses when changing character anatomy; copying an atlas or changing animation columns without calibrating the rig is insufficient. The source crop rectangles must also be updated if the headphone part layout changes.
+
+Crumb's chubby Cozy artwork was replaced on 2026-10-16. His fitting now measures the saturated pink inner-ear regions in every packed frame, keeps clearance around each bud and follows the ear tilt. Head turns hide an occluded far bud; walking retains the inward-facing rose tip. Hood, Pip and Puddle retain their existing fitted poses. See [Crumb's current earbud preview](../../docs/previews/pet-animations/crumb-earbuds.png).
+
+Walking places each bud 12 logical pixels below its measured inner-ear anchor, nearer the ear entrance as shown in the user's marked reference. This adjustment applies to both walking directions and leaves other poses unchanged.
 
 No sound detection or audio-volume behavior is defined by these files. They are embedded in the Windows application and decoded once, with cached frame drawings. Missing/invalid artwork produces a local warning and leaves ordinary pet art usable. Sprite generation prompts and this README are source documentation and are not bundled with the user guides.
 

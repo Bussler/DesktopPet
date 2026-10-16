@@ -3,60 +3,60 @@
     "action": "idle",
     "source": "idle",
     "frames": 16,
-    "scale": 1.2765957446808511
+    "scale": 1.1842105263157894
   },
   {
     "action": "runRight",
     "source": "run-parts",
     "frames": 16,
-    "scale": 0.3448275862068966
+    "scale": 0.3492433061699651
   },
   {
     "action": "runLeft",
     "source": "run-parts",
     "frames": 16,
-    "scale": 0.3448275862068966
+    "scale": 0.3492433061699651
   },
   {
     "action": "wave",
     "source": "wave",
     "frames": 12,
-    "scale": 1.0557184750733137
+    "scale": 0.9574468085106383
   },
   {
     "action": "lookUp",
     "source": "lookUp",
     "frames": 12,
-    "scale": 1.1111111111111112
+    "scale": 0.9278350515463918
   },
   {
     "action": "lookAround",
     "source": "lookAround",
     "frames": 16,
-    "scale": 1.2040133779264215
+    "scale": 1.1764705882352942
   },
   {
     "action": "jump",
     "source": "jump",
     "frames": 15,
-    "scale": 1.1505016722408026
+    "scale": 1.0810810810810811
   },
   {
     "action": "feed",
     "source": "feed",
     "frames": 15,
-    "scale": 1.1726384364820848
+    "scale": 1.0315186246418337
   },
   {
     "action": "sleep",
     "source": "sleep",
     "frames": 12,
-    "scale": 0.8646616541353384
+    "scale": 0.9543568464730291
   },
   {
     "action": "wake",
     "source": "wake",
     "frames": 15,
-    "scale": 1.2720848056537102
+    "scale": 1.1132686084142396
   }
 ]
