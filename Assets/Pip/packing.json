@@ -58,5 +58,11 @@
     "source": "wake",
     "frames": 15,
     "scale": 1.1168831168831168
+  },
+  {
+    "action": "pet",
+    "source": "pet",
+    "frames": 16,
+    "scale": 1.2
   }
 ]

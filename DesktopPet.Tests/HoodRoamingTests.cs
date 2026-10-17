@@ -90,7 +90,7 @@ public sealed class HoodRoamingTests
     [DataRow(0, 1, 18d, 0d)]
     [DataRow(2, 0, 0d, -18d)]
     [DataRow(2, 1, 0d, 18d)]
-    public void Advance_ChoosesBothAxesAndDirectionsAndRewardsActualMovement(
+    public void Advance_ChoosesBothAxesAndDirectionsWithoutRelievingBoredom(
         int axisSample, int directionSample, double dx, double dy)
     {
         var session = CreateSession(new PetBounds(100, 100, 480, 400), new PetPosition(244, 196),
@@ -99,7 +99,7 @@ public sealed class HoodRoamingTests
         session.Advance(TimeSpan.FromSeconds(1));
 
         Assert.AreEqual(new PetPosition(244 + dx, 196 + dy), session.Position);
-        Assert.AreEqual(19.5, session.Needs.Boredom, 1e-9);
+        Assert.AreEqual(20, session.Needs.Boredom, 1e-9);
         Assert.IsTrue(session.RequiresAnimationFrames, "Movement animates even with idle animations disabled.");
     }
 
@@ -150,7 +150,7 @@ public sealed class HoodRoamingTests
         session.Advance(TimeSpan.FromMilliseconds(500));
 
         Assert.AreEqual(new PetPosition(100, 109), session.Position);
-        Assert.AreEqual(19.75, session.Needs.Boredom, 1e-9);
+        Assert.AreEqual(20, session.Needs.Boredom, 1e-9);
         AssertContained(session);
     }
 
@@ -165,7 +165,7 @@ public sealed class HoodRoamingTests
 
         Assert.AreEqual(expectedY, session.Position.Y, 1e-9);
         Assert.AreEqual(expectedAction, session.Presentation.Action);
-        Assert.AreEqual(18.75, session.Needs.Boredom, 1e-9);
+        Assert.AreEqual(20, session.Needs.Boredom, 1e-9);
         for (var second = 0; second < 100; second++)
         {
             session.Advance(TimeSpan.FromSeconds(1));
@@ -180,12 +180,12 @@ public sealed class HoodRoamingTests
         session.Advance(TimeSpan.FromSeconds(8));
         var restedPosition = session.Position;
         Assert.AreEqual(PetAction.Idle, session.Presentation.Action);
-        Assert.AreEqual(16, session.Needs.Boredom, 1e-9);
+        Assert.AreEqual(20, session.Needs.Boredom, 1e-9);
 
-        var restSeconds = 40 / (0.1 + 1.1 * 16 / 100) - 8;
+        var restSeconds = 40 / (0.1 + 1.1 * 20 / 100) - 8;
         session.Advance(TimeSpan.FromSeconds(restSeconds));
         Assert.AreEqual(restedPosition, session.Position);
-        Assert.AreEqual(16, session.Needs.Boredom, 1e-9);
+        Assert.AreEqual(20, session.Needs.Boredom, 1e-9);
         session.Advance(TimeSpan.FromSeconds(1));
         Assert.AreNotEqual(restedPosition, session.Position);
     }
@@ -247,9 +247,9 @@ public sealed class HoodRoamingTests
     }
 
     [TestMethod]
-    [DataRow(16d, 26.557d)]
-    [DataRow(200d, 26.05d)]
-    public void Advance_MovementReliefNearSaturationKeepsTheNextBoutIndependentOfTimeChunks(
+    [DataRow(16d, 25.334d)]
+    [DataRow(200d, 25.334d)]
+    public void Advance_SaturatedBoredomKeepsTheNextBoutIndependentOfTimeChunks(
         double boredomPerHour, double restSeconds)
     {
         var needs = HoodConfiguration.Defaults.Needs with
@@ -277,11 +277,11 @@ public sealed class HoodRoamingTests
     }
 
     [TestMethod]
-    [DataRow(100d, 16d, 96.0355555556d)]
+    [DataRow(100d, 16d, 100d)]
     [DataRow(99d, 3600d, 100d)]
-    [DataRow(0d, 16d, 0d)]
-    [DataRow(1d, 16d, 0d)]
-    public void Advance_CombinesBoredomGrowthAndActualMovementBeforeClamping(
+    [DataRow(0d, 16d, 0.0355555556d)]
+    [DataRow(1d, 16d, 1.0355555556d)]
+    public void Advance_MovementDoesNotRelieveBoredomAndGrowthClampsAt100(
         double initialBoredom, double boredomPerHour, double expectedBoredom)
     {
         var needs = HoodConfiguration.Defaults.Needs with
@@ -364,7 +364,7 @@ public sealed class HoodRoamingTests
         session.BeginDragging();
         session.Advance(TimeSpan.FromSeconds(1));
         Assert.AreEqual(start, session.Position);
-        Assert.AreEqual(19.5, session.Needs.Boredom, 1e-9);
+        Assert.AreEqual(20, session.Needs.Boredom, 1e-9);
         session.EndDragging();
         session.BeginAreaEditing();
         session.Advance(TimeSpan.FromSeconds(1));
@@ -414,7 +414,7 @@ public sealed class HoodRoamingTests
 
         Assert.AreEqual(244 + dx * 18 / Math.Sqrt(2), session.Position.X, 1e-9);
         Assert.AreEqual(196 + dy * 18 / Math.Sqrt(2), session.Position.Y, 1e-9);
-        Assert.AreEqual(19.5, session.Needs.Boredom, 1e-9);
+        Assert.AreEqual(20, session.Needs.Boredom, 1e-9);
         Assert.AreEqual(dx < 0 ? PetAction.RunLeft : PetAction.RunRight, session.Presentation.Action);
         AssertContained(session);
     }
@@ -438,7 +438,7 @@ public sealed class HoodRoamingTests
 
         Assert.AreEqual(afterBounce.X + expectedDx * 18 / Math.Sqrt(2), session.Position.X, 1e-9);
         Assert.AreEqual(afterBounce.Y + expectedDy * 18 / Math.Sqrt(2), session.Position.Y, 1e-9);
-        Assert.AreEqual(19, session.Needs.Boredom, 1e-6);
+        Assert.AreEqual(20, session.Needs.Boredom, 1e-6);
         Assert.AreEqual(expectedDx < 0 ? PetAction.RunLeft : PetAction.RunRight, session.Presentation.Action);
         AssertContained(session);
     }
@@ -487,7 +487,7 @@ public sealed class HoodRoamingTests
 
         Assert.AreEqual(start.X + 18 / Math.Sqrt(2), session.Position.X, 1e-9);
         Assert.AreEqual(start.Y + 18 / Math.Sqrt(2), session.Position.Y, 1e-9);
-        Assert.AreEqual(19, session.Needs.Boredom, 1e-9);
+        Assert.AreEqual(20, session.Needs.Boredom, 1e-9);
     }
     [TestMethod]
     [DataRow(480d, 208d, 18d, 0d)]
@@ -507,7 +507,7 @@ public sealed class HoodRoamingTests
 
         Assert.AreEqual(start.X + dx, session.Position.X, 1e-9);
         Assert.AreEqual(start.Y + dy, session.Position.Y, 1e-9);
-        Assert.AreEqual(boredom - (dx != 0 || dy != 0 ? 0.5 : 0), session.Needs.Boredom, 1e-9);
+        Assert.AreEqual(boredom, session.Needs.Boredom, 1e-9);
         AssertContained(session);
     }
 

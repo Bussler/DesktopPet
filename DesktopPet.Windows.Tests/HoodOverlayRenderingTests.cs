@@ -19,6 +19,49 @@ public sealed class HoodOverlayRenderingTests
     private const BindingFlags PrivateInstance = BindingFlags.Instance | BindingFlags.NonPublic;
 
     [TestMethod]
+    [DataRow("hood")]
+    [DataRow("pip")]
+    [DataRow("crumb")]
+    [DataRow("puddle")]
+    public void PetMenuActionFollowsFeedAndPlaysTheSelectedPetsAttentionAnimationOnce(string petName)
+    {
+        var assets = (LoadedHoodAssets)LoadAssets(petName);
+        var session = CreateIdleSession(assets.Definition);
+        session.Advance(TimeSpan.FromHours(3));
+        var boredom = session.Needs.Boredom;
+        var position = session.Position;
+        var pet = CreatePet(session, assets);
+        try
+        {
+            var menu = pet.ContextMenu;
+            var feed = menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Feed"));
+            var action = (MenuItem)menu.Items[menu.Items.IndexOf(feed) + 1];
+            Assert.AreEqual("Pet", action.Header);
+            action.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+
+            Assert.AreEqual(boredom - 30, session.Needs.Boredom, 1e-9);
+            Assert.AreEqual(PetAction.Pet, session.Presentation.Action);
+            var animation = assets.Definition.GetAnimation(PetAction.Pet);
+            Assert.AreEqual(16, animation.Frames.Count);
+            Assert.IsFalse(animation.Loops);
+            Assert.AreEqual(120, animation.FrameDurationMilliseconds);
+            var image = (Image)pet.FindName("PetImage");
+            Assert.AreEqual(assets.GetFrameRectangle(animation.Frames[0]), ((CroppedBitmap)image.Source).SourceRect);
+
+            session.Advance(TimeSpan.FromMilliseconds(1919));
+            typeof(HoodOverlayWindow).GetMethod("RenderPresentation", PrivateInstance)!.Invoke(pet, null);
+            Assert.AreEqual(PetAction.Pet, session.Presentation.Action);
+            Assert.AreEqual(assets.GetFrameRectangle(animation.Frames[^1]), ((CroppedBitmap)image.Source).SourceRect);
+            session.Advance(TimeSpan.FromMilliseconds(1));
+            Assert.AreEqual(PetAction.Idle, session.Presentation.Action);
+            session.Advance(TimeSpan.FromSeconds(2));
+            Assert.AreEqual(PetAction.Idle, session.Presentation.Action);
+            Assert.AreEqual(position, session.Position);
+        }
+        finally { pet.Close(); }
+    }
+
+    [TestMethod]
     public void RepeatedRectangleKeepsItsCropWhileTheSessionAndPetPositionAdvance()
     {
         var assets = LoadAssets("hood");

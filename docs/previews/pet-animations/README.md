@@ -2,7 +2,7 @@
 
 This source-project reference covers the alternate-pet assets and their regeneration. Pip wears a forest-green wool shawl with fringed ends; Crumb wears a mustard hoodie with the hood down; Puddle has no accessory. Pip and Crumb hold a bowl in both paws while eating upright.
 
-Each pet has a transparent **6144×4160** atlas, **145 pose cells** and **265 playback entries**, covering all ten Hood actions. The manifests preserve Hood's frame layout, timing, looping, idle hold, sprite scale and motion bounds; only the pet name differs. Movement and reactions remain controlled by the existing application.
+Each pet has a transparent **6144×4576** atlas, **161 pose cells** and **281 playback entries**, covering all eleven Hood actions. The manifests preserve Hood's frame layout, timing, looping, idle hold, sprite scale and motion bounds; only the pet name differs. Pet uses the new final row and plays the happy attention gesture once in 1.92 seconds. Movement and reactions remain controlled by the existing application.
 
 | Pet | Full sprite sheet | Manifest | Contact sheet |
 | --- | --- | --- | --- |

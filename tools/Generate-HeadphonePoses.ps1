@@ -1,4 +1,4 @@
-param()
+param([string]$Action = '')
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Add-Type -AssemblyName PresentationCore
@@ -11,6 +11,57 @@ public static class HeadphoneFrameTop {
                 if (pixels[(row * height + y) * stride + (column * width + x) * 4 + 3] >= 64)
                     return y / scale;
         throw new System.InvalidOperationException("Empty sprite frame.");
+    }
+
+    public static double[] Earbuds(byte[] pixels, int stride, int width, int height, int row, int column, double scale) {
+        var pink = new bool[width * height];
+        var seen = new bool[pink.Length];
+        var queue = new int[pink.Length];
+        var ears = new System.Collections.Generic.List<int[]>();
+        for (int y = 0; y < height / 2; y++) for (int x = 0; x < width; x++) {
+            int p = (row * height + y) * stride + (column * width + x) * 4;
+            int b = pixels[p], g = pixels[p + 1], r = pixels[p + 2];
+            pink[y * width + x] = pixels[p + 3] > 200 && r > 180 && g > 55 && b > 55 && r > g * 1.25 && r > b * 1.12;
+        }
+        for (int start = 0; start < pink.Length; start++) {
+            if (!pink[start] || seen[start]) continue;
+            int head = 0, tail = 1, minX = width, minY = height, maxX = 0, maxY = 0;
+            queue[0] = start; seen[start] = true;
+            while (head < tail) {
+                int p = queue[head++], x = p % width, y = p / width;
+                minX = System.Math.Min(minX, x); maxX = System.Math.Max(maxX, x);
+                minY = System.Math.Min(minY, y); maxY = System.Math.Max(maxY, y);
+                foreach (int next in new[] { p - 1, p + 1, p - width, p + width })
+                    if (next >= 0 && next < pink.Length && System.Math.Abs(next % width - x) <= 1 && pink[next] && !seen[next]) {
+                        seen[next] = true; queue[tail++] = next;
+                    }
+            }
+            if (tail > 300) ears.Add(new[] { minX, minY, maxX, maxY, tail });
+        }
+        ears.Sort((a, b) => b[4].CompareTo(a[4]));
+        if (ears.Count < 2) throw new System.InvalidOperationException("Two pink ears are required for attention earbuds.");
+        var centers = new double[2][];
+        for (int i = 0; i < 2; i++) {
+            var ear = ears[i];
+            double targetX = (ear[0] + ear[2]) / 2.0, targetY = ear[1] + (ear[3] - ear[1]) * 0.7;
+            double best = double.MaxValue;
+            for (int y = ear[1]; y <= ear[3]; y++) for (int x = ear[0]; x <= ear[2]; x++) {
+                if (!pink[y * width + x]) continue;
+                bool fits = true;
+                for (int angle = 0; angle < 16; angle++) {
+                    int sx = x + (int)System.Math.Round(10 * scale * System.Math.Cos(angle * System.Math.PI / 8));
+                    int sy = y + (int)System.Math.Round(10 * scale * System.Math.Sin(angle * System.Math.PI / 8));
+                    if (sx < 0 || sx >= width || sy < 0 || sy >= height || !pink[sy * width + sx]) { fits = false; break; }
+                }
+                double score = (x - targetX) * (x - targetX) + (y - targetY) * (y - targetY);
+                if (fits && score < best) { best = score; centers[i] = new[] { x / scale, y / scale }; }
+            }
+            if (centers[i] == null) throw new System.InvalidOperationException("The pink ear has no safe earbud anchor.");
+        }
+        if (centers[0][0] > centers[1][0]) { var swap = centers[0]; centers[0] = centers[1]; centers[1] = swap; }
+        double dx = centers[1][0] - centers[0][0], dy = centers[1][1] - centers[0][1];
+        double middle = (centers[0][0] + centers[1][0]) / 2, distance = System.Math.Sqrt(dx * dx + dy * dy);
+        return new[] { middle - distance / 2, middle + distance / 2, (centers[0][1] + centers[1][1]) / 2, 12, 0, 0, System.Math.Atan2(dy, dx) * 180 / System.Math.PI };
     }
 }
 '@
@@ -69,6 +120,7 @@ $parts = [ordered]@{
     Puddle = @(@(55,1146,196,310), @(327,1146,243,321), @(601,1162,405,289))
 }
 $poses = [ordered]@{}
+$existing = if ($Action) { (Get-Content (Join-Path $root 'Assets\Headphones\poses.json') -Raw | ConvertFrom-Json).poses }
 foreach ($pet in 'Hood','Pip','Crumb','Puddle') {
     $folder = Join-Path $root "Assets\$pet"
     $manifest = Get-Content (Join-Path $folder 'hood.animations.json') -Raw | ConvertFrom-Json
@@ -82,14 +134,29 @@ foreach ($pet in 'Hood','Pip','Crumb','Puddle') {
     $pixels = New-Object byte[] ($stride * $rgba.PixelHeight)
     $rgba.CopyPixels($pixels, $stride, 0)
     $actions = [ordered]@{}
-    foreach ($animation in $manifest.animations) {
+    if ($Action) {
+        foreach ($entry in $existing.$pet.PSObject.Properties) { $actions[$entry.Name] = $entry.Value }
+    }
+    foreach ($animation in ($manifest.animations | Where-Object { -not $Action -or $_.action -eq $Action })) {
         $columns = @($animation.frames | Group-Object column | Sort-Object { [int]$_.Name })
         $entries = @()
         foreach ($column in $columns) {
             $frame = $column.Group[0]
             $index = [int]$frame.column
+            if ($pet -eq 'Crumb' -and $animation.action -eq 'pet') {
+                $entries += ,([HeadphoneFrameTop]::Earbuds($pixels, $stride, $manifest.frameWidth, $manifest.frameHeight, $frame.row, $index, $manifest.spriteScale))
+                continue
+            }
             $pose = $front[$pet].Clone()
             switch ($animation.action) {
+                'pet' {
+                    # Follow the brief happy head tilts without changing the existing action rigs.
+                    $pose[6] = switch ($pet) {
+                        'Hood' { switch ($index) { 8 { 12 } 9 { -12 } 10 { -5 } default { 0 } } }
+                        'Pip' { switch ($index) { 7 { 5 } 8 { 10 } 9 { -5 } 10 { 10 } default { 0 } } }
+                        'Puddle' { switch ($index) { 8 { 5 } 9 { -5 } 10 { 5 } default { 0 } } }
+                    }
+                }
                 'runRight' { $pose = $running[$pet].Clone() }
                 'runLeft' {
                     $pose = $running[$pet].Clone()

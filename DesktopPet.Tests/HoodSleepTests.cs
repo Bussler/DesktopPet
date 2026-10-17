@@ -130,32 +130,39 @@ public sealed class HoodSleepTests
     }
 
     [TestMethod]
-    public void Feed_WhileSleepingWakesAndFeedsWithoutLosingEarnedRecovery()
+    [DataRow(PetAction.Feed)]
+    [DataRow(PetAction.Pet)]
+    public void Care_WhileSleepingWakesWithoutLosingEarnedRecovery(PetAction action)
     {
         var configuration = Config(durationMinutes: 4, threshold: 90, earlyWakeGraceMinutes: 3, feedGain: 40);
         var session = CreateSession(configuration, AwakeSnapshot(new NeedLevels(50, 20, 80)));
         session.Sleep();
         session.Advance(TimeSpan.FromMinutes(1));
 
-        session.Feed();
+        if (action == PetAction.Feed) session.Feed();
+        else session.Pet();
 
         Assert.AreEqual(HoodSessionMode.Awake, session.Mode);
-        Assert.AreEqual(PetAction.Feed, session.Presentation.Action);
-        Assert.AreEqual(10, session.Needs.Hunger);
+        Assert.AreEqual(action, session.Presentation.Action);
+        Assert.AreEqual(action == PetAction.Feed ? 10 : 50, session.Needs.Hunger);
+        Assert.AreEqual(action == PetAction.Pet ? 0 : 20, session.Needs.Boredom);
         Assert.AreEqual(60, session.Needs.Sleep, 1e-9);
         Assert.AreEqual(TimeSpan.FromMinutes(3), session.RemainingEarlyWakeGrace);
     }
 
     [TestMethod]
-    public void Advance_AutomaticNapWaitsForFeedingAnimationToFinish()
+    [DataRow(PetAction.Feed, 900)]
+    [DataRow(PetAction.Pet, 1920)]
+    public void Advance_AutomaticNapWaitsForCareAnimationToFinish(PetAction action, int milliseconds)
     {
         var configuration = Config(durationMinutes: 1, threshold: 1, sleepPointsPerHour: 7200);
         var session = CreateSession(configuration);
-        session.Feed();
+        if (action == PetAction.Feed) session.Feed();
+        else session.Pet();
 
-        session.Advance(TimeSpan.FromMilliseconds(800));
+        session.Advance(TimeSpan.FromMilliseconds(milliseconds - 100));
         Assert.AreEqual(HoodSessionMode.Awake, session.Mode);
-        Assert.AreEqual(PetAction.Feed, session.Presentation.Action);
+        Assert.AreEqual(action, session.Presentation.Action);
 
         session.Advance(TimeSpan.FromMilliseconds(100));
         Assert.AreEqual(HoodSessionMode.Sleeping, session.Mode);

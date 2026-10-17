@@ -18,9 +18,9 @@ namespace DesktopPet.Windows.Tests;
 public sealed class HoodAssetsTests
 {
     [TestMethod]
-    [DataRow(0.5, 1.0, 1536, 1040)]
-    [DataRow(1.5, 1.25, 5760, 3900)]
-    [DataRow(2.0, 1.5, 6144, 4160)]
+    [DataRow(0.5, 1.0, 1536, 1144)]
+    [DataRow(1.5, 1.25, 5760, 4290)]
+    [DataRow(2.0, 1.5, 6144, 4576)]
     public void PetSizeAndDisplayDpiDetermineDecodedResolution(double petScale, double dpi, int width, int height)
     {
         var assetsType = typeof(HoodOverlayWindow).Assembly.GetType("DesktopPet.Windows.HoodAssets")!;
@@ -179,7 +179,7 @@ public sealed class HoodAssetsTests
             var image = (Image)pet.FindName("PetImage");
             var crop = (CroppedBitmap)image.Source;
             Assert.AreEqual(4608, sheet.PixelWidth);
-            Assert.AreEqual(3120, sheet.PixelHeight);
+            Assert.AreEqual(3432, sheet.PixelHeight);
             Assert.AreSame(sheet, crop.Source);
             Assert.AreEqual(size, (pet.Width, pet.Height));
             Assert.AreEqual(192d, image.Width);
@@ -398,7 +398,7 @@ public sealed class HoodAssetsTests
                 Action = action.ToString(),
                 Frames = [new SpriteFrame(0, 0), new SpriteFrame(1, 0), new SpriteFrame(3, 4)],
                 FrameDurationMilliseconds = 100,
-                Loops = action != PetAction.Jump,
+                Loops = action is not (PetAction.Jump or PetAction.Pet),
                 MotionBounds = new PetBounds(0, 0, 11 / spriteScale, 13 / spriteScale)
             }).ToList()
         };

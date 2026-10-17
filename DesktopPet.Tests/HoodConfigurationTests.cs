@@ -7,6 +7,42 @@ namespace DesktopPet.Tests;
 public sealed class HoodConfigurationTests
 {
     [TestMethod]
+    [DataRow(10d)]
+    [DataRow(25d)]
+    public void PetReliefDefaultsForOlderFilesAndRoundTripsAlongsideLegacySettings(double relief)
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new YamlConfigurationStore(Path.Combine(directory.Path, "config.yaml"));
+        store.LoadOrCreate();
+        File.WriteAllText(store.Path, Regex.Replace(File.ReadAllText(store.Path), @"(?m)^  pet_relief:.*\r?\n", string.Empty));
+        var legacy = store.LoadOrCreate();
+        Assert.AreEqual(30d, legacy.Needs.PetRelief);
+        store.Save(legacy with { Needs = legacy.Needs with { PetRelief = relief, MovementReliefPerSecond = 7, StationaryClickRelief = 8 } });
+        var restored = store.LoadOrCreate();
+        Assert.AreEqual(relief, restored.Needs.PetRelief);
+        Assert.AreEqual(7d, restored.Needs.MovementReliefPerSecond);
+        Assert.AreEqual(8d, restored.Needs.StationaryClickRelief);
+    }
+
+    [TestMethod]
+    [DataRow(-1d)]
+    [DataRow(double.NaN)]
+    [DataRow(double.PositiveInfinity)]
+    public void PetReliefRejectsInvalidValuesWithoutReplacingSavedConfiguration(double relief)
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new YamlConfigurationStore(Path.Combine(directory.Path, "config.yaml"));
+        var configuration = store.LoadOrCreate();
+        var original = File.ReadAllText(store.Path);
+        var exception = Assert.Throws<HoodConfigurationException>(() => store.Save(configuration with
+        {
+            Needs = configuration.Needs with { PetRelief = relief }
+        }));
+        Assert.AreEqual("needs.pet_relief", exception.SettingPath);
+        Assert.AreEqual(original, File.ReadAllText(store.Path));
+    }
+
+    [TestMethod]
     [DataRow(0.5)]
     [DataRow(1.35)]
     [DataRow(2.0)]

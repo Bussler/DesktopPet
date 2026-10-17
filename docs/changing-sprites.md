@@ -8,7 +8,7 @@ Hood loads `hood_spritesheet.png` and `hood.animations.json` from the selected p
 
 ## Replace artwork with the same layout
 
-Use a transparent PNG measuring **6144x4160 pixels**, arranged in **16 columns and 10 rows** of **384x416 pixel** cells. Keep each pose inside its cell, including wings, feet, and props, with transparent margins. Align the character consistently between frames.
+Use a transparent PNG measuring **6144x4576 pixels**, arranged in **16 columns and 11 rows** of **384x416 pixel** cells. Keep each pose inside its cell, including wings, feet, and props, with transparent margins. Align the character consistently between frames.
 
 The [animation table and preview](hood-animations.md) list the rows, pose counts, and playback timings. Rows and columns start at zero. Each action uses columns zero through its pose count minus one; idle begins with 120 extra references to column zero for its quiet hold. Unreferenced cells remain empty.
 
@@ -19,8 +19,8 @@ Edit `hood.animations.json` along with the PNG:
 - Keep `schemaVersion` at `1`, `spriteSheet` at `hood_spritesheet.png`, and a nonempty `name`.
 - Set `sheetWidth` and `sheetHeight` to the PNG's pixel dimensions, and `frameWidth` and `frameHeight` to one cell's pixel dimensions.
 - Set `spriteScale` to a finite positive number of pixels per logical unit. The current value `2` displays a 384x416 frame at 192x208. Omitting it defaults to `1` for legacy manifests. Display size and placement use pixel frame dimensions divided by this scale.
-- Define all ten supported actions exactly once, with at least one frame. Each nonnegative `column` and `row` must identify an entire cell inside the sheet.
-- Set a positive `frameDurationMilliseconds` and explicit `loops` value. Idle must loop, jump must finish; retain the other playback rules unless intentionally changing them.
+- Define all eleven supported actions exactly once, with at least one frame. Each nonnegative `column` and `row` must identify an entire cell inside the sheet. The new `pet` action uses row 10, preserving the original ten rows and saved frame indices. Legacy custom manifests without `pet` still load and use a one-shot copy of their wave animation for petting.
+- Set a positive `frameDurationMilliseconds` and explicit `loops` value. Idle must loop; jump and pet must finish. Retain the other playback rules unless intentionally changing them.
 - Keep `motionBounds` in **logical units**, inside the displayed frame. A full bound of `{ "x": 0, "y": 0, "width": 192, "height": 208 }` suits the current assets. Include every visible part of Hood and his props.
 
 For example, doubling artwork resolution again while preserving Hood's size means 768x832 pixel frames with `spriteScale: 4`; motion bounds remain 192x208.

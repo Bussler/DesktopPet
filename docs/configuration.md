@@ -16,7 +16,7 @@ Under **Behavior**, **Show headphones during audio playback** is enabled by defa
 
 Browser tab/player mute follows the same three-second quiet delay. Observable Windows app/device mute and zero volume clear that source promptly; another source can retain headphones. Hardware mute and paths bypassing Windows metering are not observable guarantees. Detection/artwork failures and recovery are recorded in `media-headphones.log` in the data folder; use **Open config folder** in Settings to read it.
 
-With roaming enabled, Hood moves in 8-second bouts at the same travel speed. Boredom smoothly scales the frequency from 10% of the previous 40-second cycle at boredom 0 to 120% at boredom 100: roughly one bout every 400 seconds when content, every 61.5 seconds at boredom 50, or every 33.3 seconds at boredom 100. Increasing boredom shortens the current idle rest, and actual movement still reduces boredom. The first bout can start immediately. The cadence uses active behavior time and pauses while roaming is blocked by sleep, dragging, editing, or another action. These timing changes apply to all four pets.
+With roaming enabled, Hood moves in 8-second bouts at the same travel speed. Boredom smoothly scales the frequency from 10% of the previous 40-second cycle at boredom 0 to 120% at boredom 100: roughly one bout every 400 seconds when content, every 61.5 seconds at boredom 50, or every 33.3 seconds at boredom 100. Increasing boredom shortens the current idle rest. Only the **Pet** menu action reduces boredom, by 30 points by default, and plays the selected pet's happy animation once for 1.92 seconds. Pet is directly below Feed and works with roaming disabled. Like Feed, it wakes a care nap while preserving earned sleep recovery. Repeated clicks restart the animation and provide relief immediately without queueing playback. Walking, ordinary clicks, feeding and sleep provide no boredom relief. The first roaming bout can start immediately. The cadence uses active behavior time and pauses while roaming is blocked by sleep, dragging, editing, or another action. These rules apply to all four pets.
 
 The default idle animation repeats about 20% more often by shortening its still pause, keeping its moving poses at their original speed. Spontaneous gestures retain their configured interval and playback timing.
 
@@ -38,6 +38,7 @@ needs:
   boredom_points_per_hour: 16
   sleep_points_per_hour: 20
   feed_gain: 40
+  pet_relief: 30
   movement_relief_per_second: 0.5
   stationary_click_relief: 10
 sleep:
@@ -71,8 +72,8 @@ notes:
 | `behavior.show_sprites` | Boolean | Defaults to `true`, including in older files. `false` hides the pet and pauses animations, roaming, needs, and timers; open notes stay visible. |
 | `needs.hunger_points_per_hour`, `boredom_points_per_hour`, `sleep_points_per_hour` | Need points per awake active hour | Finite and at least `0`. |
 | `needs.feed_gain` | Hunger points per Feed action | Finite and at least `0`. |
-| `needs.movement_relief_per_second` | Boredom points per second of movement | Finite and at least `0`. |
-| `needs.stationary_click_relief` | Boredom points per completed stationary click | Finite and at least `0`. |
+| `needs.pet_relief` | Boredom points per Pet action | Finite and at least `0`; defaults to `30` when absent. Explicit saved values are preserved. |
+| `needs.movement_relief_per_second`, `needs.stationary_click_relief` | Legacy settings | Finite and at least `0`. Accepted and preserved for compatibility, but have no effect. Only Pet reduces boredom. |
 | `sleep.automatic_nap_threshold` | Need points | Greater than `0` and at most `100`. |
 | `sleep.duration_minutes`, `sleep.early_wake_grace_minutes` | Active minutes | Finite and greater than `0`. |
 | `random_interval.minimum_minutes`, `maximum_minutes` | Active awake minutes | Finite, each greater than `0`, and minimum no greater than maximum. Defaults: `1` and `5`. |

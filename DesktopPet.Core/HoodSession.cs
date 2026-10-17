@@ -512,14 +512,6 @@ public sealed class HoodSession
         }
 
         StartDirectAction(PetAction.Jump);
-        if (!_configuration.Behavior.Roaming)
-        {
-            Needs = Needs with
-            {
-                Boredom = Math.Max(0, Needs.Boredom - _configuration.Needs.StationaryClickRelief)
-            };
-            SaveSnapshot();
-        }
     }
 
     public void Feed()
@@ -533,15 +525,18 @@ public sealed class HoodSession
         {
             Hunger = Math.Max(0, Needs.Hunger - _configuration.Needs.FeedGain)
         };
-        if (Mode == HoodSessionMode.Sleeping)
+        StartCareAction(PetAction.Feed);
+    }
+
+    public void Pet()
+    {
+        if (_quitRequested)
         {
-            LeaveNap(PetAction.Feed);
-            SaveSnapshot();
             return;
         }
 
-        StartDirectAction(PetAction.Feed);
-        SaveSnapshot();
+        Needs = Needs with { Boredom = Math.Max(0, Needs.Boredom - _configuration.Needs.PetRelief) };
+        StartCareAction(PetAction.Pet);
     }
 
     public void Sleep()
@@ -652,8 +647,8 @@ public sealed class HoodSession
 
             AdvanceNapTimers(step);
             AdvanceAnimation(step);
-            var movementSeconds = AdvanceMovement(step);
-            AdvanceNeeds(step, movementSeconds);
+            AdvanceMovement(step);
+            AdvanceNeeds(step);
             if (advanceRandomInterval)
             {
                 RemainingRandomInterval = step >= RemainingRandomInterval
@@ -733,9 +728,16 @@ public sealed class HoodSession
         _frameElapsed = TimeSpan.Zero;
     }
 
+    private void StartCareAction(PetAction action)
+    {
+        if (Mode == HoodSessionMode.Sleeping) LeaveNap(action);
+        else StartDirectAction(action);
+        SaveSnapshot();
+    }
+
     private static double AddNeed(double current, double increase) => Math.Min(100, current + increase);
 
-    private void AdvanceNeeds(TimeSpan elapsed, double movementSeconds)
+    private void AdvanceNeeds(TimeSpan elapsed)
     {
         if (Mode == HoodSessionMode.Sleeping)
         {
@@ -745,12 +747,9 @@ public sealed class HoodSession
         }
 
         var hours = elapsed.TotalHours;
-        // Clamp the net change once so saturation does not depend on update size.
-        var boredomChange = _configuration.Needs.BoredomPointsPerHour * hours -
-            _configuration.Needs.MovementReliefPerSecond * movementSeconds;
         Needs = new NeedLevels(
             AddNeed(Needs.Hunger, _configuration.Needs.HungerPointsPerHour * hours),
-            Math.Clamp(Needs.Boredom + boredomChange, 0, 100),
+            AddNeed(Needs.Boredom, _configuration.Needs.BoredomPointsPerHour * hours),
             AddNeed(Needs.Sleep, _configuration.Needs.SleepPointsPerHour * hours));
     }
 
@@ -893,7 +892,7 @@ public sealed class HoodSession
         _editingArea;
 
     private static bool IsForegroundAction(PetAction action) =>
-        action is PetAction.Jump or PetAction.Feed or PetAction.Wake;
+        action is PetAction.Jump or PetAction.Feed or PetAction.Pet or PetAction.Wake;
 
     private TimeSpan TimeUntilRoaming()
     {
@@ -1008,11 +1007,11 @@ public sealed class HoodSession
         return TimeSpan.FromTicks(Math.Max(1, (long)Math.Ceiling(ticks)));
     }
 
-    private double AdvanceMovement(TimeSpan elapsed)
+    private void AdvanceMovement(TimeSpan elapsed)
     {
         if (!IsMoving)
         {
-            return 0;
+            return;
         }
 
         var travel = RoamingAxisSpeed * elapsed.TotalSeconds;
@@ -1020,12 +1019,8 @@ public sealed class HoodSession
         var next = new PetPosition(
             Math.Clamp(Position.X + _roamingDirection.X * travel, RoamingArea.X, RoamingEndX),
             Math.Clamp(Position.Y + _roamingDirection.Y * travel, RoamingArea.Y, RoamingEndY));
-        var dx = next.X - Position.X;
-        var dy = next.Y - Position.Y;
-        var distance = Math.Sqrt(dx * dx + dy * dy);
         Position = next;
         NormalizeRoamingDirection();
-        return distance / RoamingSpeedUnitsPerSecond;
     }
 
     private TimeSpan SampleRandomInterval()

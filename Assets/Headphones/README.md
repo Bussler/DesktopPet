@@ -8,6 +8,8 @@ The fitted poses place Hood's and Pip's cups higher at their animal ears, with a
 
 To regenerate placement after deliberately changing the built-in atlases, run `powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools/Generate-HeadphonePoses.ps1`. The generator measures the actual opaque top of each frame and combines that with the explicit hand-fitted rig tuples. Update those tuples and inspect all rendered poses when changing character anatomy; copying an atlas or changing animation columns without calibrating the rig is insufficient. The source crop rectangles must also be updated if the headphone part layout changes.
 
+The Pet attention poses can be regenerated independently with `tools/Generate-HeadphonePoses.ps1 -Action pet`, preserving all existing action calibrations. The new poses follow the happy head tilts; Crumb's attention earbuds are fitted inside the actual pink ear regions with clearance around each bud.
+
 Crumb's chubby Cozy artwork was replaced on 2026-10-16. His fitting now measures the saturated pink inner-ear regions in every packed frame, keeps clearance around each bud and follows the ear tilt. Head turns hide an occluded far bud; walking retains the inward-facing rose tip. Hood, Pip and Puddle retain their existing fitted poses. See [Crumb's current earbud preview](../../docs/previews/pet-animations/crumb-earbuds.png).
 
 Walking places each bud 12 logical pixels below its measured inner-ear anchor, nearer the ear entrance as shown in the user's marked reference. This adjustment applies to both walking directions and leaves other poses unchanged.

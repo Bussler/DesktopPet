@@ -3,7 +3,7 @@
   "name": "Crumb",
   "spriteSheet": "hood_spritesheet.png",
   "sheetWidth": 6144,
-  "sheetHeight": 4160,
+  "sheetHeight": 4576,
   "frameWidth": 384,
   "frameHeight": 416,
   "spriteScale": 2,
@@ -1190,6 +1190,83 @@
         }
       ],
       "frameDurationMilliseconds": 60,
+      "loops": false,
+      "motionBounds": {
+        "height": 208,
+        "width": 192,
+        "y": 0,
+        "x": 0
+      }
+    },
+    {
+      "action": "pet",
+      "frames": [
+        {
+          "row": 10,
+          "column": 0
+        },
+        {
+          "row": 10,
+          "column": 1
+        },
+        {
+          "row": 10,
+          "column": 2
+        },
+        {
+          "row": 10,
+          "column": 3
+        },
+        {
+          "row": 10,
+          "column": 4
+        },
+        {
+          "row": 10,
+          "column": 5
+        },
+        {
+          "row": 10,
+          "column": 6
+        },
+        {
+          "row": 10,
+          "column": 7
+        },
+        {
+          "row": 10,
+          "column": 8
+        },
+        {
+          "row": 10,
+          "column": 9
+        },
+        {
+          "row": 10,
+          "column": 10
+        },
+        {
+          "row": 10,
+          "column": 11
+        },
+        {
+          "row": 10,
+          "column": 12
+        },
+        {
+          "row": 10,
+          "column": 13
+        },
+        {
+          "row": 10,
+          "column": 14
+        },
+        {
+          "row": 10,
+          "column": 15
+        }
+      ],
+      "frameDurationMilliseconds": 120,
       "loops": false,
       "motionBounds": {
         "height": 208,

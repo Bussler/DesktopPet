@@ -12,6 +12,22 @@ namespace DesktopPet.Windows.Tests;
 public sealed class MediaHeadphoneArtworkTests
 {
     [TestMethod]
+    [DataRow("hood")]
+    [DataRow("pip")]
+    [DataRow("crumb")]
+    [DataRow("puddle")]
+    public void AttentionPosesKeepTheirAudioAccessories(string pet)
+    {
+        var assets = HoodAssets.LoadPet(Path.Combine(AppContext.BaseDirectory, "Assets"), pet);
+        foreach (var frame in assets.Definition.GetAnimation(PetAction.Pet).Frames)
+        {
+            var art = MediaHeadphoneArtwork.Get(pet, PetAction.Pet, frame);
+            Assert.IsTrue(CountOpaque(Render(art.InFront), new Int32Rect(0, 0, 192, 208)) > 100,
+                $"{pet} attention frame {frame.Column} must keep its headphones or earbuds.");
+        }
+    }
+
+    [TestMethod]
     [DataRow(PetAction.RunRight, 145)]
     [DataRow(PetAction.RunLeft, 39)]
     public void HoodsFarHeadbandStemStaysBehindTheCapWhenWalking(PetAction action, int farX)
