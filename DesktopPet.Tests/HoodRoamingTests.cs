@@ -201,8 +201,7 @@ public sealed class HoodRoamingTests
         var session = CreateSession(new PetBounds(100, 100, 192, 400), new PetPosition(100, 100),
             boredom: boredom, needs: HoodConfiguration.Defaults.Needs with
             {
-                HungerPointsPerHour = 0, BoredomPointsPerHour = 0, SleepPointsPerHour = 0,
-                MovementReliefPerSecond = 0
+                HungerPointsPerHour = 0, BoredomPointsPerHour = 0, SleepPointsPerHour = 0
             });
 
         session.Advance(TimeSpan.FromSeconds(8));
@@ -227,7 +226,7 @@ public sealed class HoodRoamingTests
         var needs = HoodConfiguration.Defaults.Needs with
         {
             HungerPointsPerHour = 0, BoredomPointsPerHour = boredomPerHour,
-            SleepPointsPerHour = 0, MovementReliefPerSecond = 0
+            SleepPointsPerHour = 0
         };
         var area = new PetBounds(100, 100, 192, 400);
         var position = new PetPosition(100, 100);

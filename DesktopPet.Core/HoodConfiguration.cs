@@ -80,9 +80,6 @@ public sealed record NeedSettings
     public double SleepPointsPerHour { get; init; } = 20;
     public double FeedGain { get; init; } = 40;
     public double PetRelief { get; init; } = 30;
-    // Retained so existing configuration files still load; only Pet now relieves boredom.
-    public double MovementReliefPerSecond { get; init; } = 0.5;
-    public double StationaryClickRelief { get; init; } = 10;
 }
 
 public sealed record SleepSettings
@@ -267,8 +264,6 @@ public static class HoodConfigurationValidator
         RequireFiniteNonnegative(configuration.Needs.SleepPointsPerHour, "needs.sleep_points_per_hour");
         RequireFiniteNonnegative(configuration.Needs.FeedGain, "needs.feed_gain");
         RequireFiniteNonnegative(configuration.Needs.PetRelief, "needs.pet_relief");
-        RequireFiniteNonnegative(configuration.Needs.MovementReliefPerSecond, "needs.movement_relief_per_second");
-        RequireFiniteNonnegative(configuration.Needs.StationaryClickRelief, "needs.stationary_click_relief");
 
         var threshold = configuration.Sleep.AutomaticNapThreshold;
         if (!double.IsFinite(threshold) || threshold <= 0 || threshold > 100)

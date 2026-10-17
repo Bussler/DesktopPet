@@ -224,8 +224,7 @@ public sealed class HoodSleepTests
                 HungerPointsPerHour = 0,
                 BoredomPointsPerHour = 0,
                 SleepPointsPerHour = sleepPointsPerHour,
-                FeedGain = feedGain,
-                StationaryClickRelief = 0
+                FeedGain = feedGain
             },
             Sleep = defaults.Sleep with
             {

@@ -39,8 +39,6 @@ needs:
   sleep_points_per_hour: 20
   feed_gain: 40
   pet_relief: 30
-  movement_relief_per_second: 0.5
-  stationary_click_relief: 10
 sleep:
   automatic_nap_threshold: 80
   duration_minutes: 5
@@ -73,7 +71,6 @@ notes:
 | `needs.hunger_points_per_hour`, `boredom_points_per_hour`, `sleep_points_per_hour` | Need points per awake active hour | Finite and at least `0`. |
 | `needs.feed_gain` | Hunger points per Feed action | Finite and at least `0`. |
 | `needs.pet_relief` | Boredom points per Pet action | Finite and at least `0`; defaults to `30` when absent. Explicit saved values are preserved. |
-| `needs.movement_relief_per_second`, `needs.stationary_click_relief` | Legacy settings | Finite and at least `0`. Accepted and preserved for compatibility, but have no effect. Only Pet reduces boredom. |
 | `sleep.automatic_nap_threshold` | Need points | Greater than `0` and at most `100`. |
 | `sleep.duration_minutes`, `sleep.early_wake_grace_minutes` | Active minutes | Finite and greater than `0`. |
 | `random_interval.minimum_minutes`, `maximum_minutes` | Active awake minutes | Finite, each greater than `0`, and minimum no greater than maximum. Defaults: `1` and `5`. |

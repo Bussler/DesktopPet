@@ -253,8 +253,7 @@ public sealed class HoodSessionTests
             {
                 HungerPointsPerHour = 0,
                 BoredomPointsPerHour = 0,
-                SleepPointsPerHour = 0,
-                MovementReliefPerSecond = 0.5
+                SleepPointsPerHour = 0
             }
         };
         var snapshot = new DesktopPet.Core.HoodSessionSnapshot
@@ -284,8 +283,7 @@ public sealed class HoodSessionTests
             {
                 HungerPointsPerHour = 0,
                 BoredomPointsPerHour = 0,
-                SleepPointsPerHour = 0,
-                MovementReliefPerSecond = 0.5
+                SleepPointsPerHour = 0
             }
         };
         var snapshot = new DesktopPet.Core.HoodSessionSnapshot
@@ -713,8 +711,7 @@ public sealed class HoodSessionTests
             {
                 HungerPointsPerHour = 0,
                 BoredomPointsPerHour = 10,
-                SleepPointsPerHour = 0,
-                MovementReliefPerSecond = 0
+                SleepPointsPerHour = 0
             }
         };
         var store = new RecordingSessionStore();
