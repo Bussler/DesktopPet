@@ -680,6 +680,7 @@ public partial class App : System.Windows.Application
                     RetryNotesSave,
                     _effectiveNotesSettings,
                     _effectiveUiStyle);
+                window.ChecklistItemCompleted += () => _petWindow?.CelebrateChecklistCompletion();
                 _noteWindows.Add(note.Id, window);
             }
 

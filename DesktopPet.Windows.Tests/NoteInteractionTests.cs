@@ -805,6 +805,38 @@ public sealed class NoteInteractionTests
     }
 
     [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void ChecklistCompletionNotifiesOnlyWhenTickedDone(bool initiallyChecked)
+    {
+        var document = NotesDocument.FromText("Task").SetListKind(0, 4, NoteBlockKind.Checklist)
+            .SetChecklistChecked(0, initiallyChecked);
+        NotesDocument? saved = null;
+        var window = CreateChecklistWindow(result => saved = result, document: document);
+        var completions = 0;
+        window.ChecklistItemCompleted += () =>
+        {
+            Assert.IsTrue(saved!.Paragraphs[0].IsChecked, "Save the completed item before notifying.");
+            completions++;
+        };
+        try
+        {
+            window.ApplyAppearance(new NotesConfiguration(), NoteColor.Yellow);
+            Assert.AreEqual(0, completions, "Rendering a completed item must not celebrate.");
+            var checkbox = ChecklistCheckbox(window);
+            if (initiallyChecked) Click(checkbox);
+            Assert.AreEqual(0, completions);
+            Click(checkbox);
+            Assert.AreEqual(1, completions);
+            Click(checkbox);
+            Assert.AreEqual(1, completions, "Unchecking must not celebrate.");
+            Click(checkbox);
+            Assert.AreEqual(2, completions);
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
     public void CheckedChecklistRendersALineThroughItsText()
     {
         var window = CreateChecklistWindow(_ => { },

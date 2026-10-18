@@ -51,6 +51,8 @@ public partial class HoodOverlayWindow : Window
     private FocusSession? _focus;
     private PetAction? _focusAction;
     private long _focusAnimationTicks;
+    private long? _checklistAnimationTicks;
+    private long _checklistAnimationStartedAt;
     private RoamingAreaEditorWindow? _areaEditor;
     private System.Windows.Point _mouseDownScreen;
     private System.Windows.Point _lastPointerScreen;
@@ -236,6 +238,7 @@ public partial class HoodOverlayWindow : Window
 
         var elapsed = Stopwatch.GetElapsedTime(previous, now);
         AdvanceFocusAnimation(elapsed);
+        AdvanceChecklistAnimation(Stopwatch.GetElapsedTime(Math.Max(previous, _checklistAnimationStartedAt), now));
         var oldPosition = _session.Position;
         try
         {
@@ -718,10 +721,33 @@ public partial class HoodOverlayWindow : Window
         _focusAnimationTicks = (_focusAnimationTicks + elapsed.Ticks % cycle) % cycle;
     }
 
+    internal void CelebrateChecklistCompletion()
+    {
+        if (!_session.Configuration.Behavior.ShowSprites) return;
+        _checklistAnimationTicks = 0;
+        _checklistAnimationStartedAt = Stopwatch.GetTimestamp();
+        RenderPresentation();
+        UpdateTimerInterval();
+    }
+
+    internal void AdvanceChecklistAnimation(TimeSpan elapsed)
+    {
+        if (_checklistAnimationTicks is not { } ticks) return;
+        var animation = _assetSource.Definition.GetAnimation(PetAction.Pet);
+        var duration = TimeSpan.FromMilliseconds(animation.FrameDurationMilliseconds).Ticks * animation.Frames.Count;
+        _checklistAnimationTicks = elapsed.Ticks >= duration - ticks ? null : ticks + elapsed.Ticks;
+    }
+
     internal HoodPresentation CurrentPresentation
     {
         get
         {
+            if (_checklistAnimationTicks is { } ticks)
+            {
+                var celebration = _assetSource.Definition.GetAnimation(PetAction.Pet);
+                var frameTicks = TimeSpan.FromMilliseconds(celebration.FrameDurationMilliseconds).Ticks;
+                return new(PetAction.Pet, (int)(ticks / frameTicks), _session.Position);
+            }
             if (_focusAction is not { } action) return _session.Presentation;
             var animation = _assetSource.Definition.GetAnimation(action);
             var duration = TimeSpan.FromMilliseconds(animation.FrameDurationMilliseconds);
@@ -763,7 +789,7 @@ public partial class HoodOverlayWindow : Window
     }
 
     private void UpdateTimerInterval() => _frameTimer.Interval = TimeSpan.FromMilliseconds(
-        _focusAction is not null || _session.RequiresAnimationFrames ? 33 : 1000);
+        _checklistAnimationTicks is not null || _focusAction is not null || _session.RequiresAnimationFrames ? 33 : 1000);
 
     private static IntPtr WindowMessageHook(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
     {

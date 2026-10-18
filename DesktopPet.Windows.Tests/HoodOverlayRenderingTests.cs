@@ -62,6 +62,90 @@ public sealed class HoodOverlayRenderingTests
     }
 
     [TestMethod]
+    [DataRow("hood", false)]
+    [DataRow("pip", true)]
+    [DataRow("crumb", false)]
+    [DataRow("puddle", true)]
+    public void ChecklistCelebrationPlaysOnceAndRestartsWithoutChangingNapNeedsOrFocus(string petName, bool focusBreak)
+    {
+        var assets = LoadAssets(petName);
+        var session = CreateIdleSession(assets.Definition);
+        session.Sleep();
+        var needs = session.Needs;
+        var pet = CreatePet(session, assets);
+        var focus = new FocusSession();
+        pet.AttachFocus(focus);
+        if (focusBreak)
+        {
+            focus.StartFocus();
+            focus.Advance(focus.Remaining);
+            focus.TakeBreak();
+        }
+        var phase = focus.Phase;
+        var remaining = focus.Remaining;
+        var original = pet.CurrentPresentation;
+        try
+        {
+            pet.CelebrateChecklistCompletion();
+            var animation = assets.Definition.GetAnimation(PetAction.Pet);
+            var image = (Image)pet.FindName("PetImage");
+            Assert.AreEqual(PetAction.Pet, pet.CurrentPresentation.Action);
+            Assert.AreEqual(assets.GetFrameRectangle(animation.Frames[0]), ((CroppedBitmap)image.Source).SourceRect);
+            pet.AdvanceChecklistAnimation(TimeSpan.FromMilliseconds(600));
+            Assert.IsGreaterThan(0, pet.CurrentPresentation.FrameIndex);
+            pet.CelebrateChecklistCompletion();
+            Assert.AreEqual(0, pet.CurrentPresentation.FrameIndex, "Repeated completions restart playback.");
+            var duration = animation.FrameDurationMilliseconds * animation.Frames.Count;
+            pet.AdvanceChecklistAnimation(TimeSpan.FromMilliseconds(duration - 1));
+            Assert.AreEqual(animation.Frames.Count - 1, pet.CurrentPresentation.FrameIndex);
+            pet.AdvanceChecklistAnimation(TimeSpan.FromMilliseconds(1));
+            Assert.AreEqual(original, pet.CurrentPresentation);
+            Assert.AreEqual(needs, session.Needs);
+            Assert.AreEqual(HoodSessionMode.Sleeping, session.Mode);
+            Assert.AreEqual(phase, focus.Phase);
+            Assert.AreEqual(remaining, focus.Remaining);
+        }
+        finally { pet.Close(); }
+    }
+
+    [TestMethod]
+    public void ChecklistCelebrationStartsTimingAtCompletionInsteadOfThePreviousIdleTick()
+    {
+        var assets = LoadAssets("hood");
+        var session = CreateIdleSession(assets.Definition);
+        var pet = CreatePet(session, assets);
+        try
+        {
+            typeof(HoodOverlayWindow).GetField("_lastTick", PrivateInstance)!
+                .SetValue(pet, Stopwatch.GetTimestamp() - Stopwatch.Frequency * 10);
+            pet.CelebrateChecklistCompletion();
+            typeof(HoodOverlayWindow).GetMethod("OnFrameTimerTick", PrivateInstance)!
+                .Invoke(pet, [null, EventArgs.Empty]);
+            Assert.AreEqual(PetAction.Pet, pet.CurrentPresentation.Action,
+                "Time before the completion must not consume the celebration.");
+        }
+        finally { pet.Close(); }
+    }
+
+    [TestMethod]
+    public void ChecklistCompletionWhileSpritesAreHiddenDoesNotQueueACelebration()
+    {
+        var assets = LoadAssets("hood");
+        var session = CreateIdleSession(assets.Definition, showSprites: false);
+        var pet = CreatePet(session, assets);
+        try
+        {
+            pet.CelebrateChecklistCompletion();
+            ApplyConfiguration(session, session.Configuration with
+            {
+                Behavior = session.Configuration.Behavior with { ShowSprites = true }
+            });
+            Assert.AreEqual(session.Presentation, pet.CurrentPresentation);
+        }
+        finally { pet.Close(); }
+    }
+
+    [TestMethod]
     public void RepeatedRectangleKeepsItsCropWhileTheSessionAndPetPositionAdvance()
     {
         var assets = LoadAssets("hood");

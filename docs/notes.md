@@ -38,6 +38,8 @@ Click the body to type. The toolbar applies bold, italic, underline, and striket
 
 At the start of a paragraph, type `- ` for bullets, `1) ` for numbering, or `- [ ] ` for checklists. The final space completes the shortcut. For a checklist, the dash first becomes a bullet; continue with `[ ] ` to create the checkbox. These shortcuts also work in table cells. Checked items use muted text and strikethrough; unchecking removes the completion effect while preserving manually applied formatting. Nesting saves with the note and supports up to 32 levels.
 
+Ticking a checklist item done plays your pet's happy animation once. Unticking an item does not trigger it. The celebration preserves needs, naps, and Focus state; it stays off while sprites are hidden.
+
 ## Markdown and code
 
 Completed markers convert while typing or pasting; unfinished markers remain editable text. Opening old notes or changing appearance does not reinterpret existing literal markers. Prefix markers with a backslash to keep them literal, such as `\**literal**`, `\# heading`, or `\$5`; the backslash remains visible. Markers inside code stay literal.

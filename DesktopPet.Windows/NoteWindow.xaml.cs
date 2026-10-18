@@ -16,6 +16,8 @@ namespace DesktopPet.Windows;
 
 public partial class NoteWindow : Window
 {
+    internal event Action? ChecklistItemCompleted;
+
     private static readonly System.Windows.Media.FontFamily CodeFont = new("Consolas");
 
     [Flags]
@@ -1183,6 +1185,7 @@ public partial class NoteWindow : Window
             finally { _updatingEditor = false; }
             SaveEditorDocument(document);
             UpdateToolbar();
+            if (isChecked) ChecklistItemCompleted?.Invoke();
         }
         catch (Exception exception) when (exception is InvalidDataException or ArgumentException or InvalidOperationException)
         {
