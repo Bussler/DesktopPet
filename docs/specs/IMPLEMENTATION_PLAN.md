@@ -137,8 +137,8 @@ Animation preparation can proceed after milestone 1 while configuration is devel
 
 **Work**
 
-- Implement gentle movement within the area and reduce boredom from actual movement time, not simply from the enabled setting.
-- Reduce boredom for completed stationary left-click interactions while roaming is disabled.
+- Implement gentle movement within the area with frequency increasing as boredom rises; movement provides no boredom relief.
+- Reduce boredom only through the Pet menu action below Feed, playing the selected pet's happy attention animation once, including when roaming is disabled.
 - Schedule wave/look-around/hop reactions within the configured random interval range. Select only actions whose footprints fit the current area.
 - Suspend ambient actions during sleep, dragging, editing, and foreground reactions. Resume without replaying a backlog.
 - Expose roaming, idle animation, and random-event toggles independently in the initial settings view. Retain dedicated action animations when idle is disabled.
@@ -148,7 +148,7 @@ Animation preparation can proceed after milestone 1 while configuration is devel
 
 - Test all combinations of the three behavior toggles and verify no implicit coupling.
 - Test known random choices and interval endpoints, suspension/resumption, area-fit fallback, and direct-action precedence.
-- Verify motion decreases boredom only when Hood actually moves and clicks provide relief when stationary.
+- Verify only Pet decreases boredom; movement, ordinary reactions, feeding and sleeping do not. Check one-shot playback, persistence and roaming cadence.
 - Completion means Hood can behave quietly or actively according to independent settings, with deterministic tests for the interaction combinations.
 
 ### 7. Finish the settings UI and Windows controls

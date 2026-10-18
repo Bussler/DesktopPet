@@ -183,7 +183,7 @@ function Save-Png($bitmap, $path) {
     $stream = [System.IO.File]::Create($path)
     try { $encoder.Save($stream) } finally { $stream.Dispose() }
 }
-$sheet = [System.Windows.Media.Imaging.RenderTargetBitmap]::new(6144,4160,96,96,[System.Windows.Media.PixelFormats]::Pbgra32)
+$sheet = [System.Windows.Media.Imaging.RenderTargetBitmap]::new($manifest.sheetWidth,$manifest.sheetHeight,96,96,[System.Windows.Media.PixelFormats]::Pbgra32)
 $sheet.Render($visual)
 Save-Png $sheet (Join-Path $directory 'hood_spritesheet.png')
 $manifest.name = $Pet
@@ -193,4 +193,4 @@ New-Item -ItemType Directory -Path $previewDirectory -Force | Out-Null
 Save-Png ([System.Windows.Media.Imaging.TransformedBitmap]::new($sheet,
     [System.Windows.Media.ScaleTransform]::new(0.5,0.5))) (Join-Path $previewDirectory "$($Pet.ToLowerInvariant())-actions.png")
 $report | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $directory 'packing.json') -Encoding utf8
-Write-Output "$Pet packed: 6144x4160; 145 unique poses, 265 playback entries; Hood schedule preserved."
+Write-Output "$Pet packed: $($manifest.sheetWidth)x$($manifest.sheetHeight); Hood schedule preserved."

@@ -20,7 +20,7 @@
   {
     "action": "wave",
     "source": "wave",
-    "frames": 12,
+    "frames": 16,
     "scale": 0.9574468085106383
   },
   {
@@ -58,5 +58,11 @@
     "source": "wake",
     "frames": 15,
     "scale": 1.1132686084142396
+  },
+  {
+    "action": "pet",
+    "source": "pet",
+    "frames": 16,
+    "scale": 1.139240506329114
   }
 ]

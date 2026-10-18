@@ -411,6 +411,9 @@ public partial class HoodOverlayWindow : Window
         var feed = new WpfMenuItem { Header = "Feed" };
         feed.Click += (_, _) => RunSessionCommand(_session.Feed);
         menu.Items.Add(feed);
+        var pet = new WpfMenuItem { Header = "Pet" };
+        pet.Click += (_, _) => RunSessionCommand(_session.Pet);
+        menu.Items.Add(pet);
         _sleepActionMenuItem.Click += (_, _) => RunSessionCommand(_session.Sleep);
         menu.Items.Add(_sleepActionMenuItem);
         _editAreaMenuItem.Header = "Edit roaming area";

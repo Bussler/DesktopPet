@@ -17,11 +17,13 @@ The published app targets **64-bit Windows (`win-x64`)** and includes its .NET r
 | Left-click an awake pet | Show or hide open notes. The first use creates a blank note; if all notes are closed, it opens the Notes list. |
 | Left-click a sleeping pet | Wake it from a care nap. During a Focus break, show/hide Notes and reopen Focus while it stays asleep. |
 | Drag the pet | Move it and its roaming area, including between monitors. |
-| Right-click the pet | View needs; Feed, Sleep, Edit roaming area, open Focus, Notes or Settings, or Quit. |
+| Right-click the pet | View needs; Feed, Pet, Sleep, Edit roaming area, open Focus, Notes or Settings, or Quit. |
 | Double-click the tray icon | Show or hide open notes, like clicking the pet. |
 | Right-click the tray icon | Access Focus, Notes, Settings, Show Hood sprites, or Quit. |
 
 **Edit roaming area** shows an outline: drag its top bar to move it, or its edges and corners to resize it. Needs and timers pause while the app is closed or Windows is suspended.
+
+Choose **Pet**, directly below **Feed**, to give your companion attention. It plays a short happy animation and reduces boredom by 30 points by default. Higher boredom makes roaming more frequent; walking, ordinary clicks, feeding, and sleep do not reduce boredom.
 
 In **Settings > Appearance**, choose a pet, size (50%–200%), UI style, and System/Light/Dark theme. Changes preview immediately; **Save** keeps them, while **Cancel** or closing Settings restores the previous appearance. Behavior settings control roaming, animations, reactions, and always-on-top. Turn off **Show Hood sprites** to use notes alone; the pet pauses, and the tray menu can show it again.
 

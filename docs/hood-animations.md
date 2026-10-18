@@ -11,13 +11,14 @@ The preview shows each unique pose, with rows in playback order:
 | Idle | 0 | 16 | 80 ms | 7.84-second neutral hold, then a 1.2-second gentle blink; loops every 9.04 seconds (about 20% more often). |
 | Run right | 1 | 16 | 55 ms | Alternating feet with a restrained body bounce; loops every 880 ms. |
 | Run left | 2 | 16 | 55 ms | Mirrored right-running stride; loops every 880 ms. |
-| Wave | 3 | 12 | 78 ms | Completes in 936 ms. |
+| Wave | 3 | 16 | 120 ms | Completes once in 1920 ms; four new in-between poses extend the existing wave. |
 | Look up | 4 | 12 | 78 ms | Completes in 936 ms. |
 | Look around | 5 | 16 | 143 ms | Completes in 2288 ms. |
 | Jump | 6 | 15 | 80 ms | Crouch, vertical jump, and soft landing; completes in 1200 ms. |
 | Feed | 7 | 15 | 60 ms | Completes in 900 ms; Hood takes a seed from his bowl. |
 | Sleep | 8 | 12 | 225 ms | Gentle closed-eye breathing; loops every 2700 ms. |
 | Wake | 9 | 15 | 60 ms | Completes in 900 ms, ending with eyes open. |
+| Pet | 10 | 16 | 120 ms | Happy attention response; completes once in 1920 ms. All four pets have their own artwork. |
 
 Each sequence uses columns zero through its unique-pose count minus one. Idle additionally repeats column zero 120 times at the beginning to provide a quiet hold; playback skips 23 of those repeated frames to shorten the pause while preserving the manifest and saved frame indices. Head tilts are confined to deliberate reactions instead of the idle loop. Roaming retains eight-second bouts and its travel speed. Boredom scales bout frequency linearly from 10% to 120% of the previous once-per-40-seconds cadence. At fixed boredom 0, 50, and 100, the idle rests are approximately 392, 53.5, and 25.3 seconds respectively; increasing boredom brings the next bout forward during the current rest. Sleep, dragging, area editing, and other actions pause roaming.
 

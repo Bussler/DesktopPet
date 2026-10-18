@@ -13,7 +13,8 @@ public enum PetAction
     Jump,
     Feed,
     Sleep,
-    Wake
+    Wake,
+    Pet
 }
 
 public sealed class PetAssetException(string message, Exception? innerException = null)
@@ -171,10 +172,21 @@ public sealed class PetDefinition
 
         foreach (var requiredAction in Enum.GetValues<PetAction>())
         {
-            if (!actions.Contains(requiredAction))
+            // Older custom artwork can use its friendly wave for the new interaction.
+            if (requiredAction != PetAction.Pet && !actions.Contains(requiredAction))
             {
                 throw new PetAssetException($"The Hood animation manifest is missing the required '{requiredAction}' animation.");
             }
+        }
+
+        if (!actions.Contains(PetAction.Pet))
+        {
+            var wave = GetAnimation(PetAction.Wave);
+            Animations.Add(new PetAnimation
+            {
+                Action = "pet", Frames = wave.Frames, FrameDurationMilliseconds = wave.FrameDurationMilliseconds,
+                Loops = false, MotionBounds = wave.MotionBounds
+            });
         }
 
         if (!GetAnimation(PetAction.Idle).Loops)
@@ -185,6 +197,11 @@ public sealed class PetDefinition
         if (GetAnimation(PetAction.Jump).Loops)
         {
             throw new PetAssetException("The Hood 'Jump' reaction must finish instead of looping.");
+        }
+
+        if (GetAnimation(PetAction.Pet).Loops)
+        {
+            throw new PetAssetException("The 'Pet' reaction must finish instead of looping.");
         }
     }
 }

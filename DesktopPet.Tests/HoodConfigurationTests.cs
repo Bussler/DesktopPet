@@ -7,6 +7,40 @@ namespace DesktopPet.Tests;
 public sealed class HoodConfigurationTests
 {
     [TestMethod]
+    [DataRow(10d)]
+    [DataRow(25d)]
+    public void PetReliefDefaultsForOlderFilesAndRoundTrips(double relief)
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new YamlConfigurationStore(Path.Combine(directory.Path, "config.yaml"));
+        store.LoadOrCreate();
+        File.WriteAllText(store.Path, Regex.Replace(File.ReadAllText(store.Path), @"(?m)^  pet_relief:.*\r?\n", string.Empty));
+        var legacy = store.LoadOrCreate();
+        Assert.AreEqual(30d, legacy.Needs.PetRelief);
+        store.Save(legacy with { Needs = legacy.Needs with { PetRelief = relief } });
+        var restored = store.LoadOrCreate();
+        Assert.AreEqual(relief, restored.Needs.PetRelief);
+    }
+
+    [TestMethod]
+    [DataRow(-1d)]
+    [DataRow(double.NaN)]
+    [DataRow(double.PositiveInfinity)]
+    public void PetReliefRejectsInvalidValuesWithoutReplacingSavedConfiguration(double relief)
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new YamlConfigurationStore(Path.Combine(directory.Path, "config.yaml"));
+        var configuration = store.LoadOrCreate();
+        var original = File.ReadAllText(store.Path);
+        var exception = Assert.Throws<HoodConfigurationException>(() => store.Save(configuration with
+        {
+            Needs = configuration.Needs with { PetRelief = relief }
+        }));
+        Assert.AreEqual("needs.pet_relief", exception.SettingPath);
+        Assert.AreEqual(original, File.ReadAllText(store.Path));
+    }
+
+    [TestMethod]
     [DataRow(0.5)]
     [DataRow(1.35)]
     [DataRow(2.0)]
@@ -100,6 +134,15 @@ public sealed class HoodConfigurationTests
         StringAssert.Contains(yaml, "pet: hood");
         StringAssert.Contains(yaml, "ui_style: sticky-notes");
         StringAssert.Contains(yaml, "hunger_points_per_hour: 12.5");
+        StringAssert.Contains(yaml.Replace("\r\n", "\n"), """
+            needs:
+              hunger_points_per_hour: 12.5
+              boredom_points_per_hour: 16
+              sleep_points_per_hour: 20
+              feed_gain: 40
+              pet_relief: 30
+            sleep:
+            """.Replace("\r\n", "\n"));
         StringAssert.Contains(yaml, "minimum_minutes: 1");
         StringAssert.Contains(yaml, "maximum_minutes: 5");
         StringAssert.Contains(yaml, "default_color: yellow");

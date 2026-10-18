@@ -22,6 +22,7 @@ public sealed class HoodSessionTests
         Assert.IsTrue(definition.GetAnimation(DesktopPet.Core.PetAction.Idle).Loops);
         Assert.IsTrue(definition.GetAnimation(DesktopPet.Core.PetAction.Sleep).Loops);
         Assert.IsFalse(definition.GetAnimation(DesktopPet.Core.PetAction.Feed).Loops);
+        Assert.IsFalse(definition.GetAnimation(DesktopPet.Core.PetAction.Pet).Loops);
         Assert.IsFalse(definition.GetAnimation(DesktopPet.Core.PetAction.Wake).Loops);
         Assert.IsFalse(definition.GetAnimation(DesktopPet.Core.PetAction.LookUp).Loops);
         Assert.IsFalse(definition.GetAnimation(DesktopPet.Core.PetAction.LookAround).Loops);
@@ -57,6 +58,22 @@ public sealed class HoodSessionTests
         Assert.AreEqual(1d, definition.SpriteScale);
         Assert.AreEqual(192d, definition.DisplayWidth);
         Assert.AreEqual(208d, definition.DisplayHeight);
+    }
+
+    [TestMethod]
+    public void Assets_LegacyManifestsUseAOneShotWaveWhenPetIsMissing()
+    {
+        var (json, width, height) = ReadPackagedDefinition();
+        var root = System.Text.Json.Nodes.JsonNode.Parse(json)!;
+        var animations = root["animations"]!.AsArray();
+        animations.Remove(animations.Single(animation => animation!["action"]!.GetValue<string>() == "pet"));
+        animations.Single(animation => animation!["action"]!.GetValue<string>() == "wave")!["loops"] = true;
+
+        var definition = DesktopPet.Core.PetDefinition.Parse(root.ToJsonString(), width, height);
+
+        Assert.IsFalse(definition.GetAnimation(DesktopPet.Core.PetAction.Pet).Loops);
+        CollectionAssert.AreEqual(definition.GetAnimation(DesktopPet.Core.PetAction.Wave).Frames,
+            definition.GetAnimation(DesktopPet.Core.PetAction.Pet).Frames);
     }
 
     [TestMethod]
@@ -226,7 +243,7 @@ public sealed class HoodSessionTests
     }
 
     [TestMethod]
-    public void Advance_RoamsWithinBoundsAndRelievesBoredomOnlyForMovementTime()
+    public void Advance_RoamsWithinBoundsWithoutRelievingBoredom()
     {
         var defaults = DesktopPet.Core.HoodConfiguration.Defaults;
         var configuration = defaults with
@@ -236,8 +253,7 @@ public sealed class HoodSessionTests
             {
                 HungerPointsPerHour = 0,
                 BoredomPointsPerHour = 0,
-                SleepPointsPerHour = 0,
-                MovementReliefPerSecond = 0.5
+                SleepPointsPerHour = 0
             }
         };
         var snapshot = new DesktopPet.Core.HoodSessionSnapshot
@@ -252,7 +268,7 @@ public sealed class HoodSessionTests
 
         Assert.AreEqual(new DesktopPet.Core.PetPosition(882, 816), session.Position);
         Assert.AreEqual(DesktopPet.Core.PetAction.RunRight, session.Presentation.Action);
-        Assert.AreEqual(19.5, session.Needs.Boredom, 1e-9);
+        Assert.AreEqual(20, session.Needs.Boredom, 1e-9);
         Assert.IsTrue(session.Position.X >= session.RoamingArea.X);
         Assert.IsTrue(session.Position.X + 192 <= session.RoamingArea.Right);
     }
@@ -267,8 +283,7 @@ public sealed class HoodSessionTests
             {
                 HungerPointsPerHour = 0,
                 BoredomPointsPerHour = 0,
-                SleepPointsPerHour = 0,
-                MovementReliefPerSecond = 0.5
+                SleepPointsPerHour = 0
             }
         };
         var snapshot = new DesktopPet.Core.HoodSessionSnapshot
@@ -460,7 +475,7 @@ public sealed class HoodSessionTests
     }
 
     [TestMethod]
-    [DataRow(0, DesktopPet.Core.PetAction.Wave, 936)]
+    [DataRow(0, DesktopPet.Core.PetAction.Wave, 1920)]
     [DataRow(1, DesktopPet.Core.PetAction.LookAround, 2288)]
     [DataRow(3, DesktopPet.Core.PetAction.LookUp, 936)]
     public void Advance_SelectsIdleGesturesAndReturnsToRest(int choice, DesktopPet.Core.PetAction expected, int durationMilliseconds)
@@ -647,49 +662,56 @@ public sealed class HoodSessionTests
     }
 
     [TestMethod]
-    public void React_ReducesBoredomForEachStationaryClickAndReplacesTheCurrentAction()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void Pet_ReducesBoredomForEachClickAndReplacesTheCurrentAction(bool roaming)
     {
         var defaults = DesktopPet.Core.HoodConfiguration.Defaults;
         var configuration = defaults with
         {
-            Behavior = defaults.Behavior with { Roaming = false },
+            Behavior = defaults.Behavior with { Roaming = roaming },
             Needs = defaults.Needs with
             {
                 HungerPointsPerHour = 0,
                 BoredomPointsPerHour = 100,
                 SleepPointsPerHour = 0,
-                StationaryClickRelief = 10
+                PetRelief = 10
             }
         };
         var store = new RecordingSessionStore();
         var session = CreateSession(new SequenceRandomSource(0), store, configuration);
         session.Advance(TimeSpan.FromMinutes(30));
 
-        session.React();
-        session.React();
+        session.Pet();
+        session.Advance(TimeSpan.FromMilliseconds(600));
+        session.Pet();
 
-        Assert.AreEqual(30, session.Needs.Boredom);
+        Assert.AreEqual(30 + 100 * TimeSpan.FromMilliseconds(600).TotalHours, session.Needs.Boredom, 1e-9);
         Assert.AreEqual(2, store.SaveCount);
         Assert.AreEqual(session.Needs, store.Snapshot!.Needs);
-        Assert.AreEqual(DesktopPet.Core.PetAction.Jump, session.Presentation.Action);
+        Assert.AreEqual(DesktopPet.Core.PetAction.Pet, session.Presentation.Action);
         Assert.AreEqual(0, session.Presentation.FrameIndex);
 
-        session.Advance(TimeSpan.FromMilliseconds(1200));
+        session.Advance(TimeSpan.FromMilliseconds(1919));
+        Assert.AreEqual(DesktopPet.Core.PetAction.Pet, session.Presentation.Action);
+        session.Advance(TimeSpan.FromMilliseconds(1));
         Assert.AreEqual(DesktopPet.Core.PetAction.Idle, session.Presentation.Action);
     }
 
     [TestMethod]
-    public void React_DoesNotReduceBoredomWhileRoamingIsEnabled()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void React_DoesNotReduceBoredomRegardlessOfRoaming(bool roaming)
     {
         var defaults = DesktopPet.Core.HoodConfiguration.Defaults;
         var configuration = defaults with
         {
+            Behavior = defaults.Behavior with { Roaming = roaming },
             Needs = defaults.Needs with
             {
                 HungerPointsPerHour = 0,
                 BoredomPointsPerHour = 10,
-                SleepPointsPerHour = 0,
-                MovementReliefPerSecond = 0
+                SleepPointsPerHour = 0
             }
         };
         var store = new RecordingSessionStore();
@@ -738,6 +760,53 @@ public sealed class HoodSessionTests
             {
                 Directory.Delete(directory, recursive: true);
             }
+        }
+    }
+
+    [TestMethod]
+    [DataRow(15d, 0d)]
+    [DataRow(55d, 35d)]
+    public void Pet_OnlyRelievesBoredomAndRestoresItsSavedAnimation(double initialBoredom, double expectedBoredom)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"hood-pet-{Guid.NewGuid():N}");
+        try
+        {
+            var store = new DesktopPet.Core.JsonSessionStore(Path.Combine(directory, "state.json"));
+            var defaults = DesktopPet.Core.HoodConfiguration.Defaults;
+            var configuration = defaults with
+            {
+                Behavior = defaults.Behavior with { Roaming = false, IdleAnimations = false },
+                Needs = defaults.Needs with { HungerPointsPerHour = 0, BoredomPointsPerHour = 0, SleepPointsPerHour = 0, PetRelief = 20 }
+            };
+            var saved = new DesktopPet.Core.HoodSessionSnapshot
+            {
+                Position = new(864, 816), Needs = new(50, initialBoredom, 20)
+            };
+            var session = CreateSession(new SequenceRandomSource(0), store, configuration, saved);
+            session.Pet();
+            Assert.AreEqual(new DesktopPet.Core.NeedLevels(50, expectedBoredom, 20), store.Load()!.Needs);
+            session.Advance(TimeSpan.FromMilliseconds(360));
+            session.Quit();
+
+            var restored = CreateSession(new SequenceRandomSource(0), store, configuration, store.Load());
+            Assert.AreEqual(DesktopPet.Core.PetAction.Pet, restored.Presentation.Action);
+            Assert.AreEqual(3, restored.Presentation.FrameIndex);
+            Assert.AreEqual(session.Needs, restored.Needs);
+            restored.Advance(TimeSpan.FromMilliseconds(1560));
+            Assert.AreEqual(DesktopPet.Core.PetAction.Idle, restored.Presentation.Action);
+            restored.Feed();
+            restored.React();
+            restored.Sleep();
+            restored.Advance(TimeSpan.FromMinutes(5));
+            Assert.AreEqual(expectedBoredom, restored.Needs.Boredom);
+            restored.Quit();
+            var final = store.Load();
+            restored.Pet();
+            Assert.AreEqual(final, store.Load(), "Pet must have no effect after Quit.");
+        }
+        finally
+        {
+            if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true);
         }
     }
 

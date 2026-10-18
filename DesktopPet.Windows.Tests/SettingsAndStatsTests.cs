@@ -269,7 +269,7 @@ public sealed class SettingsAndStatsTests
             Assert.AreEqual(104d, pet.Height);
             var crop = (CroppedBitmap)((Image)pet.FindName("PetImage")).Source;
             Assert.AreEqual(2304, crop.Source.PixelWidth);
-            Assert.AreEqual(1560, crop.Source.PixelHeight);
+            Assert.AreEqual(1716, crop.Source.PixelHeight);
             Assert.AreEqual(ExpectedFrameRectangle(pet, fixture.Session), crop.SourceRect);
         }
         finally { settings.Close(); pet.Close(); }
