@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using System.Diagnostics;
 using System.Media;
 using System.Windows;
@@ -14,10 +13,12 @@ internal sealed class FocusApplication : IDisposable
     private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(200) };
     private readonly Dispatcher _dispatcher;
     private readonly Func<long> _timestamp;
-    private readonly Func<string?> _openSettings;
     private readonly Func<Window, bool> _activateWindow;
     private readonly Action _playCompletionSound;
     private readonly SoundPlayer? _completionSound;
+    private readonly FocusNotifications _notifications;
+    private readonly Action<string> _reportNotificationError;
+    private bool _automaticNotifications;
     private long _lastTick;
     private FocusWindow? _window;
     private bool _topmost;
@@ -27,14 +28,16 @@ internal sealed class FocusApplication : IDisposable
     internal FocusSession Session { get; } = new();
 
     internal FocusApplication(Dispatcher dispatcher, string theme, string style, Func<long>? timestamp = null,
-        Func<string?>? openSettings = null, Func<Window, bool>? activateWindow = null, Action? playCompletionSound = null)
+        Func<Window, bool>? activateWindow = null, Action? playCompletionSound = null,
+        FocusNotifications? notifications = null, Action<string>? reportNotificationError = null)
     {
         _dispatcher = dispatcher;
         _theme = theme;
         _style = style;
         _timestamp = timestamp ?? Stopwatch.GetTimestamp;
-        _openSettings = openSettings ?? OpenNotificationSettings;
         _activateWindow = activateWindow ?? (window => window.Activate());
+        _notifications = notifications ?? new FocusNotifications();
+        _reportNotificationError = reportNotificationError ?? ReportNotificationError;
         if (playCompletionSound is null)
         {
             _completionSound = new SoundPlayer(typeof(FocusApplication).Assembly.GetManifestResourceStream("DesktopPet.FocusCompletion.wav")
@@ -45,6 +48,7 @@ internal sealed class FocusApplication : IDisposable
         _lastTick = _timestamp();
         _timer.Tick += OnTick;
         Session.RestoreRequested += Show;
+        Session.Changed += OnFocusChanged;
         SystemEvents.PowerModeChanged += OnPowerModeChanged;
         _timer.Start();
     }
@@ -54,9 +58,17 @@ internal sealed class FocusApplication : IDisposable
         if (_disposed) return;
         if (_window is null)
         {
-            _window = new FocusWindow(Session, Execute, _topmost, value => _topmost = value, _openSettings);
+            _window = new FocusWindow(Session, Execute, _topmost, value => _topmost = value,
+                _automaticNotifications, SetAutomaticNotifications);
             _window.ApplyTheme(_theme, _style);
-            _window.Closed += (_, _) => { Session.Stop(); _window = null; };
+            _window.Closed += (_, _) =>
+            {
+                Session.Stop();
+                UpdateNotifications(force: true);
+                _window = null;
+                if (!_disposed && _notifications.Error.Length > 0) _reportNotificationError(_notifications.Error);
+            };
+            _window.SetNotificationError(_notifications.Error);
             _window.Show();
         }
         if (_window.WindowState == WindowState.Minimized) _window.WindowState = WindowState.Normal;
@@ -73,6 +85,24 @@ internal sealed class FocusApplication : IDisposable
     {
         Tick();
         command();
+    }
+
+    private void SetAutomaticNotifications(bool enabled)
+    {
+        Tick();
+        _automaticNotifications = enabled;
+        UpdateNotifications(force: true);
+    }
+
+    private void OnFocusChanged() => UpdateNotifications(force: Session.Phase == FocusPhase.Idle);
+
+    private static void ReportNotificationError(string message) =>
+        System.Windows.MessageBox.Show(message, "Hood notifications", MessageBoxButton.OK, MessageBoxImage.Warning);
+
+    private void UpdateNotifications(bool force = false)
+    {
+        if (_notifications.Update(_automaticNotifications && Session.Phase == FocusPhase.Focus && !Session.IsPaused, force))
+            _window?.SetNotificationError(_notifications.Error);
     }
 
     private void OnTick(object? sender, EventArgs e) => Tick();
@@ -105,19 +135,7 @@ internal sealed class FocusApplication : IDisposable
     {
         _lastTick = _timestamp();
         Session.Stop();
-    }
-
-    private static string? OpenNotificationSettings()
-    {
-        try
-        {
-            Process.Start(new ProcessStartInfo("ms-settings:notifications") { UseShellExecute = true });
-            return null;
-        }
-        catch (Exception exception) when (exception is Win32Exception or InvalidOperationException)
-        {
-            return $"Could not open Windows notification settings. Open Settings > System > Notifications manually. {exception.Message}";
-        }
+        UpdateNotifications(force: true);
     }
 
     public void Dispose()
@@ -129,6 +147,8 @@ internal sealed class FocusApplication : IDisposable
         Session.RestoreRequested -= Show;
         Reset();
         _window?.Close();
+        Session.Changed -= OnFocusChanged;
+        if (_notifications.Error.Length > 0) _reportNotificationError(_notifications.Error);
         _completionSound?.Dispose();
     }
 }

@@ -329,21 +329,142 @@ public sealed class FocusInteractionTests
     }
 
     [TestMethod]
-    public void ManualNotificationActionReportsFailureWithoutControllingOrStoppingTimer()
+    public void AutomaticNotificationsFollowRealControlsAndDoNotRunDuringBreaks()
     {
-        var requests = 0;
+        long clock = 0;
+        var profile = FocusNotifications.Unrestricted;
+        var writes = new List<string>();
+        var notifications = new FocusNotifications(() => profile, value => { writes.Add(value); profile = value; });
         using var focus = new FocusApplication(System.Windows.Threading.Dispatcher.CurrentDispatcher, "light", UiStyleCatalog.StickyNotes,
-            openSettings: () => { requests++; return "Settings unavailable; open Windows Settings manually."; }, playCompletionSound: () => { });
+            () => clock, playCompletionSound: () => { }, notifications: notifications);
         focus.Show();
         var window = GetWindow(focus);
+        var option = (CheckBox)window.FindName("AutomaticNotificationsCheckBox");
+        Assert.IsFalse(option.IsChecked);
+        focus.Session.Configure(1, 1);
         Click(window, "PrimaryButton");
-        Click(window, "NotificationSettingsButton");
-        Assert.AreEqual(1, requests);
-        StringAssert.Contains(Text(window, "NotificationErrorText"), "Settings unavailable");
+        Assert.AreEqual(0, writes.Count, "Automatic control is opt-in.");
+        option.IsChecked = true;
+        Assert.AreEqual(FocusNotifications.PriorityOnly, profile);
+        window.WindowState = WindowState.Minimized;
+        clock += Stopwatch.Frequency * 10;
+        focus.Tick();
+        Assert.AreEqual(1, writes.Count, "Minimizing and countdown ticks retain the same acquisition.");
+        Click(window, "PrimaryButton");
+        Assert.AreEqual(FocusNotifications.Unrestricted, profile, "Pause restores notifications.");
+        Click(window, "PrimaryButton");
+        Assert.AreEqual(FocusNotifications.PriorityOnly, profile, "Resume reacquires DND.");
+        clock += Stopwatch.Frequency * 50;
+        focus.Tick();
+        Assert.AreEqual(FocusPhase.FocusFinished, focus.Session.Phase);
+        Assert.AreEqual(FocusNotifications.Unrestricted, profile);
+        var beforeBreak = writes.Count;
+        Click(window, "PrimaryButton");
+        Click(window, "PrimaryButton");
+        Click(window, "PrimaryButton");
+        Click(window, "SkipButton");
+        Assert.AreEqual(beforeBreak, writes.Count, "Break controls never acquire DND.");
+        Click(window, "PrimaryButton");
+        option.IsChecked = false;
+        Assert.AreEqual(FocusNotifications.Unrestricted, profile, "Unchecking immediately releases DND.");
+    }
+
+    [TestMethod]
+    [DataRow("Stop")]
+    [DataRow("Close")]
+    [DataRow("Reset")]
+    [DataRow("Dispose")]
+    public void AutomaticNotificationsRestoreOnEveryCleanupPath(string cleanup)
+    {
+        var profile = FocusNotifications.Unrestricted;
+        var notifications = new FocusNotifications(() => profile, value => profile = value);
+        using var focus = new FocusApplication(System.Windows.Threading.Dispatcher.CurrentDispatcher, "light", UiStyleCatalog.StickyNotes,
+            () => 0, playCompletionSound: () => { }, notifications: notifications);
+        focus.Show();
+        var window = GetWindow(focus);
+        ((CheckBox)window.FindName("AutomaticNotificationsCheckBox")).IsChecked = true;
+        Click(window, "PrimaryButton");
+        Assert.AreEqual(FocusNotifications.PriorityOnly, profile);
+        switch (cleanup)
+        {
+            case "Stop": Click(window, "StopButton"); break;
+            case "Close": window.Close(); break;
+            case "Reset": focus.Reset(); break;
+            case "Dispose": focus.Dispose(); break;
+        }
+        Assert.AreEqual(FocusNotifications.Unrestricted, profile);
+        if (cleanup == "Close")
+        {
+            focus.Show();
+            Assert.IsTrue(((CheckBox)GetWindow(focus).FindName("AutomaticNotificationsCheckBox")).IsChecked);
+            Click(GetWindow(focus), "PrimaryButton");
+            Assert.AreEqual(FocusNotifications.PriorityOnly, profile);
+        }
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void StopRetriesFailedNotificationRestoration(bool finishFocus)
+    {
+        long clock = 0;
+        var profile = FocusNotifications.Unrestricted;
+        var restoreAttempts = 0;
+        var notifications = new FocusNotifications(() => profile, value =>
+        {
+            if (value == FocusNotifications.Unrestricted && ++restoreAttempts == 1) throw new COMException("Busy");
+            profile = value;
+        });
+        using var focus = new FocusApplication(System.Windows.Threading.Dispatcher.CurrentDispatcher, "light", UiStyleCatalog.StickyNotes,
+            () => clock, playCompletionSound: () => { }, notifications: notifications);
+        focus.Show();
+        var window = GetWindow(focus);
+        focus.Session.Configure(1, 1);
+        ((CheckBox)window.FindName("AutomaticNotificationsCheckBox")).IsChecked = true;
+        Click(window, "PrimaryButton");
+        if (finishFocus)
+        {
+            clock += Stopwatch.Frequency * 60;
+            focus.Tick();
+        }
+        else Click(window, "PrimaryButton");
+        Assert.AreEqual(FocusNotifications.PriorityOnly, profile);
+        StringAssert.Contains(Text(window, "NotificationErrorText"), "Could not restore");
+        clock += Stopwatch.Frequency;
+        focus.Tick();
+        Assert.AreEqual(1, restoreAttempts, "Countdown ticks must not repeatedly retry a failed restoration.");
+        Click(window, "StopButton");
+        Assert.AreEqual(2, restoreAttempts, "Explicit Stop must retry the outstanding restoration.");
+        Assert.AreEqual(FocusNotifications.Unrestricted, profile);
+        Assert.AreEqual(FocusPhase.Idle, focus.Session.Phase);
+        Assert.AreEqual("", Text(window, "NotificationErrorText"));
+    }
+
+    [TestMethod]
+    [DataRow(unchecked((int)0x80004005))] // E_FAIL
+    [DataRow(unchecked((int)0x80004001))] // E_NOTIMPL
+    public void AutomaticNotificationFailureIsVisibleWithOptionsCollapsedAndTimerContinues(int errorCode)
+    {
+        long clock = 0;
+        var notifications = new FocusNotifications(() =>
+        {
+            Marshal.ThrowExceptionForHR(errorCode);
+            return FocusNotifications.Unrestricted;
+        });
+        using var focus = new FocusApplication(System.Windows.Threading.Dispatcher.CurrentDispatcher, "light", UiStyleCatalog.StickyNotes,
+            () => clock, playCompletionSound: () => { }, notifications: notifications);
+        focus.Show();
+        var window = GetWindow(focus);
+        ((CheckBox)window.FindName("AutomaticNotificationsCheckBox")).IsChecked = true;
+        Click(window, "PrimaryButton");
+        Assert.IsFalse(((Expander)window.FindName("OptionsExpander")).IsExpanded);
+        Assert.AreEqual(Visibility.Visible, ((TextBlock)window.FindName("NotificationErrorText")).Visibility);
+        StringAssert.Contains(Text(window, "NotificationErrorText"), "Could not enable");
         Assert.AreEqual(FocusPhase.Focus, focus.Session.Phase);
-        focus.Session.TogglePause(); focus.Session.TogglePause(); focus.Session.Advance(focus.Session.Remaining);
-        focus.Session.TakeBreak(); focus.Session.SkipBreak(); focus.Reset();
-        Assert.AreEqual(1, requests, "Manual mode never changes Windows settings on a timer transition.");
+        Assert.IsFalse(focus.Session.IsPaused);
+        clock += Stopwatch.Frequency;
+        focus.Tick();
+        Assert.AreEqual(TimeSpan.FromMinutes(25) - TimeSpan.FromSeconds(1), focus.Session.Remaining);
     }
 
     [TestMethod]
@@ -420,12 +541,12 @@ public sealed class FocusInteractionTests
         window.UpdateLayout();
         Assert.AreEqual(window.MinHeight, window.ActualHeight, 1, "Exercise the actual minimum height, with automatic sizing disabled as it is on manual resize.");
         Assert.AreEqual(window.FindResource("NotesSurfaceBrush"), window.Background);
-        foreach (var name in new[] { "PrimaryButton", "NotificationSettingsButton" })
+        foreach (var name in new[] { "PrimaryButton", "AutomaticNotificationsCheckBox" })
         {
-            var button = Button(window, name);
-            Assert.IsTrue(button.Focusable);
-            Assert.IsTrue(button.ActualWidth <= window.ActualWidth);
-            Assert.AreEqual(Visibility.Visible, button.Visibility);
+            var control = (Control)window.FindName(name);
+            Assert.IsTrue(control.Focusable);
+            Assert.IsTrue(control.ActualWidth <= window.ActualWidth);
+            Assert.AreEqual(Visibility.Visible, control.Visibility);
         }
         Assert.AreEqual("Focus minutes", System.Windows.Automation.AutomationProperties.GetName(Input(window, "FocusInput")));
         Assert.AreEqual("Break minutes", System.Windows.Automation.AutomationProperties.GetName(Input(window, "BreakInput")));

@@ -38,7 +38,7 @@ See the [Notes guide](docs/notes.md) for all shortcuts and editing features.
 
 ## Focus and breaks
 
-Open **Focus** from either menu for a compact 25/5-minute timer. One button handles Start focus, Pause/Resume and Take break; Skip break appears only during breaks. Expand **Options** for durations, always-on-top and notification settings. A short chime plays when either timer finishes. Hood waves when focus finishes; click him to reopen the timer, then choose **Take break**. During breaks he looks asleep; clicking him reopens Focus and shows/hides Notes without waking him. **Break finished** restores the window and waits for **Start focus**. Closing stops the cycle; minimizing keeps it running. Windows notification control is manual through **Open Windows notification settings**. See the [Focus guide](docs/focus.md).
+Open **Focus** from either menu for a compact 25/5-minute timer. One button handles Start focus, Pause/Resume and Take break; Skip break appears only during breaks. Expand **Options** for durations, always-on-top and **Do not disturb during focus**. This option automatically silences Windows notifications with your priority exceptions, restoring the previous setting on pause, completion, Stop or close. A short chime plays when either timer finishes. Hood waves when focus finishes; click him to reopen the timer, then choose **Take break**. During breaks he looks asleep; clicking him reopens Focus and shows/hides Notes without waking him. **Break finished** restores the window and waits for **Start focus**. Closing stops the cycle; minimizing keeps it running. See the [Focus guide](docs/focus.md).
 
 ## Your local data
 

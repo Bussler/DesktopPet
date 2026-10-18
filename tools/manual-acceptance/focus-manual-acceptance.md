@@ -30,3 +30,12 @@ Use the follow-up candidate identified in the acceptance record. Original result
 ## Compact window follow-up: pending
 
 - [ ] Use the compact candidate identified in the acceptance record. Confirm the window is small by default, with Options collapsed. Follow a full cycle using the one Start focus/Pause/Resume/Take break button. Stop appears during a cycle; Skip break appears only in a running or paused break. Options exposes duration editing, topmost and manual notification settings; keyboard access, themes and display scaling remain usable. Resizing to the minimum keeps expanded options reachable by scrolling. Minimize keeps counting and closing stops the cycle.
+
+## Automatic Do not disturb follow-up (2026-10-18): pending
+
+Use `artifacts/hood-focus-review-fixes-20261018/app/DesktopPet.Windows.exe`. Earlier checked manual-mode results do not establish automatic-control acceptance. Options has no Windows notification-settings button or text below the two checkboxes; failures remain above Options. This candidate includes the Stop-retry and unsupported-interface review fixes.
+
+- [ ] Launch without elevation. In Focus > Options, check Do not disturb during focus. With Windows DND initially off, Start focus enables it; a representative non-priority Windows toast is silenced/sent to notification center, while existing priority exceptions still work. Repeat minimized. Confirm priority exceptions remain unchanged.
+- [ ] Pause restores the previous setting; Resume enables DND again. Natural focus expiry, Stop, unchecking the option, closing Focus, quitting Hood and computer sleep each restore the previous setting. Breaks and break pauses never enable DND. Reopen Focus during the same app run: the checkbox is retained; restart Hood: it is unchecked.
+- [ ] Start with DND already enabled: Hood leaves it enabled after cleanup. During a Hood-controlled focus, select a different Windows notification profile outside Hood; cleanup preserves that choice. Check option keyboard access, wrapping and scrolling across themes/styles and display scales.
+- [ ] If automatic control fails, the message is visible even with Options collapsed and the timer still runs. A restoration failure on close is reported rather than silently claiming success. Abrupt termination is outside the restoration guarantee; restore DND manually if needed.

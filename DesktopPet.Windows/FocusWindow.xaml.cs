@@ -9,21 +9,22 @@ public partial class FocusWindow : Window
 {
     private readonly FocusSession _session;
     private readonly Action<Action> _execute;
-    private readonly Func<string?> _openNotificationSettings;
     private readonly Action<bool> _setTopmost;
+    private readonly Action<bool> _setAutomaticNotifications;
     private bool _loading = true;
 
     internal FocusWindow(FocusSession session, Action<Action> execute, bool topmost, Action<bool> setTopmost,
-        Func<string?> openNotificationSettings)
+        bool automaticNotifications, Action<bool> setAutomaticNotifications)
     {
         _session = session;
         _execute = execute;
         _setTopmost = setTopmost;
-        _openNotificationSettings = openNotificationSettings;
+        _setAutomaticNotifications = setAutomaticNotifications;
         InitializeComponent();
         FocusInput.Text = session.FocusMinutes.ToString(CultureInfo.CurrentCulture);
         BreakInput.Text = session.BreakMinutes.ToString(CultureInfo.CurrentCulture);
         TopmostCheckBox.IsChecked = Topmost = topmost;
+        AutomaticNotificationsCheckBox.IsChecked = automaticNotifications;
         _loading = false;
         session.Changed += Refresh;
         Closed += (_, _) => session.Changed -= Refresh;
@@ -31,6 +32,12 @@ public partial class FocusWindow : Window
     }
 
     public void ApplyTheme(string theme, string style) => NotesAppearance.Apply(this, theme, style);
+
+    internal void SetNotificationError(string error)
+    {
+        NotificationErrorText.Text = error;
+        NotificationErrorText.Visibility = error.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
+    }
 
     private bool ValidateDurations()
     {
@@ -90,5 +97,8 @@ public partial class FocusWindow : Window
         Topmost = TopmostCheckBox.IsChecked == true;
         _setTopmost(Topmost);
     }
-    private void OnNotificationSettings(object sender, RoutedEventArgs e) => NotificationErrorText.Text = _openNotificationSettings() ?? "";
+    private void OnAutomaticNotificationsChanged(object sender, RoutedEventArgs e)
+    {
+        if (!_loading) _setAutomaticNotifications(AutomaticNotificationsCheckBox.IsChecked == true);
+    }
 }

@@ -4,9 +4,48 @@
 **Status:** The user accepted all eleven original native checks on 2026-10-15. The subsequent sound/Notes changes and compact UI are separate follow-ups; their three native checklist items remain pending.
 **Specification:** [Focus-Mode-SPEC.md](Focus-Mode-SPEC.md)
 
-## Delivered notification mode
+## Review fixes (2026-10-18)
+
+Both P2 findings are fixed: entering Idle through explicit Stop now forces a retry of retained notification ownership after a failed Pause/expiry restoration, and E_NOTIMPL/NotImplementedException is handled as a notification error rather than escaping the UI event. Ordinary countdown ticks still do not repeatedly retry failures. The checkbox-only layout is unchanged.
+
+Before the fixes, the six-case regression loop had **5 failures and 1 pass** (TRX `2026-10-18_14_27_36_net10.0.trx`): Stop did not retry after either Pause or expiry failure, and E_NOTIMPL escaped from reads and enable/restore writes. After the fixes, **52 Focus cases passed** (`14_28_09`). The final `tools/Test.ps1` run with SDK 10.0.401 passed **453 Core + 692 Windows = 1,145 tests**, no failures/skips, plus locked restore and sprite checks (Core TRX `14_28_41`, Windows `14_28_46`). The original review probe now reports a handled error. All notification failures/state in these checks are simulated; native delivery acceptance remains pending.
+
+Use `artifacts/hood-focus-review-fixes-20261018/app/DesktopPet.Windows.exe` for the latest candidate, superseding the checkbox-only candidate below.
+
+## Focus options cleanup (2026-10-18)
+
+Latest clarification removes the remaining dynamic status below the checkboxes as well. **47 focused cases** passed again (TRX `2026-10-18_14_16_25_net10.0.trx`), with all eight theme/style layouts rendered and dark studio inspected. The latest package is `artifacts/hood-focus-checkboxes-only-20261018/app/DesktopPet.Windows.exe`; it supersedes the cleanup candidate below. Errors remain above Options, and automatic DND behavior is unchanged.
+
+The user subsequently requested removal of the Windows notification-settings button and long explanatory paragraph below Do not disturb during focus. Both are removed, along with the unused settings-launch plumbing and obsolete launch test. The short dynamic status and failure reporting remain. The focused suite passed **47 cases**, including all eight theme/style layout cases (TRX `2026-10-18_14_13_18_net10.0.trx`); light sticky-notes and dark studio renders were inspected. `Build-AndPublish.ps1` produced `artifacts/hood-focus-options-cleanup-20261018/app/DesktopPet.Windows.exe`, which supersedes the candidate below. Native automatic-DND acceptance remains pending; this UI cleanup did not change Windows notification settings.
+
+## Automatic Do not disturb follow-up (2026-10-18)
+
+The user requested direct in-Hood control and confirmed existing priority exceptions and restoration on Pause, focus expiry, Stop or close. Options now includes **Do not disturb during focus**, initially unchecked and retained until app exit. Resume reacquires DND; breaks leave it alone. The isolated undocumented Windows COM integration preserves pre-existing DND and different external profile changes, verifies writes by readback, retains failed restoration for cleanup retry, and reports failures without stopping the timer. This supersedes the original manual-only notification mode below.
+
+Final candidate: `C:\github\DesktopPet\artifacts\hood-focus-auto-dnd-20261018-v2\app\DesktopPet.Windows.exe`.
+
+| Check | Result |
+| --- | --- |
+| Full `tools/Test.ps1`, SDK 10.0.401 | **453 Core + 688 Windows = 1,141 passed**, zero failures/skips; locked restore and sprite checks passed. TRX timestamps `2026-10-18_13_55_27` (Core) and `13_55_26` (Windows). |
+| Final Focus tests | **48 passed** after preserving manual settings-launch errors across countdown ticks. Includes deterministic ownership/failure tests and real controls for opt-in, Pause/Resume, expiry, breaks, minimize, uncheck, Stop, close, reset and disposal. TRX `2026-10-18_14_01_49_net10.0.trx`. |
+| Appearance | Eight existing theme/style cases passed and generated previews; light sticky-notes and dark studio expanded Options inspected. No further XAML changes. Physical keyboard/DPI acceptance remains pending. |
+| Native backend | Actual backend-source probe enabled PriorityOnly from Unrestricted, read it back and restored Unrestricted in finally. This proves profile control, not representative toast delivery. |
+| Final packaged lifecycle smoke | Ordinary-user process (not administrator) verified pre-existing PriorityOnly remains unchanged through Start, Pause, Resume, expiry, break, next focus, Stop, reset and disposal. DND was already on, so this packaged run did not exercise acquiring from off. Original profile verified after cleanup. |
+| Packaging | `tools/Build-AndPublish.ps1 -CandidateDirectory artifacts/hood-focus-auto-dnd-20261018-v2` passed separately. Root contains only README, app and docs; source/test exclusions checked; packaged README/Focus guide match source; **29 local package links** resolve. |
+
+| Final candidate file | SHA-256 |
+| --- | --- |
+| `DesktopPet.Windows.exe` | `D4A4DAB675AC2D47DFE63E110F8F72ED62C411E434F4AA11E2AD9494300F7802` |
+| `DesktopPet.Windows.dll` | `1180AD05DCEB91CB0E864FF0B8550481FC6AF7B083E6AB9805465FC156C1E91C` |
+| `DesktopPet.Core.dll` | `B63DB52573C5F9EC98334393401AEADF0F650EFFF144381F4CC8B6EAA46BAE60` |
+
+Actual Windows toast suppression/priority-exception behavior, packaged acquisition from DND off, physical tray/keyboard/DPI and sleep acceptance remain pending in the automatic-DND section of the native checklist. The undocumented interface can change after Windows updates; this is not Microsoft-approved Windows Focus-session access. No crash-recovery guarantee is added.
+
+## Original notification mode (2026-10-15)
 
 Manual Windows notification settings. No automatic suppression switch or simulated protection is shipped. Timer transitions never write Windows DND, priority exceptions, other Focus sessions, app presence, or audio settings. The window explains manual control and exposes Open Windows notification settings (`ms-settings:notifications`), including an actionable error if launching fails.
+
+The automatic-control follow-up below supersedes this original delivery for the 2026-10-18 candidate; the older native results remain historical evidence.
 
 The normal-user feasibility probe on Windows **10.0.26200.0** resolved `Windows.UI.Shell.FocusSessionManager` through Windows PowerShell's WinRT projection and reported `IsSupported = True`. Calling `GetDefault().TryStartFocusSession()` threw **UnauthorizedAccessException (Access denied)**; no session was acquired or ended. The distribution has no Microsoft Limited Access Feature token/unlock integration. This is evidence of unavailable access on this host, not evidence of automatic Windows notification suppression or that administrator rights would grant restricted access.
 

@@ -21,6 +21,7 @@
                 <Button x:Name="StopButton" Grid.Column="1" Content="St_op" Click="OnStop" Margin="8,0,0,0" />
             </Grid>
             <Button x:Name="SkipButton" Content="S_kip break" Click="OnSkip" Margin="0,8,0,0" />
+            <TextBlock x:Name="NotificationErrorText" TextWrapping="Wrap" Margin="0,6,0,0" Visibility="Collapsed" AutomationProperties.LiveSetting="Polite" />
             <Expander x:Name="OptionsExpander" Header="Opt_ions" Margin="0,12,0,0">
                 <StackPanel>
                     <Grid Margin="0,8">
@@ -35,12 +36,9 @@
                         </StackPanel>
                     </Grid>
                     <CheckBox x:Name="TopmostCheckBox" Content="_Always on top" Checked="OnTopmostChanged" Unchecked="OnTopmostChanged" Margin="0,4,0,12" />
-                    <TextBlock Text="Do not disturb is manual. Turn it on for focus and off for breaks in Windows; Hood leaves it unchanged. Windows priority exceptions apply."
-                               TextWrapping="Wrap" Margin="0,0,0,8" Foreground="{DynamicResource NotesSecondaryTextBrush}" />
-                    <Button x:Name="NotificationSettingsButton" Click="OnNotificationSettings" HorizontalContentAlignment="Center">
-                        <TextBlock Text="Open Windows notification settings" TextWrapping="Wrap" />
-                    </Button>
-                    <TextBlock x:Name="NotificationErrorText" TextWrapping="Wrap" Margin="0,6,0,0" AutomationProperties.LiveSetting="Polite" />
+                    <CheckBox x:Name="AutomaticNotificationsCheckBox" Checked="OnAutomaticNotificationsChanged" Unchecked="OnAutomaticNotificationsChanged" Margin="0,0,0,8">
+                        <AccessText Text="_Do not disturb during focus" TextWrapping="Wrap" />
+                    </CheckBox>
                 </StackPanel>
             </Expander>
         </StackPanel>
