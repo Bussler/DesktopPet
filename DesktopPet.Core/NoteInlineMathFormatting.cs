@@ -199,25 +199,6 @@ public static class NoteInlineMathFormatting
         return end - start;
     }
 
-    private static void GetCharacterData(IReadOnlyList<NoteTextRun> runs, int length,
-        out NoteTextStyle[] styles, out NoteInlineKind[] kinds, out string?[] destinations)
-    {
-        styles = new NoteTextStyle[length];
-        kinds = new NoteInlineKind[length];
-        destinations = new string?[length];
-        var offset = 0;
-        foreach (var run in runs)
-        {
-            var runLength = NormalizeLineBreaks(run.Text).Length;
-            for (var index = 0; index < runLength && offset < length; index++, offset++)
-            {
-                styles[offset] = run.Style;
-                kinds[offset] = run.Kind;
-                destinations[offset] = run.LinkDestination;
-            }
-        }
-    }
-
     private static void AddRun(List<NoteTextRun> runs, string text, NoteTextStyle style, NoteInlineKind kind,
         string? destination = null)
     {

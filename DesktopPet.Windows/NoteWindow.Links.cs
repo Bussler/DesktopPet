@@ -142,14 +142,13 @@ public partial class NoteWindow
 
     private (int Start, int Length)? GetLinkRange(Hyperlink link)
     {
-        var document = ReadEditorDocument();
         var selectionStart = Editor.Selection.Start;
         var selectionEnd = Editor.Selection.End;
         _lookingUpLinkRange = true;
         try
         {
             Editor.Selection.Select(link.ContentStart, link.ContentEnd);
-            return GetSelectionOffsets(document);
+            return GetSelectionOffsets();
         }
         finally
         {
@@ -161,8 +160,7 @@ public partial class NoteWindow
     private void CommitLinkDocument(NotesDocument document, int selectionStart, int selectionLength)
     {
         SetEditorDocument(document, selectionStart, selectionLength);
-        SetSaveStatus(_updateDocument(_noteId, document));
-        _lastAcceptedDocument = document.Copy();
+        SaveEditorDocument(document);
         UpdateToolbar();
         ClearLinkFeedback();
     }
@@ -170,7 +168,7 @@ public partial class NoteWindow
     private void TrackPlainUrlInput(NotesDocument document, (int Start, int Length) input)
     {
         var previous = _pendingPlainUrl;
-        var (caret, selectionLength) = GetSelectionOffsets(document);
+        var (caret, selectionLength) = GetSelectionOffsets();
         var candidate = selectionLength == 0 ? NoteLinkFormatting.FindPlainUrlEndingAt(document, caret) : null;
         if (candidate is { } current && Overlaps(input, current))
         {
@@ -197,7 +195,7 @@ public partial class NoteWindow
         if (_pendingPlainUrl is not { } pending || _plainUrlCommitPending || _updatingEditor ||
             _editorRecoveryPending)
             return;
-        var (start, length) = GetSelectionOffsets(ReadEditorDocument());
+        var (start, length) = GetSelectionOffsets();
         var end = start + length;
         if (start >= pending.Start && end <= pending.Start + pending.Length) return;
 
@@ -225,7 +223,7 @@ public partial class NoteWindow
         try
         {
             var document = ReadEditorDocument();
-            var (selectionStart, selectionLength) = GetSelectionOffsets(document);
+            var (selectionStart, selectionLength) = GetSelectionOffsets();
             var updated = NoteLinkFormatting.Apply(document, pending, ref selectionStart, ref selectionLength,
                 forcePlainUrl: pending);
             _pendingPlainUrl = null;

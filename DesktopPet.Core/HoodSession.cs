@@ -12,9 +12,7 @@ public sealed class SystemRandomSource : IPetRandomSource
 
 public interface ISessionStore
 {
-    HoodSessionSnapshot? Load();
     void Save(HoodSessionSnapshot snapshot);
-    string? ResetAfterAcknowledgement();
 }
 
 public sealed record NeedLevels(double Hunger, double Boredom, double Sleep)
@@ -127,8 +125,7 @@ public static class HoodSessionSnapshotValidator
 public sealed record HoodPresentation(
     PetAction Action,
     int FrameIndex,
-    PetPosition Position,
-    bool QuitRequested);
+    PetPosition Position);
 
 public sealed class HoodSession
 {
@@ -212,9 +209,7 @@ public sealed class HoodSession
 
         if (!_configuration.Behavior.Roaming && _action is (PetAction.RunLeft or PetAction.RunRight))
         {
-            _action = PetAction.Idle;
-            _frameIndex = NextIdleFrame();
-            _frameElapsed = TimeSpan.Zero;
+            StartIdle();
         }
     }
 
@@ -232,7 +227,6 @@ public sealed class HoodSession
     public TimeSpan RemainingRandomInterval { get; private set; }
     public TimeSpan RemainingEarlyWakeGrace { get; private set; }
     public bool IsEditingArea => _editingArea;
-    public bool IsDragging => _dragging;
     // Presentation only: ordinary needs and legitimate naps continue; this flag is never saved.
     public void SetFocusPresentation(bool active) => _focusPresentation = active;
     public bool RequiresAnimationFrames =>
@@ -249,10 +243,10 @@ public sealed class HoodSession
             if (_dragAction is { } action)
             {
                 var frameDuration = TimeSpan.FromMilliseconds(_definition.GetAnimation(action).FrameDurationMilliseconds);
-                return new(action, (int)(_dragAnimationElapsed.Ticks / frameDuration.Ticks), Position, _quitRequested);
+                return new(action, (int)(_dragAnimationElapsed.Ticks / frameDuration.Ticks), Position);
             }
 
-            return new(_action, _frameIndex, PresentationPosition(), _quitRequested);
+            return new(_action, _frameIndex, PresentationPosition());
         }
     }
 
@@ -293,11 +287,6 @@ public sealed class HoodSession
         var displayList = displays.ToArray();
         var primary = displayList.SingleOrDefault(display => display.IsPrimary)
             ?? throw new InvalidOperationException("Hood needs exactly one primary display with a usable work area.");
-        if (displayList.Count(display => display.IsPrimary) != 1)
-        {
-            throw new InvalidOperationException("Hood needs exactly one primary display with a usable work area.");
-        }
-
         var scaledDefinition = definition.WithDisplayScale(configuration.PetScale);
         var placement = restoredSession is null
             ? PetPlacementPolicy.Initial(scaledDefinition, primary, configuration.InitialArea)
@@ -458,9 +447,7 @@ public sealed class HoodSession
         _configuration = configuration;
         if (!configuration.Behavior.Roaming && _action is (PetAction.RunLeft or PetAction.RunRight))
         {
-            _action = PetAction.Idle;
-            _frameIndex = NextIdleFrame();
-            _frameElapsed = TimeSpan.Zero;
+            StartIdle();
         }
     }
 
@@ -591,8 +578,9 @@ public sealed class HoodSession
                 RemainingRandomInterval = SampleRandomInterval();
             }
 
-            if (_action == PetAction.Idle && CanRoam && TimeUntilRoaming() == TimeSpan.Zero && TryStartRoaming())
+            if (_action == PetAction.Idle && CanRoam && TimeUntilRoaming() == TimeSpan.Zero)
             {
+                StartRoaming();
                 continue;
             }
 
@@ -676,9 +664,7 @@ public sealed class HoodSession
                 {
                     if (_action is PetAction.RunLeft or PetAction.RunRight)
                     {
-                        _action = PetAction.Idle;
-                        _frameIndex = NextIdleFrame();
-                        _frameElapsed = TimeSpan.Zero;
+                        StartIdle();
                     }
 
                     _elapsedRoamingRest = TimeSpan.Zero;
@@ -710,16 +696,14 @@ public sealed class HoodSession
         SaveSnapshot();
     }
 
-    private int NextIdleFrame()
+    private void StartIdle()
     {
-        var frame = _random.NextIndex(_definition.GetAnimation(PetAction.Idle).Frames.Count);
-        if (frame < 0 || frame >= _definition.GetAnimation(PetAction.Idle).Frames.Count)
-        {
-            throw new InvalidOperationException("The random source returned an invalid Hood idle frame index.");
-        }
-
-        return frame;
+        _action = PetAction.Idle;
+        _frameIndex = NextIdleFrame();
+        _frameElapsed = TimeSpan.Zero;
     }
+
+    private int NextIdleFrame() => NextRandomIndex(_definition.GetAnimation(PetAction.Idle).Frames.Count);
 
     private void StartDirectAction(PetAction action)
     {
@@ -798,9 +782,7 @@ public sealed class HoodSession
         var ticksToComplete = totalTicks - currentTicks;
         if (elapsed.Ticks >= ticksToComplete)
         {
-            _action = PetAction.Idle;
-            _frameIndex = NextIdleFrame();
-            _frameElapsed = TimeSpan.Zero;
+            StartIdle();
             return;
         }
 
@@ -918,13 +900,8 @@ public sealed class HoodSession
         return TimeSpan.FromTicks(Math.Max(1, (long)Math.Ceiling(seconds * TimeSpan.TicksPerSecond)));
     }
 
-    private bool TryStartRoaming()
+    private void StartRoaming()
     {
-        if (!CanRoam)
-        {
-            return false;
-        }
-
         // Choose horizontal, diagonal, or vertical travel when both axes have room.
         var travel = CanRoamVertically
             ? CanRoamHorizontally ? NextRandomIndex(3) : 2
@@ -935,7 +912,6 @@ public sealed class HoodSession
         StartDirectAction(RoamingAction);
         _remainingRoamingBout = RoamingBoutDuration;
         _elapsedRoamingRest = null;
-        return true;
     }
 
     private double ChooseDirection(double coordinate, double start, double end) =>
@@ -953,9 +929,7 @@ public sealed class HoodSession
 
         if (!CanRoamHorizontally && !CanRoamVertically)
         {
-            _action = PetAction.Idle;
-            _frameIndex = NextIdleFrame();
-            _frameElapsed = TimeSpan.Zero;
+            StartIdle();
             _remainingRoamingBout = TimeSpan.Zero;
             _elapsedRoamingRest = null;
             return;

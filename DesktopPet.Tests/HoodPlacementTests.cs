@@ -778,16 +778,12 @@ public sealed class HoodPlacementTests
 
     private sealed class NoopSessionStore : ISessionStore
     {
-        public HoodSessionSnapshot? Load() => null;
         public void Save(HoodSessionSnapshot snapshot) { }
-        public string? ResetAfterAcknowledgement() => null;
     }
 
     private sealed class RecordingSessionStore : ISessionStore
     {
         public HoodSessionSnapshot? Snapshot { get; private set; }
-        public HoodSessionSnapshot? Load() => null;
         public void Save(HoodSessionSnapshot snapshot) => Snapshot = snapshot;
-        public string? ResetAfterAcknowledgement() => null;
     }
 }

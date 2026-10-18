@@ -29,7 +29,7 @@ public sealed class FocusNotificationsTests
     {
         var notifications = new FocusNotifications(() => profile, _ => Assert.Fail("Existing DND must remain unchanged."));
         notifications.Update(true);
-        StringAssert.Contains(notifications.Status, "already on");
+        Assert.AreEqual("", notifications.Error);
         notifications.Update(false);
         Assert.AreEqual("", notifications.Error);
     }

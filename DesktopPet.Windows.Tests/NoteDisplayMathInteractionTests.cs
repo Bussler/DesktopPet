@@ -393,7 +393,7 @@ public sealed class NoteDisplayMathInteractionTests
             Assert.IsTrue(editor.Focus());
             var selection = ((int Start, int Length))typeof(NoteWindow)
                 .GetMethod("GetSelectionOffsets", BindingFlags.Instance | BindingFlags.NonPublic)!
-                .Invoke(window, [app.GetNote(noteId).Document])!;
+                .Invoke(window, null)!;
             Assert.AreEqual(9, selection.Start, $"Unexpected display source start: {selection.Start}, {selection.Length}.");
             Assert.AreEqual(5, selection.Length, $"Unexpected selected display source range: {selection.Start}, {selection.Length}.");
             Assert.IsTrue(PressBackspace(editor, window), "Backspace should remove the selected rendered display block.");

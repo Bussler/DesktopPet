@@ -161,7 +161,7 @@ public sealed class NoteEmphasisInteractionTests
                 editor.Selection.Select(selectedStart, selectedEnd);
                 Pump(window);
                 var originalDocument = editor.Document;
-                var originalSelection = SelectionOffsets(window, app.GetNote(noteId).Document);
+                var originalSelection = SelectionOffsets(window);
                 var button = (System.Windows.Controls.Primitives.ToggleButton)window.FindName(buttonName);
 
                 Click(button);
@@ -177,7 +177,7 @@ public sealed class NoteEmphasisInteractionTests
                     .All(run => run.Style == existing));
                 Assert.AreEqual(NoteTextStyle.None, formatted.Paragraphs[0].Runs.Single(run => run.Text == "before ").Style);
                 Assert.AreEqual(NoteTextStyle.None, formatted.Paragraphs[0].Runs.Single(run => run.Text == " after").Style);
-                Assert.AreEqual(originalSelection, SelectionOffsets(window, formatted));
+                Assert.AreEqual(originalSelection, SelectionOffsets(window));
                 Assert.AreEqual(existing | style,
                     NotesApplication.Start(new JsonNotesStore(storePath)).GetNote(noteId).Document.Paragraphs[0]
                         .Runs.Single(run => run.Text == "target").Style);
@@ -442,16 +442,16 @@ public sealed class NoteEmphasisInteractionTests
             scroll.ScrollToVerticalOffset(240);
             Pump(window);
             var offset = scroll.VerticalOffset;
-            var selection = SelectionOffsets(window, app.GetNote(id).Document);
+            var selection = SelectionOffsets(window);
             Assert.IsTrue(offset > 0);
             Click((System.Windows.Controls.Primitives.ToggleButton)window.FindName(buttonName));
             Pump(window);
             Assert.AreEqual(offset, scroll.VerticalOffset, 0.5, $"Formatting changed scroll from {offset} to {scroll.VerticalOffset}.");
-            Assert.AreEqual(selection, SelectionOffsets(window, app.GetNote(id).Document));
+            Assert.AreEqual(selection, SelectionOffsets(window));
             Click((System.Windows.Controls.Primitives.ToggleButton)window.FindName(buttonName));
             Pump(window);
             Assert.AreEqual(offset, scroll.VerticalOffset, 0.5);
-            Assert.AreEqual(selection, SelectionOffsets(window, app.GetNote(id).Document));
+            Assert.AreEqual(selection, SelectionOffsets(window));
         }
         finally { window.CloseWithoutMembershipChange(); }
     }
@@ -642,7 +642,7 @@ public sealed class NoteEmphasisInteractionTests
             editor.CaretPosition = codeRun.ContentEnd;
             Type(editor, "X");
             Pump(window);
-            Assert.AreEqual((31, 0), SelectionOffsets(window, app.GetNote(noteId).Document));
+            Assert.AreEqual((31, 0), SelectionOffsets(window));
             Assert.AreNotSame(map, typeof(NoteWindow).GetField("_editorOffsetMap", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .GetValue(window), "A text edit must invalidate offsets tied to the old editor content.");
             Assert.AreEqual(1, updateCalls);
@@ -651,7 +651,7 @@ public sealed class NoteEmphasisInteractionTests
             {
                 editor.CaretPosition = position;
                 Pump(window);
-                var offsets = SelectionOffsets(window, app.GetNote(noteId).Document);
+                var offsets = SelectionOffsets(window);
                 Assert.AreEqual((expected, 0), offsets);
                 return offsets;
             }
@@ -659,9 +659,9 @@ public sealed class NoteEmphasisInteractionTests
         finally { window.CloseWithoutMembershipChange(); }
     }
 
-    private static (int Start, int Length) SelectionOffsets(NoteWindow window, NotesDocument document) =>
+    private static (int Start, int Length) SelectionOffsets(NoteWindow window) =>
         ((int Start, int Length))typeof(NoteWindow).GetMethod("GetSelectionOffsets", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .Invoke(window, [document])!;
+            .Invoke(window, null)!;
 
     private static void Click(System.Windows.Controls.Primitives.ToggleButton button) =>
         typeof(System.Windows.Controls.Primitives.ToggleButton).GetMethod("OnClick", BindingFlags.Instance | BindingFlags.NonPublic)!

@@ -734,8 +734,6 @@ public sealed class FocusInteractionTests
     private sealed class RecordingStore : ISessionStore
     {
         public HoodSessionSnapshot? Snapshot;
-        public HoodSessionSnapshot? Load() => null;
         public void Save(HoodSessionSnapshot snapshot) => Snapshot = snapshot;
-        public string? ResetAfterAcknowledgement() => null;
     }
 }

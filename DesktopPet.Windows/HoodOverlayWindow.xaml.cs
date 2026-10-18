@@ -82,7 +82,7 @@ public partial class HoodOverlayWindow : Window
         Action showNotesList,
         Action showNotesSettings,
         string uiStyle)
-        : this(session, assets.Source ?? new HoodAssetSource(assets.SourceDirectory, assets.Definition), assets,
+        : this(session, assets.Source, assets,
             showSettings, quitApplication, activateNotes, createNote, showNotesList, showNotesSettings, uiStyle)
     {
     }
@@ -636,7 +636,7 @@ public partial class HoodOverlayWindow : Window
 
     internal void ApplyPetAssets(LoadedHoodAssets assets)
     {
-        ApplyPetAssets(assets.Source ?? new HoodAssetSource(assets.SourceDirectory, assets.Definition), assets);
+        ApplyPetAssets(assets.Source, assets);
     }
 
     internal void ApplyPetAssets(HoodAssetSource source, LoadedHoodAssets assets)
@@ -725,7 +725,7 @@ public partial class HoodOverlayWindow : Window
             if (_focusAction is not { } action) return _session.Presentation;
             var animation = _assetSource.Definition.GetAnimation(action);
             var duration = TimeSpan.FromMilliseconds(animation.FrameDurationMilliseconds);
-            return new(action, (int)(_focusAnimationTicks / duration.Ticks % animation.Frames.Count), _session.Position, _session.QuitRequested);
+            return new(action, (int)(_focusAnimationTicks / duration.Ticks % animation.Frames.Count), _session.Position);
         }
     }
 

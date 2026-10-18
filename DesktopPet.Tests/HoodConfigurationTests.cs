@@ -895,11 +895,9 @@ public sealed class HoodConfigurationTests
 
     private sealed class NoopSessionStore : ISessionStore
     {
-        public HoodSessionSnapshot? Load() => null;
 
         public void Save(HoodSessionSnapshot snapshot) { }
 
-        public string? ResetAfterAcknowledgement() => null;
     }
 
     private sealed class FailingConfigurationStore : IYamlConfigurationStore

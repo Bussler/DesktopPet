@@ -12,10 +12,7 @@ internal static class MediaHeadphoneDiagnostics
         Trace.TraceWarning(message);
         try
         {
-            var storageOverride = Environment.GetEnvironmentVariable("HOOD_DATA_DIRECTORY");
-            directory ??= string.IsNullOrWhiteSpace(storageOverride)
-                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HoodDesktopPet")
-                : Path.GetFullPath(storageOverride);
+            directory ??= HoodDataDirectory.Resolve();
             lock (Gate)
             {
                 Directory.CreateDirectory(directory);

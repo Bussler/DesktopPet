@@ -33,10 +33,7 @@ public partial class App : System.Windows.Application
     {
         base.OnStartup(e);
 
-        var storageOverride = Environment.GetEnvironmentVariable("HOOD_DATA_DIRECTORY");
-        var storageDirectory = string.IsNullOrWhiteSpace(storageOverride)
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "HoodDesktopPet")
-            : Path.GetFullPath(storageOverride);
+        var storageDirectory = HoodDataDirectory.Resolve();
         var configurationPath = Path.Combine(storageDirectory, "config.yaml");
         try
         {
@@ -400,7 +397,7 @@ public partial class App : System.Windows.Application
 
     private void ShowSettings()
     {
-        if (_session is null || _petWindow is null)
+        if (_session is null || _petWindow is null || _configurationStore is null)
         {
             return;
         }
@@ -411,13 +408,9 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        var store = _configurationStore ?? new YamlConfigurationStore(Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "HoodDesktopPet",
-            "config.yaml"));
         _settingsWindow = new SettingsWindow(
-            new HoodConfigurationController(_session, store, _startupRegistration), _petWindow, _effectiveUiStyle, ApplyUiStyle,
-            _effectiveNotesSettings.Theme, ApplyTheme);
+            new HoodConfigurationController(_session, _configurationStore, _startupRegistration), _petWindow, _effectiveUiStyle, ApplyUiStyle,
+            _effectiveNotesSettings.Theme, ApplyTheme, Path.GetDirectoryName(_configurationStore.Path)!);
         _settingsWindow.ApplyTheme(_effectiveNotesSettings.Theme, _effectiveUiStyle);
         _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         _settingsWindow.Show();
@@ -428,7 +421,7 @@ public partial class App : System.Windows.Application
 
     private void ShowNotesSettings()
     {
-        if (_session is null)
+        if (_session is null || _configurationStore is null)
         {
             return;
         }
@@ -439,12 +432,8 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        var store = _configurationStore ?? new YamlConfigurationStore(Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "HoodDesktopPet",
-            "config.yaml"));
         _notesSettingsWindow = new NotesSettingsWindow(
-            new HoodConfigurationController(_session, store, _startupRegistration),
+            new HoodConfigurationController(_session, _configurationStore, _startupRegistration),
             ApplyNotesSettings,
             _effectiveUiStyle,
             _effectiveNotesSettings);
@@ -481,47 +470,19 @@ public partial class App : System.Windows.Application
 
     private void ApplyNotesSettings(NotesConfiguration settings)
     {
-        if (_session is null || _effectiveNotesSettings == settings)
-        {
-            return;
-        }
-
-        var previousSettings = _effectiveNotesSettings;
-        _effectiveNotesSettings = settings;
-        try
-        {
-            ApplyNotesAppearance();
-        }
-        catch (Exception applyError) when (applyError is not OutOfMemoryException)
-        {
-            _effectiveNotesSettings = previousSettings;
-            try
-            {
-                ApplyNotesAppearance();
-            }
-            catch (Exception restoreError) when (restoreError is not OutOfMemoryException)
-            {
-                throw new AggregateException(
-                    "Hood could not apply the Notes settings or restore the previous appearance.",
-                    applyError,
-                    restoreError);
-            }
-
-            throw new InvalidOperationException(
-                "Hood could not apply the Notes settings. The previous appearance was restored.",
-                applyError);
-        }
+        if (_session is not null) ApplyAppearance(settings, _effectiveUiStyle);
     }
 
-    private void ApplyUiStyle(string style)
-    {
-        style = UiStyleCatalog.Canonicalize(style);
-        if (style == _effectiveUiStyle)
-        {
-            return;
-        }
+    private void ApplyUiStyle(string style) =>
+        ApplyAppearance(_effectiveNotesSettings, UiStyleCatalog.Canonicalize(style));
 
+    private void ApplyAppearance(NotesConfiguration settings, string style)
+    {
+        if (_effectiveNotesSettings == settings && _effectiveUiStyle == style) return;
+
+        var previousSettings = _effectiveNotesSettings;
         var previousStyle = _effectiveUiStyle;
+        _effectiveNotesSettings = settings;
         _effectiveUiStyle = style;
         try
         {
@@ -529,6 +490,7 @@ public partial class App : System.Windows.Application
         }
         catch (Exception applyError) when (applyError is not OutOfMemoryException)
         {
+            _effectiveNotesSettings = previousSettings;
             _effectiveUiStyle = previousStyle;
             try
             {
@@ -537,13 +499,13 @@ public partial class App : System.Windows.Application
             catch (Exception restoreError) when (restoreError is not OutOfMemoryException)
             {
                 throw new AggregateException(
-                    "Hood could not refresh the UI style or restore the previous appearance.",
+                    "Hood could not apply the requested appearance or restore the previous appearance.",
                     applyError,
                     restoreError);
             }
 
             throw new InvalidOperationException(
-                $"Hood could not apply the UI style. The previous {previousStyle} appearance was restored.",
+                "Hood could not apply the appearance. The previous appearance was restored.",
                 applyError);
         }
     }

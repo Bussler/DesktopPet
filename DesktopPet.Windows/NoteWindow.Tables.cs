@@ -21,7 +21,7 @@ public partial class NoteWindow
         {
             ApplyPendingMarkupFormatting();
             var document = ReadEditorDocument();
-            var (start, _) = GetSelectionOffsets(document);
+            var (start, _) = GetSelectionOffsets();
             var (index, offset) = document.GetParagraphPositionAt(start);
             var source = document.Paragraphs[index];
             if (source.Cell is { } cell)
@@ -213,8 +213,7 @@ public partial class NoteWindow
     {
         NotesSnapshotValidator.ValidateDocument(document);
         SetEditorDocument(document, caret, 0);
-        SetSaveStatus(_updateDocument(_noteId, document));
-        _lastAcceptedDocument = document.Copy();
+        SaveEditorDocument(document);
         Editor.Focus();
     }
 
@@ -224,7 +223,7 @@ public partial class NoteWindow
         try
         {
             var document = ReadEditorDocument();
-            var (start, length) = GetSelectionOffsets(document);
+            var (start, length) = GetSelectionOffsets();
             var paragraphIndex = document.GetParagraphIndexAt(start);
             var cell = document.Paragraphs[paragraphIndex].Cell;
             if (cell is null) return false;
@@ -275,7 +274,7 @@ public partial class NoteWindow
     private Guid? GetSelectedTable()
     {
         var document = ReadEditorDocument();
-        var (start, length) = GetSelectionOffsets(document);
+        var (start, length) = GetSelectionOffsets();
         foreach (var id in document.Paragraphs.Where(row => row.Cell is not null).Select(row => row.Cell!.TableId).Distinct())
         {
             var first = document.Paragraphs.FindIndex(row => row.Cell?.TableId == id);

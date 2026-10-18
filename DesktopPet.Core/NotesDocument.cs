@@ -148,18 +148,6 @@ public sealed class NotesDocument
         return new NotesDocument { Paragraphs = paragraphs };
     }
 
-    public NoteBlockKind? GetListKind(int start, int length)
-    {
-        var indexes = GetSelectedParagraphIndexes(start, length);
-        if (indexes.Count == 0)
-        {
-            return null;
-        }
-
-        var kind = Paragraphs[indexes[0]].Kind;
-        return indexes.All(index => Paragraphs[index].Kind == kind) ? kind : null;
-    }
-
     public int GetParagraphIndexAt(int offset)
     {
         return GetParagraphPositionAt(offset).ParagraphIndex;

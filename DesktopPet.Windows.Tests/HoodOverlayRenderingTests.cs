@@ -25,7 +25,7 @@ public sealed class HoodOverlayRenderingTests
     [DataRow("puddle")]
     public void PetMenuActionFollowsFeedAndPlaysTheSelectedPetsAttentionAnimationOnce(string petName)
     {
-        var assets = (LoadedHoodAssets)LoadAssets(petName);
+        var assets = LoadAssets(petName);
         var session = CreateIdleSession(assets.Definition);
         session.Advance(TimeSpan.FromHours(3));
         var boredom = session.Needs.Boredom;
@@ -65,7 +65,7 @@ public sealed class HoodOverlayRenderingTests
     public void RepeatedRectangleKeepsItsCropWhileTheSessionAndPetPositionAdvance()
     {
         var assets = LoadAssets("hood");
-        var definition = (PetDefinition)assets.GetType().GetProperty("Definition")!.GetValue(assets)!;
+        var definition = assets.Definition;
         var session = CreateIdleSession(definition);
         var pet = CreatePet(session, assets);
         var image = (Image)pet.FindName("PetImage");
@@ -112,7 +112,7 @@ public sealed class HoodOverlayRenderingTests
         var manifest = System.Text.Json.Nodes.JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(builtIn.Definition))!;
         manifest["Name"] = "Custom grid";
         var definition = PetDefinition.Parse(manifest.ToJsonString(), builtIn.Definition.SheetWidth, builtIn.Definition.SheetHeight);
-        var assets = builtIn with { Definition = definition, Source = builtIn.Source! with { Definition = definition } };
+        var assets = builtIn with { Source = builtIn.Source with { Definition = definition } };
         var session = CreateIdleSession(definition);
         var pet = CreatePet(session, assets, new UnavailableMediaAudioProbe());
         var image = (Image)pet.FindName("PetImage");
@@ -208,11 +208,11 @@ public sealed class HoodOverlayRenderingTests
     public void AllAvailablePetHeadphonesCoverEveryAnimationFrameAndPreserveTheSession()
     {
         var assets = LoadAssets("hood");
-        var definition = (PetDefinition)assets.GetType().GetProperty("Definition")!.GetValue(assets)!;
+        var definition = assets.Definition;
         foreach (var petName in new[] { "hood", "pip", "crumb", "puddle" })
         {
             var petAssets = LoadAssets(petName);
-            var petDefinition = (PetDefinition)petAssets.GetType().GetProperty("Definition")!.GetValue(petAssets)!;
+            var petDefinition = petAssets.Definition;
             foreach (var animation in petDefinition.Animations)
             {
                 var action = Enum.Parse<PetAction>(animation.Action, ignoreCase: true);
@@ -271,14 +271,12 @@ public sealed class HoodOverlayRenderingTests
     public void AlternatePetPreviewUsesCurrentAudioStateWhenCancelRestoresHood(string selectedPet)
     {
         var assets = LoadAssets("hood");
-        var definition = (PetDefinition)assets.GetType().GetProperty("Definition")!.GetValue(assets)!;
+        var definition = assets.Definition;
         var session = CreateIdleSession(definition);
         var pet = CreatePet(session, assets);
         var controller = new HoodConfigurationController(session,
             new YamlConfigurationStore(Path.Combine(Path.GetTempPath(), $"HoodMediaPreview-{Guid.NewGuid():N}.yaml")));
-        var settings = (Window)typeof(HoodOverlayWindow).Assembly.GetType("DesktopPet.Windows.SettingsWindow")!
-            .GetConstructors(PrivateInstance).Single(candidate => candidate.GetParameters().Length == 6)
-            .Invoke([controller, pet, UiStyleCatalog.StickyNotes, null, "system", null]);
+        var settings = new SettingsWindow(controller, pet, UiStyleCatalog.StickyNotes, null, "system", null);
         var presentation = session.Presentation;
         var needs = session.Needs;
         var audible = new MediaAudioObservation(true,
@@ -311,7 +309,7 @@ public sealed class HoodOverlayRenderingTests
     public void SuspendClearsHeadphonesAndResumeStartsFreshObservationWithoutChangingPetState()
     {
         var assets = LoadAssets("hood");
-        var definition = (PetDefinition)assets.GetType().GetProperty("Definition")!.GetValue(assets)!;
+        var definition = assets.Definition;
         var session = CreateIdleSession(definition);
         var pet = CreatePet(session, assets, new UnavailableMediaAudioProbe());
         var presentation = session.Presentation;
@@ -358,7 +356,7 @@ public sealed class HoodOverlayRenderingTests
     public void HiddenSpritesKeepObservationActiveAndRevealUsesTheCurrentAudioState()
     {
         var source = LoadSource(Path.Combine(AppContext.BaseDirectory, "Assets"), "hood");
-        var definition = (PetDefinition)source.GetType().GetProperty("Definition")!.GetValue(source)!;
+        var definition = source.Definition;
         var session = CreateIdleSession(definition, showSprites: false);
         var pet = CreateMetadataPet(session, source, new UnavailableMediaAudioProbe());
         pet.Opacity = 0;
@@ -382,8 +380,8 @@ public sealed class HoodOverlayRenderingTests
             {
                 Behavior = session.Configuration.Behavior with { ShowSprites = true }
             });
-            typeof(HoodOverlayWindow).GetMethod("EnsureSpriteAssetsLoaded", PrivateInstance)!.Invoke(pet, null);
-            typeof(HoodOverlayWindow).GetMethod("RefreshBehaviorSettings", PrivateInstance)!.Invoke(pet, null);
+            pet.EnsureSpriteAssetsLoaded();
+            pet.RefreshBehaviorSettings();
             Assert.IsTrue(pet.IsVisible);
             Assert.IsNotNull(cups.Source, "Reveal uses the latest audible state.");
             var activeObserver = observer.GetValue(pet);
@@ -392,7 +390,7 @@ public sealed class HoodOverlayRenderingTests
             {
                 Behavior = session.Configuration.Behavior with { ShowSprites = false }
             });
-            typeof(HoodOverlayWindow).GetMethod("RefreshBehaviorSettings", PrivateInstance)!.Invoke(pet, null);
+            pet.RefreshBehaviorSettings();
             Assert.IsNull(band.Source);
             Assert.IsNull(cups.Source);
             Assert.AreSame(activeObserver, observer.GetValue(pet), "Hiding art leaves audio observation active.");
@@ -402,8 +400,8 @@ public sealed class HoodOverlayRenderingTests
             {
                 Behavior = session.Configuration.Behavior with { ShowSprites = true }
             });
-            typeof(HoodOverlayWindow).GetMethod("EnsureSpriteAssetsLoaded", PrivateInstance)!.Invoke(pet, null);
-            typeof(HoodOverlayWindow).GetMethod("RefreshBehaviorSettings", PrivateInstance)!.Invoke(pet, null);
+            pet.EnsureSpriteAssetsLoaded();
+            pet.RefreshBehaviorSettings();
             Assert.IsNotNull(cups.Source, "Sound observed while hidden appears when sprites are revealed.");
             Assert.AreSame(activeObserver, observer.GetValue(pet));
         }
@@ -418,7 +416,7 @@ public sealed class HoodOverlayRenderingTests
     public void SwitchingPetWithTheSameRectangleRefreshesTheDecodedSpriteSource()
     {
         var assets = LoadAssets("hood");
-        var definition = (PetDefinition)assets.GetType().GetProperty("Definition")!.GetValue(assets)!;
+        var definition = assets.Definition;
         var session = CreateIdleSession(definition);
         var pet = CreatePet(session, assets);
         var image = (Image)pet.FindName("PetImage");
@@ -430,23 +428,17 @@ public sealed class HoodOverlayRenderingTests
 
         try
         {
-            var loadPet = typeof(HoodOverlayWindow).Assembly.GetType("DesktopPet.Windows.HoodAssets")!
-                .GetMethod("LoadPet", BindingFlags.Static | BindingFlags.Public)!;
-            var replacementAssets = loadPet.Invoke(null,
-                [Path.Combine(AppContext.BaseDirectory, "Assets"), "pip", definition])!;
-            var replacementDefinition = (PetDefinition)replacementAssets.GetType().GetProperty("Definition")!.GetValue(replacementAssets)!;
+            var replacementAssets = HoodAssets.LoadPet(Path.Combine(AppContext.BaseDirectory, "Assets"), "pip", definition);
+            var replacementDefinition = replacementAssets.Definition;
             var presentation = session.Presentation;
             var replacementFrame = replacementDefinition.GetAnimation(presentation.Action).Frames[presentation.FrameIndex];
-            var replacementRectangle = (Int32Rect)replacementAssets.GetType().GetMethod("GetFrameRectangle")!
-                .Invoke(replacementAssets, [replacementFrame])!;
+            var replacementRectangle = replacementAssets.GetFrameRectangle(replacementFrame);
             Assert.AreEqual(originalCrop.SourceRect, replacementRectangle, "The test requires equal crop coordinates across pets.");
 
-            typeof(HoodOverlayWindow).GetMethods(PrivateInstance)
-                .Single(method => method.Name == "ApplyPetAssets" && method.GetParameters().Length == 1)
-                .Invoke(pet, [replacementAssets]);
+            pet.ApplyPetAssets(replacementAssets);
 
             var replacementCrop = (CroppedBitmap)image.Source;
-            var replacementSheet = (BitmapSource)replacementAssets.GetType().GetProperty("SpriteSheet")!.GetValue(replacementAssets)!;
+            var replacementSheet = replacementAssets.SpriteSheet;
             Assert.AreEqual(originalCrop.SourceRect, replacementCrop.SourceRect);
             Assert.AreNotSame(originalCrop.Source, replacementCrop.Source);
             Assert.AreSame(replacementSheet, replacementCrop.Source);
@@ -463,7 +455,7 @@ public sealed class HoodOverlayRenderingTests
     public void HiddenPetLoadsOnRevealAndReleasesAllDecodedImageReferencesOnHide()
     {
         var source = LoadSource(Path.Combine(AppContext.BaseDirectory, "Assets"), "hood");
-        var definition = (PetDefinition)source.GetType().GetProperty("Definition")!.GetValue(source)!;
+        var definition = source.Definition;
         var session = CreateIdleSession(definition, showSprites: false);
         var pet = CreateMetadataPet(session, source);
         var image = (Image)pet.FindName("PetImage");
@@ -475,19 +467,19 @@ public sealed class HoodOverlayRenderingTests
 
         try
         {
-            Assert.IsNull(GetCurrentAssets(pet), "Hidden startup should retain only the source metadata.");
+            Assert.IsNull(pet.CurrentAssets, "Hidden startup should retain only the source metadata.");
             Assert.IsNull(image.Source);
             Assert.IsFalse(timer.IsEnabled);
 
-            typeof(HoodOverlayWindow).GetMethod("EnsureSpriteAssetsLoaded", PrivateInstance)!.Invoke(pet, null);
-            Assert.IsNotNull(GetCurrentAssets(pet));
+            pet.EnsureSpriteAssetsLoaded();
+            Assert.IsNotNull(pet.CurrentAssets);
             Assert.IsNull(image.Source, "Preloading for a reveal must not render before the setting changes.");
 
             ApplyConfiguration(session, session.Configuration with
             {
                 Behavior = session.Configuration.Behavior with { ShowSprites = true }
             });
-            typeof(HoodOverlayWindow).GetMethod("RefreshBehaviorSettings", PrivateInstance)!.Invoke(pet, null);
+            pet.RefreshBehaviorSettings();
             Assert.IsTrue(pet.IsVisible);
             Assert.IsInstanceOfType<CroppedBitmap>(image.Source);
             Assert.IsTrue(timer.IsEnabled);
@@ -496,12 +488,12 @@ public sealed class HoodOverlayRenderingTests
             {
                 Behavior = session.Configuration.Behavior with { ShowSprites = false }
             });
-            typeof(HoodOverlayWindow).GetMethod("RefreshBehaviorSettings", PrivateInstance)!.Invoke(pet, null);
+            pet.RefreshBehaviorSettings();
 
             Assert.IsFalse(pet.IsVisible);
             Assert.IsFalse(timer.IsEnabled);
             Assert.IsNull(image.Source);
-            Assert.IsNull(GetCurrentAssets(pet), "The atlas must no longer be owned by the hidden overlay.");
+            Assert.IsNull(pet.CurrentAssets, "The atlas must no longer be owned by the hidden overlay.");
             Assert.IsNull(typeof(HoodOverlayWindow).GetField("_renderedSpriteSheet", PrivateInstance)!.GetValue(pet));
             Assert.IsNull(typeof(HoodOverlayWindow).GetField("_renderedRectangle", PrivateInstance)!.GetValue(pet));
             Assert.AreEqual(originalPresentation, session.Presentation);
@@ -523,7 +515,7 @@ public sealed class HoodOverlayRenderingTests
         var source = LoadSource(root, "hood");
         File.WriteAllText(Path.Combine(directory, "hood_spritesheet.png"), "corrupt after metadata load");
 
-        var definition = (PetDefinition)source.GetType().GetProperty("Definition")!.GetValue(source)!;
+        var definition = source.Definition;
         var session = CreateIdleSession(definition, showSprites: false);
         var pet = CreateMetadataPet(session, source);
         var image = (Image)pet.FindName("PetImage");
@@ -533,11 +525,8 @@ public sealed class HoodOverlayRenderingTests
 
         try
         {
-            var failure = Assert.Throws<TargetInvocationException>(() =>
-                typeof(HoodOverlayWindow).GetMethod("EnsureSpriteAssetsLoaded", PrivateInstance)!.Invoke(pet, null));
-
-            Assert.IsInstanceOfType<PetAssetException>(failure.InnerException);
-            Assert.IsNull(GetCurrentAssets(pet));
+            Assert.Throws<PetAssetException>(() => pet.EnsureSpriteAssetsLoaded());
+            Assert.IsNull(pet.CurrentAssets);
             Assert.IsNull(image.Source);
             Assert.AreEqual(originalPresentation, session.Presentation);
             Assert.AreEqual(originalNeeds, session.Needs);
@@ -561,14 +550,12 @@ public sealed class HoodOverlayRenderingTests
         File.Copy(Path.Combine(packaged, "hood_spritesheet.png"), Path.Combine(directory, "hood_spritesheet.png"));
         var source = LoadSource(root, "hood");
         File.WriteAllText(Path.Combine(directory, "hood_spritesheet.png"), "corrupt after metadata load");
-        var definition = (PetDefinition)source.GetType().GetProperty("Definition")!.GetValue(source)!;
+        var definition = source.Definition;
         var session = CreateIdleSession(definition, showSprites: false);
         var pet = CreateMetadataPet(session, source);
         var configurationPath = Path.Combine(root, "config.yaml");
         var controller = new HoodConfigurationController(session, new YamlConfigurationStore(configurationPath));
-        var settings = (Window)typeof(HoodOverlayWindow).Assembly.GetType("DesktopPet.Windows.SettingsWindow")!
-            .GetConstructors(PrivateInstance).Single(candidate => candidate.GetParameters().Length == 6)
-            .Invoke([controller, pet, UiStyleCatalog.StickyNotes, null, "system", null]);
+        var settings = new SettingsWindow(controller, pet, UiStyleCatalog.StickyNotes, null, "system", null);
 
         try
         {
@@ -578,7 +565,7 @@ public sealed class HoodOverlayRenderingTests
 
             Assert.IsFalse(controller.Current.Behavior.ShowSprites);
             Assert.IsFalse(pet.IsVisible);
-            Assert.IsNull(GetCurrentAssets(pet));
+            Assert.IsNull(pet.CurrentAssets);
             Assert.IsFalse(File.Exists(configurationPath), "A failed reveal must not persist ShowSprites=true.");
             var error = (TextBlock)settings.FindName("AppearanceErrorText")!;
             Assert.AreEqual(Visibility.Visible, error.Visibility);
@@ -599,34 +586,32 @@ public sealed class HoodOverlayRenderingTests
     public void CancelAfterATrayVisibilityChangeRestoresArtworkForCurrentVisibility(bool initiallyVisible)
     {
         var source = LoadSource(Path.Combine(AppContext.BaseDirectory, "Assets"), "hood");
-        var definition = (PetDefinition)source.GetType().GetProperty("Definition")!.GetValue(source)!;
+        var definition = source.Definition;
         var session = CreateIdleSession(definition, initiallyVisible);
         var pet = initiallyVisible ? CreatePet(session, LoadAssets("hood")) : CreateMetadataPet(session, source);
         pet.Opacity = 0;
         pet.ShowInTaskbar = false;
         var configPath = Path.Combine(Path.GetTempPath(), $"HoodRollbackVisibility-{Guid.NewGuid():N}.yaml");
         var controller = new HoodConfigurationController(session, new YamlConfigurationStore(configPath));
-        var settings = (SettingsWindow)typeof(SettingsWindow).GetConstructors(PrivateInstance)
-            .Single(candidate => candidate.GetParameters().Length == 3)
-            .Invoke([controller, pet, UiStyleCatalog.StickyNotes]);
+        var settings = new SettingsWindow(controller, pet, UiStyleCatalog.StickyNotes);
         try
         {
             ((ComboBox)settings.FindName("PetComboBox")).SelectedValue = PetCatalog.Pip;
-            if (!initiallyVisible) typeof(HoodOverlayWindow).GetMethod("EnsureSpriteAssetsLoaded", PrivateInstance)!.Invoke(pet, null);
+            if (!initiallyVisible) pet.EnsureSpriteAssetsLoaded();
             controller.SaveAndApply("behavior.show_sprites", controller.Current with
             {
                 Behavior = controller.Current.Behavior with { ShowSprites = !initiallyVisible }
             });
-            typeof(HoodOverlayWindow).GetMethod("RefreshBehaviorSettings", PrivateInstance)!.Invoke(pet, null);
+            pet.RefreshBehaviorSettings();
             settings.Close();
 
             Assert.AreEqual(!initiallyVisible, session.Configuration.Behavior.ShowSprites);
             Assert.AreEqual(!initiallyVisible, pet.IsVisible);
-            Assert.AreEqual(!initiallyVisible, GetCurrentAssets(pet) is not null);
+            Assert.AreEqual(!initiallyVisible, pet.CurrentAssets is not null);
             Assert.AreEqual(!initiallyVisible, ((Image)pet.FindName("PetImage")).Source is not null);
-            var restoredSource = typeof(HoodOverlayWindow).GetProperty("CurrentSource", PrivateInstance)!.GetValue(pet)!;
-            Assert.AreEqual(source.GetType().GetProperty("Directory")!.GetValue(source),
-                restoredSource.GetType().GetProperty("Directory")!.GetValue(restoredSource));
+            var restoredSource = pet.CurrentSource;
+            Assert.AreEqual(source.Directory,
+                restoredSource.Directory);
         }
         finally { settings.Close(); pet.Close(); File.Delete(configPath); }
     }
@@ -647,25 +632,19 @@ public sealed class HoodOverlayRenderingTests
         File.Copy(Path.Combine(packaged, "hood_spritesheet.png"), Path.Combine(directory, "hood_spritesheet.png"));
 
         var source = LoadSource(root, "hood");
-        var loadAtScale = typeof(HoodOverlayWindow).Assembly.GetType("DesktopPet.Windows.HoodAssets")!
-            .GetMethod("LoadAtScale", BindingFlags.Static | BindingFlags.Public)!;
-        var definition = (PetDefinition)source.GetType().GetProperty("Definition")!.GetValue(source)!;
+        var definition = source.Definition;
         var session = CreateIdleSession(definition);
-        var displayProvider = typeof(HoodOverlayWindow).Assembly.GetType("DesktopPet.Windows.WindowsDisplayProvider")!;
-        var displays = displayProvider.GetMethod("GetDisplays", BindingFlags.Static | BindingFlags.Public)!.Invoke(null, null)!;
-        var displayScale = (double)displayProvider.GetMethod("GetScaleForPet", BindingFlags.Static | BindingFlags.Public)!
-            .Invoke(null, [session.Position, definition, displays])!;
-        var originalAssets = loadAtScale.Invoke(null, [source, displayScale, displayScale])!;
-        var originalSheet = (BitmapSource)originalAssets.GetType().GetProperty("SpriteSheet")!.GetValue(originalAssets)!;
+        var displays = WindowsDisplayProvider.GetDisplays();
+        var displayScale = WindowsDisplayProvider.GetScaleForPet(session.Position, definition, displays);
+        var originalAssets = HoodAssets.LoadAtScale(source, displayScale, displayScale);
+        var originalSheet = originalAssets.SpriteSheet;
         var sourcePath = Path.Combine(directory, "hood_spritesheet.png");
         if (mutateBeforeSettings) File.WriteAllText(sourcePath, "changed before Settings opened");
         var pet = CreatePet(session, originalAssets);
         var controller = new HoodConfigurationController(session, new YamlConfigurationStore(Path.Combine(root, "config.yaml")));
-        var settings = (Window)typeof(HoodOverlayWindow).Assembly.GetType("DesktopPet.Windows.SettingsWindow")!
-            .GetConstructors(PrivateInstance).Single(candidate => candidate.GetParameters().Length == 6)
-            .Invoke([controller, pet, UiStyleCatalog.StickyNotes, null, "system", null]);
+        var settings = new SettingsWindow(controller, pet, UiStyleCatalog.StickyNotes, null, "system", null);
         var frame = definition.GetAnimation(session.Presentation.Action).Frames[session.Presentation.FrameIndex];
-        var rectangle = (Int32Rect)originalAssets.GetType().GetMethod("GetFrameRectangle")!.Invoke(originalAssets, [frame])!;
+        var rectangle = originalAssets.GetFrameRectangle(frame);
         var expectedPixels = CopyPixels(originalSheet, rectangle);
 
         try
@@ -680,16 +659,14 @@ public sealed class HoodOverlayRenderingTests
                 File.Copy(Path.Combine(pip, "hood.animations.json"), Path.Combine(previewDirectory, "hood.animations.json"));
                 File.Copy(Path.Combine(pip, "hood_spritesheet.png"), Path.Combine(previewDirectory, "hood_spritesheet.png"));
                 var previewSource = LoadSource(root, "pip");
-                var preview = typeof(HoodOverlayWindow).Assembly.GetType("DesktopPet.Windows.HoodAssets")!
-                    .GetMethod("LoadForDisplay")!.Invoke(null, [previewSource, displayScale, displayScale, 0.5])!;
-                typeof(HoodOverlayWindow).GetMethod("ApplyPetAssets", PrivateInstance, [preview.GetType()])!
-                    .Invoke(pet, [preview]);
+                var preview = HoodAssets.LoadForDisplay(previewSource, displayScale, displayScale, 0.5);
+                pet.ApplyPetAssets(preview);
                 File.Delete(Path.Combine(previewDirectory, "hood_spritesheet.png"));
             }
             Assert.IsNull(typeof(SettingsWindow).GetField("_originalAssets", PrivateInstance)!.GetValue(settings),
                 "The decoded original should be replaced by its compressed rollback snapshot.");
-            var snapshot = typeof(SettingsWindow).GetField("_originalAssetSnapshot", PrivateInstance)!.GetValue(settings)!;
-            var snapshotBytes = (int)snapshot.GetType().GetProperty("EncodedByteCount")!.GetValue(snapshot)!;
+            var snapshot = (HoodAssetRollbackSnapshot)typeof(SettingsWindow).GetField("_originalAssetSnapshot", PrivateInstance)!.GetValue(settings)!;
+            var snapshotBytes = snapshot.EncodedByteCount;
             var decodedBytes = (long)originalSheet.PixelWidth * originalSheet.PixelHeight * originalSheet.Format.BitsPerPixel / 8;
             Assert.IsTrue(snapshotBytes < decodedBytes, "The rollback image must use less memory than its decoded atlas.");
 
@@ -698,18 +675,18 @@ public sealed class HoodOverlayRenderingTests
             settings.Close();
             Assert.AreEqual(1d, session.PetScale, "Cancel must restore size even when preview artwork is unavailable.");
 
-            var restored = GetCurrentAssets(pet)!;
-            var restoredSheet = (BitmapSource)restored.GetType().GetProperty("SpriteSheet")!.GetValue(restored)!;
-            var restoredRectangle = (Int32Rect)restored.GetType().GetMethod("GetFrameRectangle")!.Invoke(restored, [frame])!;
+            var restored = pet.CurrentAssets!;
+            var restoredSheet = restored.SpriteSheet;
+            var restoredRectangle = restored.GetFrameRectangle(frame);
             Assert.AreEqual(originalSheet.PixelWidth, restoredSheet.PixelWidth);
             Assert.AreEqual(originalSheet.PixelHeight, restoredSheet.PixelHeight);
             CollectionAssert.AreEqual(expectedPixels, CopyPixels(restoredSheet, restoredRectangle));
-            var currentSource = typeof(HoodOverlayWindow).GetProperty("CurrentSource", PrivateInstance)!.GetValue(pet)!;
-            Assert.IsNotNull(currentSource.GetType().GetProperty("CachedSpriteSheet")!.GetValue(currentSource),
+            var currentSource = pet.CurrentSource;
+            Assert.IsNotNull(currentSource.CachedSpriteSheet,
                 "A changed or removed file must leave the original compressed source available for later DPI reloads.");
 
-            typeof(HoodOverlayWindow).GetMethod("ReloadAssetsForDpi", PrivateInstance)!.Invoke(pet, [1.25, 1.25]);
-            Assert.AreEqual(1.25, GetCurrentAssets(pet)!.GetType().GetProperty("DpiScaleX")!.GetValue(GetCurrentAssets(pet)));
+            pet.ReloadAssetsForDpi(1.25, 1.25);
+            Assert.AreEqual(1.25, pet.CurrentAssets!.DpiScaleX);
         }
         finally
         {
@@ -722,10 +699,8 @@ public sealed class HoodOverlayRenderingTests
         }
     }
 
-    private static object LoadAssets(string pet) => typeof(HoodOverlayWindow).Assembly
-        .GetType("DesktopPet.Windows.HoodAssets")!
-        .GetMethod("LoadPet", BindingFlags.Static | BindingFlags.Public)!
-        .Invoke(null, [Path.Combine(AppContext.BaseDirectory, "Assets"), pet, null])!;
+    private static LoadedHoodAssets LoadAssets(string pet) =>
+        HoodAssets.LoadPet(Path.Combine(AppContext.BaseDirectory, "Assets"), pet);
 
     private static HoodSession CreateIdleSession(PetDefinition definition, bool showSprites = true)
     {
@@ -746,50 +721,33 @@ public sealed class HoodOverlayRenderingTests
             new FixedRandomSource(), new NoopSessionStore(), configuration, snapshot);
     }
 
-    private static HoodOverlayWindow CreatePet(HoodSession session, object assets)
+    private static HoodOverlayWindow CreatePet(HoodSession session, LoadedHoodAssets assets)
     {
         Action noop = () => { };
-        var constructor = typeof(HoodOverlayWindow).GetConstructors(PrivateInstance)
-            .Single(candidate => candidate.GetParameters().Length == 9);
-        return (HoodOverlayWindow)constructor.Invoke(
-            [session, assets, noop, noop, noop, noop, noop, noop, UiStyleCatalog.StickyNotes]);
+        return new HoodOverlayWindow(session, assets, noop, noop, noop, noop, noop, noop, UiStyleCatalog.StickyNotes);
     }
 
-    private static HoodOverlayWindow CreatePet(HoodSession session, object assets, IMediaAudioProbe mediaAudioProbe)
+    private static HoodOverlayWindow CreatePet(HoodSession session, LoadedHoodAssets assets, IMediaAudioProbe mediaAudioProbe)
     {
         Action noop = () => { };
-        var constructor = typeof(HoodOverlayWindow).GetConstructors(PrivateInstance)
-            .Single(candidate => candidate.GetParameters().Length == 11);
-        var source = assets.GetType().GetProperty("Source")!.GetValue(assets);
-        return (HoodOverlayWindow)constructor.Invoke(
-            [session, source, assets, noop, noop, noop, noop, noop, noop, UiStyleCatalog.StickyNotes, mediaAudioProbe]);
+        var source = assets.Source;
+        return new HoodOverlayWindow(session, source, assets, noop, noop, noop, noop, noop, noop, UiStyleCatalog.StickyNotes, mediaAudioProbe);
     }
 
-    private static object LoadSource(string assetsDirectory, string pet) => typeof(HoodOverlayWindow).Assembly
-        .GetType("DesktopPet.Windows.HoodAssets")!
-        .GetMethod("LoadPetSource", BindingFlags.Static | BindingFlags.Public)!
-        .Invoke(null, [assetsDirectory, pet, null])!;
+    private static HoodAssetSource LoadSource(string assetsDirectory, string pet) =>
+        HoodAssets.LoadPetSource(assetsDirectory, pet);
 
-    private static HoodOverlayWindow CreateMetadataPet(HoodSession session, object source)
+    private static HoodOverlayWindow CreateMetadataPet(HoodSession session, HoodAssetSource source)
     {
         Action noop = () => { };
-        var constructor = typeof(HoodOverlayWindow).GetConstructors(PrivateInstance)
-            .Single(candidate => candidate.GetParameters().Length == 10);
-        return (HoodOverlayWindow)constructor.Invoke(
-            [session, source, null, noop, noop, noop, noop, noop, noop, UiStyleCatalog.StickyNotes]);
+        return new HoodOverlayWindow(session, source, null, noop, noop, noop, noop, noop, noop, UiStyleCatalog.StickyNotes);
     }
 
-    private static HoodOverlayWindow CreateMetadataPet(HoodSession session, object source, IMediaAudioProbe mediaAudioProbe)
+    private static HoodOverlayWindow CreateMetadataPet(HoodSession session, HoodAssetSource source, IMediaAudioProbe mediaAudioProbe)
     {
         Action noop = () => { };
-        var constructor = typeof(HoodOverlayWindow).GetConstructors(PrivateInstance)
-            .Single(candidate => candidate.GetParameters().Length == 11);
-        return (HoodOverlayWindow)constructor.Invoke(
-            [session, source, null, noop, noop, noop, noop, noop, noop, UiStyleCatalog.StickyNotes, mediaAudioProbe]);
+        return new HoodOverlayWindow(session, source, null, noop, noop, noop, noop, noop, noop, UiStyleCatalog.StickyNotes, mediaAudioProbe);
     }
-
-    private static object? GetCurrentAssets(HoodOverlayWindow pet) =>
-        typeof(HoodOverlayWindow).GetProperty("CurrentAssets", PrivateInstance)!.GetValue(pet);
 
     private static byte[] CopyPixels(BitmapSource source, Int32Rect rectangle)
     {
@@ -808,9 +766,7 @@ public sealed class HoodOverlayRenderingTests
 
     private sealed class NoopSessionStore : ISessionStore
     {
-        public HoodSessionSnapshot? Load() => null;
         public void Save(HoodSessionSnapshot snapshot) { }
-        public string? ResetAfterAcknowledgement() => null;
     }
 
     private sealed class UnavailableMediaAudioProbe : IMediaAudioProbe

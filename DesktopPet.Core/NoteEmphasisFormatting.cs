@@ -62,7 +62,7 @@ public static class NoteEmphasisFormatting
                 continue;
             }
 
-            GetCharacterStyles(row.Runs, text.Length, out var styles, out var kinds, out var destinations);
+            GetCharacterData(row.Runs, text.Length, out var styles, out var kinds, out var destinations);
             var code = styles.Select(style => style.HasFlag(NoteTextStyle.Code)).ToArray();
             var protectedSource = kinds.Select(kind => kind != NoteInlineKind.Text).ToArray();
             ProtectMathSource(text, code, protectedSource);
@@ -127,25 +127,6 @@ public static class NoteEmphasisFormatting
         return result;
 
         int MapOffset(int offset) => offset - removed.Sum(range => Math.Clamp(offset - range.Start, 0, range.Length));
-    }
-
-    private static void GetCharacterStyles(IReadOnlyList<NoteTextRun> runs, int length,
-        out NoteTextStyle[] styles, out NoteInlineKind[] kinds, out string?[] destinations)
-    {
-        styles = new NoteTextStyle[length];
-        kinds = new NoteInlineKind[length];
-        destinations = new string?[length];
-        var offset = 0;
-        foreach (var run in runs)
-        {
-            var runLength = NormalizeLineBreaks(run.Text).Length;
-            for (var index = 0; index < runLength && offset < length; index++, offset++)
-            {
-                styles[offset] = run.Style;
-                kinds[offset] = run.Kind;
-                destinations[offset] = run.LinkDestination;
-            }
-        }
     }
 
     private static List<Pair> FindPairs(string text, bool[] code, bool[] protectedSource, (int Start, int Length) input, int paragraphStart)

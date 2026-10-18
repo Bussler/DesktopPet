@@ -22,7 +22,7 @@ public partial class NoteWindow
     {
         if (e.IsDragDrop || Editor.Selection.IsEmpty) return;
         var document = ReadEditorDocument();
-        var (start, length) = GetSelectionOffsets(document);
+        var (start, length) = GetSelectionOffsets();
         var (first, _) = document.GetParagraphPositionAt(start);
         var (last, _) = document.GetParagraphPositionAt(start + length);
         var rows = document.Paragraphs.Skip(first).Take(last - first + 1).ToArray();
@@ -60,7 +60,7 @@ public partial class NoteWindow
         try
         {
             var document = ReadEditorDocument();
-            var (start, length) = GetSelectionOffsets(document);
+            var (start, length) = GetSelectionOffsets();
             var (index, offset) = document.GetParagraphPositionAt(start);
             var range = document.GetParagraphRange(index);
             if (document.Paragraphs[index].Kind == NoteBlockKind.Code && start + length <= range.Start + range.Length &&
@@ -118,8 +118,7 @@ public partial class NoteWindow
             Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Normal, new Action(() =>
             {
                 SetEditorDocument(document, start + pastedLength, 0);
-                SetSaveStatus(_updateDocument(_noteId, document));
-                _lastAcceptedDocument = document.Copy();
+                SaveEditorDocument(document);
                 UpdateToolbar();
             }));
         }

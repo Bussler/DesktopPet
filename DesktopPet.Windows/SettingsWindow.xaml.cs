@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.ComponentModel;
 using System.Globalization;
-using System.IO;
 using System.Windows;
 using DesktopPet.Core;
 
@@ -32,6 +31,8 @@ public partial class SettingsWindow : Window
     private bool _saved;
     private bool _loadingSettings = true;
 
+    internal string ConfigurationDirectory { get; }
+
     internal SettingsWindow(HoodConfigurationController controller, HoodOverlayWindow petWindow)
         : this(controller, petWindow, controller.Current.UiStyle)
     {
@@ -48,10 +49,11 @@ public partial class SettingsWindow : Window
     }
 
     internal SettingsWindow(HoodConfigurationController controller, HoodOverlayWindow petWindow, string effectiveUiStyle,
-        Action<string>? applyUiStyle, string effectiveTheme, Action<string>? applyTheme)
+        Action<string>? applyUiStyle, string effectiveTheme, Action<string>? applyTheme, string? configurationDirectory = null)
     {
         _controller = controller;
         _petWindow = petWindow;
+        ConfigurationDirectory = configurationDirectory ?? HoodDataDirectory.Resolve();
         _originalUiStyle = _effectiveUiStyle = UiStyleCatalog.Canonicalize(effectiveUiStyle);
         _originalTheme = _theme = effectiveTheme;
         _originalPet = _previewPet = controller.Current.Pet;
@@ -59,7 +61,7 @@ public partial class SettingsWindow : Window
         _restorePetPosition = _previewPetPosition = petWindow.PetPosition;
         _restoreRoamingArea = _previewRoamingArea = petWindow.RoamingArea;
         var originalAssets = petWindow.CurrentAssets;
-        _originalSource = originalAssets?.Source ?? petWindow.CurrentSource;
+        _originalSource = petWindow.CurrentSource;
         _originalAssets = originalAssets;
         _applyUiStyle = applyUiStyle ?? (style => petWindow.ApplyAppearance(_theme, style));
         _applyTheme = applyTheme ?? (theme => petWindow.ApplyAppearance(theme, _effectiveUiStyle));
@@ -362,11 +364,7 @@ public partial class SettingsWindow : Window
 
     private void OnOpenConfigFolderClick(object sender, RoutedEventArgs e)
     {
-        var directory = Path.GetDirectoryName(new YamlConfigurationStore(Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "HoodDesktopPet",
-            "config.yaml")).Path)!;
-        Process.Start(new ProcessStartInfo(directory) { UseShellExecute = true });
+        Process.Start(new ProcessStartInfo(ConfigurationDirectory) { UseShellExecute = true });
     }
 
     private void OnEditAreaClick(object sender, RoutedEventArgs e) => _petWindow.OpenRoamingAreaEditor();
