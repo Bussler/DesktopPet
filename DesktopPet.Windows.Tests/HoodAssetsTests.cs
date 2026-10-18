@@ -18,6 +18,29 @@ namespace DesktopPet.Windows.Tests;
 public sealed class HoodAssetsTests
 {
     [TestMethod]
+    [DataRow("hood")]
+    [DataRow("pip")]
+    [DataRow("crumb")]
+    [DataRow("puddle")]
+    public void WaveHasSixteenDistinctPosesAtOneHundredTwentyMilliseconds(string pet)
+    {
+        var assets = HoodAssets.LoadPet(Path.Combine(AppContext.BaseDirectory, "Assets"), pet);
+        var animation = assets.Definition.GetAnimation(PetAction.Wave);
+        Assert.AreEqual(16, animation.Frames.Count);
+        Assert.AreEqual(16, animation.Frames.Distinct().Count());
+        Assert.AreEqual(120, animation.FrameDurationMilliseconds);
+        Assert.IsFalse(animation.Loops);
+        foreach (var frame in animation.Frames)
+        {
+            var crop = new CroppedBitmap(assets.SpriteSheet, assets.GetFrameRectangle(frame));
+            var pixels = new byte[crop.PixelWidth * crop.PixelHeight * 4];
+            crop.CopyPixels(pixels, crop.PixelWidth * 4, 0);
+            Assert.IsTrue(Enumerable.Range(0, pixels.Length / 4).Any(index => pixels[index * 4 + 3] != 0),
+                $"{pet} wave pose {frame.Column} must contain artwork.");
+        }
+    }
+
+    [TestMethod]
     [DataRow(0.5, 1.0, 1536, 1144)]
     [DataRow(1.5, 1.25, 5760, 4290)]
     [DataRow(2.0, 1.5, 6144, 4576)]

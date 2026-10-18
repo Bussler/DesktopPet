@@ -769,9 +769,25 @@
         {
           "row": 3,
           "column": 11
+        },
+        {
+          "row": 3,
+          "column": 12
+        },
+        {
+          "row": 3,
+          "column": 13
+        },
+        {
+          "row": 3,
+          "column": 14
+        },
+        {
+          "row": 3,
+          "column": 15
         }
       ],
-      "frameDurationMilliseconds": 78,
+      "frameDurationMilliseconds": 120,
       "loops": false,
       "motionBounds": {
         "height": 208,

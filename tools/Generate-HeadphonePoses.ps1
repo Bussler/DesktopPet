@@ -120,6 +120,9 @@ $parts = [ordered]@{
     Puddle = @(@(55,1146,196,310), @(327,1146,243,321), @(601,1162,405,289))
 }
 $poses = [ordered]@{}
+$waveBase = Get-Content (Join-Path $root 'Assets\Headphones\wave-12-poses.json') -Raw | ConvertFrom-Json
+$waveOrder = @(0,1,12,2,13,3,4,5,14,6,7,8,15,9,10,11)
+$wavePairs = @(@(1,2),@(2,3),@(5,6),@(8,9))
 $existing = if ($Action) { (Get-Content (Join-Path $root 'Assets\Headphones\poses.json') -Raw | ConvertFrom-Json).poses }
 foreach ($pet in 'Hood','Pip','Crumb','Puddle') {
     $folder = Join-Path $root "Assets\$pet"
@@ -143,6 +146,18 @@ foreach ($pet in 'Hood','Pip','Crumb','Puddle') {
         foreach ($column in $columns) {
             $frame = $column.Group[0]
             $index = [int]$frame.column
+            if ($animation.action -eq 'wave') {
+                $sourceIndex = $waveOrder[$index]
+                if ($sourceIndex -lt 12) {
+                    $entries += ,$waveBase.$pet[$sourceIndex]
+                } elseif ($pet -eq 'Crumb') {
+                    $entries += ,([HeadphoneFrameTop]::Earbuds($pixels, $stride, $manifest.frameWidth, $manifest.frameHeight, $frame.row, $index, $manifest.spriteScale))
+                } else {
+                    $pair = $wavePairs[$sourceIndex-12]
+                    $entries += ,@(0..6 | ForEach-Object { ($waveBase.$pet[$pair[0]][$_]+$waveBase.$pet[$pair[1]][$_])/2 })
+                }
+                continue
+            }
             if ($pet -eq 'Crumb' -and $animation.action -eq 'pet') {
                 $entries += ,([HeadphoneFrameTop]::Earbuds($pixels, $stride, $manifest.frameWidth, $manifest.frameHeight, $frame.row, $index, $manifest.spriteScale))
                 continue
@@ -164,7 +179,6 @@ foreach ($pet in 'Hood','Pip','Crumb','Puddle') {
                 }
                 'sleep' { $pose = $sleeping[$pet].Clone() }
                 'jump' { $pose = $jumps[$pet][$index].Clone() }
-                'wave' { if ($pet -eq 'Hood') { $pose = @(25,155,84,45,25,0,0) } }
                 'lookAround' {
                     if ($pet -eq 'Hood' -and $index -in 12,13) {
                         $pose = @(68,146,77,41,30,1,0)

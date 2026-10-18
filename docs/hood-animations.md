@@ -11,7 +11,7 @@ The preview shows each unique pose, with rows in playback order:
 | Idle | 0 | 16 | 80 ms | 7.84-second neutral hold, then a 1.2-second gentle blink; loops every 9.04 seconds (about 20% more often). |
 | Run right | 1 | 16 | 55 ms | Alternating feet with a restrained body bounce; loops every 880 ms. |
 | Run left | 2 | 16 | 55 ms | Mirrored right-running stride; loops every 880 ms. |
-| Wave | 3 | 12 | 78 ms | Completes in 936 ms. |
+| Wave | 3 | 16 | 120 ms | Completes once in 1920 ms; four new in-between poses extend the existing wave. |
 | Look up | 4 | 12 | 78 ms | Completes in 936 ms. |
 | Look around | 5 | 16 | 143 ms | Completes in 2288 ms. |
 | Jump | 6 | 15 | 80 ms | Crouch, vertical jump, and soft landing; completes in 1200 ms. |

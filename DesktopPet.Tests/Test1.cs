@@ -475,7 +475,7 @@ public sealed class HoodSessionTests
     }
 
     [TestMethod]
-    [DataRow(0, DesktopPet.Core.PetAction.Wave, 936)]
+    [DataRow(0, DesktopPet.Core.PetAction.Wave, 1920)]
     [DataRow(1, DesktopPet.Core.PetAction.LookAround, 2288)]
     [DataRow(3, DesktopPet.Core.PetAction.LookUp, 936)]
     public void Advance_SelectsIdleGesturesAndReturnsToRest(int choice, DesktopPet.Core.PetAction expected, int durationMilliseconds)
