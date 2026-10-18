@@ -324,6 +324,89 @@ public sealed class NoteDisplayMathInteractionTests
     }
 
     [TestMethod]
+    [DataRow(0)]
+    [DataRow(1)]
+    [DataRow(2)]
+    public void ReopenedMathBlockKeepsNewLineEditableAfterRendering(int caretOffset)
+    {
+        var app = NotesApplication.Start(new MemoryNotesStore());
+        var noteId = app.CreateNote();
+        var window = CreateWindow(app, noteId);
+        try
+        {
+            ShowHidden(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            InvokeCreateMathBlock(window);
+            Type(editor, "xy");
+            Pump(window);
+            editor.CaretPosition = ((Paragraph)editor.Document.Blocks.LastBlock).ContentEnd;
+            Pump(window);
+            var rendered = DisplayMathButtons(editor).Single();
+            Assert.IsFalse(FindFormulaControl(rendered)!.HasError);
+            var singleLineHeight = FindFormulaControl(rendered)!.ActualHeight;
+
+            rendered.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+            Pump(window);
+            var sourceRun = DisplayMathSourceSpans(editor).Single().Inlines.OfType<Run>().Single();
+            editor.CaretPosition = sourceRun.ContentStart.GetPositionAtOffset(caretOffset)!;
+            Assert.IsTrue((bool)typeof(NoteWindow)
+                .GetMethod("HandleEditorKey", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(window, [Key.Enter, false, false])!);
+            Pump(window);
+            Type(editor, "y");
+            Pump(window);
+            Assert.AreEqual(0, DisplayMathButtons(editor).Count(), "Typing must keep the source open.");
+            Type(editor, "+z");
+            Pump(window);
+
+            var block = app.GetNote(noteId).Document.Paragraphs[0];
+            Assert.AreEqual(NoteBlockKind.DisplayMath, block.Kind);
+            Assert.AreEqual("xy"[..caretOffset] + "\r\ny+z" + "xy"[caretOffset..],
+                NoteTextOffsets.NormalizeLineBreaks(Text(block)));
+            Assert.IsTrue(block.Runs.All(run => run.Kind == NoteInlineKind.Text));
+            editor.CaretPosition = ((Paragraph)editor.Document.Blocks.LastBlock).ContentEnd;
+            Pump(window);
+            Assert.IsFalse(FindFormulaControl(DisplayMathButtons(editor).Single())!.HasError);
+            if (caretOffset > 0)
+                Assert.IsTrue(FindFormulaControl(DisplayMathButtons(editor).Single())!.ActualHeight > singleLineHeight * 1.5,
+                    "Enter must add a visible rendered row after reopening a math block.");
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    [DataRow("x\ny", @"x\\y")]
+    [DataRow("x\r\ny", @"x\\y")]
+    [DataRow("x\ry", @"x\\y")]
+    [DataRow("$$\r\nx\r\ny\r\n$$", @"x\\y")]
+    [DataRow("x\\\\\r\ny", @"x\\y")]
+    [DataRow("\\frac{\r\n1}{2}", @"\frac{1}{2}")]
+    [DataRow("\\begin{pmatrix}\r\na&b\\\\\r\nc&d\r\n\\end{pmatrix}", @"\begin{pmatrix}a&b\\c&d\end{pmatrix}")]
+    [DataRow("\\begin{align}\r\na&=b\\\\\r\nc&=d\r\n\\end{align}", @"\begin{align}a&=b\\c&=d\end{align}")]
+    public void DisplaySourceNewlinesRenderWithoutChangingSourceOrStructuredLatex(string source, string expected)
+    {
+        var app = NotesApplication.Start(new MemoryNotesStore());
+        var noteId = app.CreateNote();
+        app.UpdateDocument(noteId, new NotesDocument { Paragraphs = [
+            new NoteParagraph { Kind = NoteBlockKind.DisplayMath, Runs = [new NoteTextRun(source)] },
+            new NoteParagraph { Kind = NoteBlockKind.DisplayMath, Runs = [new NoteTextRun(expected)] }
+        ] });
+        var window = CreateWindow(app, noteId);
+        try
+        {
+            ShowHidden(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            var formulas = DisplayMathButtons(editor).Select(FindFormulaControl).ToArray();
+            Assert.IsFalse(formulas.Any(formula => formula is null || formula.HasError));
+            Assert.AreEqual(formulas[1]!.ActualHeight, formulas[0]!.ActualHeight, .1,
+                "Source line breaks must render with the expected row layout.");
+            Assert.AreEqual(formulas[1]!.ActualWidth, formulas[0]!.ActualWidth, .1);
+            Assert.AreEqual(source, Text(app.GetNote(noteId).Document.Paragraphs[0]));
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
     public void DisplayBlockCopyAddsDelimitersAndRichPasteKeepsItsSemanticType()
     {
         var app = NotesApplication.Start(new MemoryNotesStore());
@@ -614,7 +697,11 @@ public sealed class NoteDisplayMathInteractionTests
 
     private static NoteWindow CreateWindow(NotesApplication app, Guid noteId) => new(
         app.GetNote(noteId),
-        (_, document) => { app.UpdateDocument(noteId, document); return null; },
+        (_, document) =>
+        {
+            try { app.UpdateDocument(noteId, document); return null; }
+            catch (System.IO.InvalidDataException exception) { return exception.Message; }
+        },
         (_, _) => null,
         (_, _) => null,
         (_, undo) =>

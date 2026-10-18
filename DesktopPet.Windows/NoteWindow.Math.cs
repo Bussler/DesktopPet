@@ -274,8 +274,11 @@ public partial class NoteWindow
         }));
     }
 
+    // A display source owns its paragraph, even when WPF splits it into multiple spans.
     private static bool IsInsideMathSource(TextPointer position, NoteInlineMathSourceSpan source) =>
-        position.CompareTo(source.ContentStart) >= 0 && position.CompareTo(source.ContentEnd) <= 0;
+        source.IsDisplayMath
+            ? position.Paragraph == source.ContentStart.Paragraph
+            : position.CompareTo(source.ContentStart) >= 0 && position.CompareTo(source.ContentEnd) <= 0;
 
     private void RefreshInlineMathAppearance()
     {

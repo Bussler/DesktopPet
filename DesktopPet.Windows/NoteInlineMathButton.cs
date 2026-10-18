@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -58,7 +59,7 @@ internal sealed class NoteInlineMathButton : WpfButton
             {
                 FormulaControl = new FormulaControl
                 {
-                    Formula = expression,
+                    Formula = isDisplayMath ? AddDisplayLineBreaks(expression) : expression,
                     Scale = fontSize,
                     Foreground = foreground,
                     HorizontalAlignment = isDisplayMath ? System.Windows.HorizontalAlignment.Center : System.Windows.HorizontalAlignment.Left,
@@ -185,6 +186,28 @@ internal sealed class NoteInlineMathButton : WpfButton
         return !string.IsNullOrWhiteSpace(expression);
     }
 
+    private static string AddDisplayLineBreaks(string expression)
+    {
+        var groupDepth = 0;
+        var environmentDepth = 0;
+        // Keep newlines within LaTeX groups/environments as formatting whitespace.
+        return Regex.Replace(expression, @"\\(?:begin|end)\{[^}]+\}|\\[^\r\n]|[{}]|\r\n|\r|\n", match =>
+        {
+            var token = match.Value;
+            if (token.StartsWith(@"\begin{")) environmentDepth++;
+            else if (token.StartsWith(@"\end{")) environmentDepth = Math.Max(0, environmentDepth - 1);
+            else if (token == "{") groupDepth++;
+            else if (token == "}") groupDepth = Math.Max(0, groupDepth - 1);
+            else if (token is "\r\n" or "\r" or "\n" && groupDepth == 0 && environmentDepth == 0)
+            {
+                // An explicit LaTeX row break already ends this source line.
+                var preceding = expression.AsSpan(0, match.Index).TrimEnd(" \t");
+                if (!preceding.EndsWith(@"\\", StringComparison.Ordinal)) return @"\\";
+            }
+            return token;
+        });
+    }
+
     private static bool TryRemoveDisplayDelimiters(string source, out string expression)
     {
         expression = string.Empty;
@@ -207,5 +230,13 @@ internal sealed class NoteInlineMathButton : WpfButton
 
 internal sealed class NoteInlineMathSourceSpan : System.Windows.Documents.Span
 {
-    public bool IsDisplayMath { get; set; }
+    // WPF copies dependency properties when it splits a span during typing.
+    public static readonly DependencyProperty IsDisplayMathProperty = DependencyProperty.Register(
+        nameof(IsDisplayMath), typeof(bool), typeof(NoteInlineMathSourceSpan), new PropertyMetadata(false));
+
+    public bool IsDisplayMath
+    {
+        get => (bool)GetValue(IsDisplayMathProperty);
+        set => SetValue(IsDisplayMathProperty, value);
+    }
 }
