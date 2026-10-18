@@ -2,7 +2,7 @@
 
 ## Artifact
 
-- Candidate: C:\Users\matri\.codex\worktrees\notes-markdown-math-links\DesktopPet\artifacts\notes-toolbar-scroll-20261006
+- Candidate: `artifacts/notes-toolbar-scroll-20261006` (relative to the source checkout)
 - Launch: app\DesktopPet.Windows.exe
 - Application DLL SHA-256: 6C28CD2592862519C139BE17D62647411F3269C9D3C559E403DC9F42AD2D1168
 - Launcher SHA-256: F870F8947EB7239B5D0C7842ACDE8217ED24324F45B2CE14B34A9EF53AE8B99A

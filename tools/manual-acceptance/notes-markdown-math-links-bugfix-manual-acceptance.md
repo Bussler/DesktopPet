@@ -2,7 +2,7 @@
 
 ## Current artifact
 
-- Candidate: C:\Users\matri\.codex\worktrees\notes-markdown-math-links\DesktopPet\artifacts\notes-markdown-math-links-bugfix-20261006
+- Candidate: `artifacts/notes-markdown-math-links-bugfix-20261006` (relative to the source checkout)
 - Launch: app\DesktopPet.Windows.exe
 - Application DLL SHA-256: 272A160AEA6D8C1B5B2AE940B0F543E6426876274832E8F2AA4FF45694893BDC
 - Launcher SHA-256: F870F8947EB7239B5D0C7842ACDE8217ED24324F45B2CE14B34A9EF53AE8B99A

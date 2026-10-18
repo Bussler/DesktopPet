@@ -5,7 +5,7 @@ This guide requires a source checkout. For installation, initial cloning, and th
 ## Requirements
 
 - Windows and PowerShell. Windows PowerShell 5.1 runs the build and test workflows; artwork regeneration requires PowerShell 7.
-- Git and repository access, or an extracted source archive.
+- Git, or an extracted source archive.
 - The Windows x64 .NET SDK specified by [global.json](../global.json): `10.0.401`, with `latestPatch` roll-forward within the `10.0.4xx` feature band and no prerelease SDKs. A runtime-only install cannot compile the project. Visual Studio is optional.
 - Access to NuGet feeds for dependencies not already cached. Versions are central in [Directory.Packages.props](../Directory.Packages.props); checked-in `packages.lock.json` files make locked restore reproducible.
 
@@ -48,6 +48,7 @@ The script restores only the app project in locked mode, builds through `dotnet 
 
 ```text
 README.md
+LICENSE
 app/
   DesktopPet.Windows.exe
   ... runtime files and Assets/
@@ -61,7 +62,7 @@ The script prints the executable path. Run that copy to check a release. To choo
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Build-AndPublish.ps1 -CandidateDirectory .\artifacts\my-build -DotnetExe C:\path\to\dotnet.exe
 ```
 
-The output directory must not already exist; relative paths resolve from the repository root. [Complete-ReleaseCandidate.ps1](../tools/Complete-ReleaseCandidate.ps1) checks the executable and copies an explicit list of user guides. Developer documentation, specifications, research, and manual checklists stay in the source checkout. Keep generated output and verification evidence out of Git.
+The output directory must not already exist; relative paths resolve from the repository root. [Complete-ReleaseCandidate.ps1](../tools/Complete-ReleaseCandidate.ps1) checks the executable and copies the project license and an explicit list of user guides and previews. Runtime license files are included under `app/licenses/`. Developer documentation, specifications, research, and manual checklists stay in the source checkout. Keep generated output and verification evidence out of Git.
 
 The bundled runtime does not receive updates from an installed runtime. To service it, update the pinned SDK and any affected dependency locks deliberately, validate, and publish a new package.
 
@@ -69,7 +70,7 @@ The bundled runtime does not receive updates from an installed runtime. To servi
 
 | Symptom | Check |
 | --- | --- |
-| `git clone` is denied | Confirm repository access and GitHub authentication, or obtain a source archive. |
+| `git clone` fails | Check the repository URL and network access, or download a source archive from GitHub. |
 | `dotnet` is missing or the SDK is incompatible | Reopen PowerShell after installation; run `dotnet --list-sdks` and compare with `global.json`. Check the per-user SDK or pass `-DotnetExe`. |
 | PowerShell blocks a script | Use the `powershell.exe -NoProfile -ExecutionPolicy Bypass -File` commands above; the override lasts only for that process. |
 | Restore fails | Check feed access and the full restore error. Keep locked mode; do not delete lock files to hide a mismatch. |
@@ -81,7 +82,7 @@ The bundled runtime does not receive updates from an installed runtime. To servi
 
 | Script | Purpose |
 | --- | --- |
-| `tools\Complete-ReleaseCandidate.ps1` | Assemble documentation after publishing; requires `app\DesktopPet.Windows.exe`. |
+| `tools\Complete-ReleaseCandidate.ps1` | Assemble the project license and user guides after publishing; requires `app\DesktopPet.Windows.exe`. |
 | `tools\Test-HoodSpriteTransparency.ps1` | Validate transparent frame corners; accepts `-AssetsDirectory`. |
 | `tools\Test-HoodRunSprites.ps1` | Validate Hood foot visibility, clipping, mirrors, and stride continuity. |
 | `tools\Test-AlternatePetSprites.ps1` | Validate Pip/Crumb artwork, feet, strides, and mirrors. |

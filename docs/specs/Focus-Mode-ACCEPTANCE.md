@@ -22,7 +22,7 @@ The user subsequently requested removal of the Windows notification-settings but
 
 The user requested direct in-Hood control and confirmed existing priority exceptions and restoration on Pause, focus expiry, Stop or close. Options now includes **Do not disturb during focus**, initially unchecked and retained until app exit. Resume reacquires DND; breaks leave it alone. The isolated undocumented Windows COM integration preserves pre-existing DND and different external profile changes, verifies writes by readback, retains failed restoration for cleanup retry, and reports failures without stopping the timer. This supersedes the original manual-only notification mode below.
 
-Final candidate: `C:\github\DesktopPet\artifacts\hood-focus-auto-dnd-20261018-v2\app\DesktopPet.Windows.exe`.
+Final candidate: `artifacts\hood-focus-auto-dnd-20261018-v2\app\DesktopPet.Windows.exe`.
 
 | Check | Result |
 | --- | --- |
@@ -75,13 +75,13 @@ The review found that break expiry ignored an unsuccessful `Window.Activate()` r
 | Check | Result |
 | --- | --- |
 | `tools/Test.ps1` with SDK 10.0.401 | Passed: **440 Core + 644 Windows = 1,084 tests**, zero failures/skips, locked restore and all sprite checks passed. |
-| Final test evidence | `DesktopPet.Tests/TestResults/matri_DESKTOP-8BVGT3G_2026-10-15_11_04_49_net10.0.trx` (Core), `matri_DESKTOP-8BVGT3G_2026-10-15_11_04_52_net10.0.trx` (Windows). |
+| Final test evidence | TRX files under `DesktopPet.Tests/TestResults`, dated 2026-10-15 at 11:04:49 (Core) and 11:04:52 (Windows). |
 | `tools/Build-AndPublish.ps1 -CandidateDirectory artifacts/hood-focus-mode-activation-fix-20261015` | Passed independently of tests: self-contained `win-x64` app, assets, README and user guides. |
 | Package contents | Root contains exactly `README.md`, `app`, `docs`; Focus guide included; no specs, acceptance records, scratch directories, test assemblies, or TRX results. All **29 packaged local links** resolve. |
 | Source documentation | All **49 local links** in updated user/index/acceptance/checklist documents resolve. `git diff --check` passes. |
 | Rendered previews | Light sticky-notes and dark studio reviewed offline; eight theme/style combinations checked by WPF tests. These are not OS window/DPI acceptance. |
 
-Candidate executable: `C:\github\DesktopPet\artifacts\hood-focus-mode-activation-fix-20261015\app\DesktopPet.Windows.exe`. This supersedes `hood-focus-mode-20261015`, which lacks the activation-denial fallback.
+Candidate executable: `artifacts\hood-focus-mode-activation-fix-20261015\app\DesktopPet.Windows.exe`. This supersedes `hood-focus-mode-20261015`, which lacks the activation-denial fallback.
 
 | Candidate file | SHA-256 |
 | --- | --- |
@@ -103,11 +103,11 @@ The existing application clock requests the Windows information sound once when 
 | --- | --- |
 | Focus interaction tests | **30 passed**, including exact/overshoot expiry, one sound per phase while minimized, paused time, silent Skip/cleanup and all four pets' break-click routing. |
 | `tools/Test.ps1`, SDK 10.0.401 | **440 Core + 647 Windows = 1,087 passed**, zero failures/skips; locked restore and all sprite validators passed. |
-| Final test evidence | `DesktopPet.Tests/TestResults/matri_DESKTOP-8BVGT3G_2026-10-15_19_29_43_net10.0.trx` (Core), same filename with `net10.0[1].trx` (Windows). Sound calls are captured, not played, by these tests. |
+| Final test evidence | TRX files under `DesktopPet.Tests/TestResults`, dated 2026-10-15 at 19:29:43, with `net10.0.trx` (Core) and `net10.0[1].trx` (Windows) suffixes. Sound calls are captured, not played, by these tests. |
 | `tools/Build-AndPublish.ps1 -CandidateDirectory artifacts/hood-focus-sound-notes-20261015` | Passed separately after the full test run; self-contained `win-x64` package. |
 | Package and documentation | Only `README.md`, `app`, `docs` at root; updated Focus guide included; source-only specs/tests/scratch excluded; all **29 package links** and **19 changed-source documentation links** resolve. `git diff --check` passed. |
 
-Follow-up executable: `C:\github\DesktopPet\artifacts\hood-focus-sound-notes-20261015\app\DesktopPet.Windows.exe`.
+Follow-up executable: `artifacts\hood-focus-sound-notes-20261015\app\DesktopPet.Windows.exe`.
 
 | Follow-up candidate file | SHA-256 |
 | --- | --- |
@@ -132,7 +132,7 @@ All 32 Focus interaction cases passed with compact/default and expanded layouts 
 | `tools/Build-AndPublish.ps1 -CandidateDirectory artifacts/hood-focus-compact-20261015` | Passed separately after testing; self-contained `win-x64` package. |
 | Contents and links | Updated user guide included; root limited to `README.md`, `app`, `docs`; source/test/scratch exclusions verified. All **29 packaged** and **19 changed-source documentation** local links resolve. `git diff --check` passed. |
 
-Current compact candidate: `C:\github\DesktopPet\artifacts\hood-focus-compact-20261015\app\DesktopPet.Windows.exe`. Use this candidate for all three pending follow-up native checks; it includes the sound/Notes changes.
+Current compact candidate: `artifacts\hood-focus-compact-20261015\app\DesktopPet.Windows.exe`. Use this candidate for all three pending follow-up native checks; it includes the sound/Notes changes.
 
 | Compact candidate file | SHA-256 |
 | --- | --- |
@@ -148,7 +148,7 @@ The new default-player regression failed against the previous SystemSound implem
 
 `tools/Build-AndPublish.ps1 -CandidateDirectory artifacts/hood-focus-little-ripple-20261015` passed separately. Package verification found the exact WAV embedded once, all **29 local links** valid, and source/test/scratch files excluded. `git diff --check` passed.
 
-Latest candidate: `C:\github\DesktopPet\artifacts\hood-focus-little-ripple-20261015\app\DesktopPet.Windows.exe`. Use this package for the pending native checks above, including hearing Little Ripple once at each natural completion and verifying Windows/app volume and mute. No packaged playback or native acceptance is claimed by automated tests.
+Latest candidate: `artifacts\hood-focus-little-ripple-20261015\app\DesktopPet.Windows.exe`. Use this package for the pending native checks above, including hearing Little Ripple once at each natural completion and verifying Windows/app volume and mute. No packaged playback or native acceptance is claimed by automated tests.
 
 | Candidate file | SHA-256 |
 | --- | --- |

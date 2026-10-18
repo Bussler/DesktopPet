@@ -2,10 +2,14 @@
 
 Hood is an animated Windows desktop companion with sticky notes. Choose Hood the owl, Pip the fox, Crumb the mouse, or Puddle the slime; feed your pet, let it nap, and give it room to roam. Use notes for reminders, formatted text, checklists, tables, code, and equations. Settings and notes stay on your computer, with no account or network connection needed to use the app.
 
+![Hood enjoying a little attention](docs/previews/hood-attention/hood-attention.gif)
+
 ## Install and run
 
-1. Obtain a published build, or [build from source](#build-from-source) below.
-2. Extract the entire package to a folder you want to keep. Keep `README.md`, `app/`, and `docs/` together.
+Prebuilt downloads are not published yet. [Build from source](#build-from-source) to create a runnable package.
+
+1. Build the package using the instructions below.
+2. Keep the entire package folder together, including `app/` and `docs/`.
 3. Run `app\DesktopPet.Windows.exe`. The pet appears on your desktop and its icon appears in the Windows notification area.
 
 The published app targets **64-bit Windows (`win-x64`)** and includes its .NET runtime. There is no separate installer or runtime installation. Create a shortcut to the executable if desired. Enable **Start Hood when I sign in** in Settings after placing the app in its intended folder.
@@ -56,30 +60,15 @@ For advanced settings, quit before editing YAML. See [configuration](docs/config
 
 ## Build from source
 
-1. On Windows, install [Git for Windows](https://git-scm.com/downloads/win) and the **Windows x64 .NET SDK 10.0.401** from [Microsoft's .NET 10 download page](https://dotnet.microsoft.com/en-us/download/dotnet/10.0). `global.json` permits later `10.0.4xx` patches; a runtime alone or a different SDK feature band is insufficient. PowerShell is also required; Visual Studio is optional.
-2. Open a new PowerShell window, clone the repository into your chosen parent folder, and enter it (repository access is required):
-
-   ```powershell
-   git clone https://github.com/Bussler/DesktopPet.git
-   Set-Location DesktopPet
-   dotnet --version
-   ```
-
-3. Build and package from the repository root. The script restores locked dependencies from NuGet, compiles the app, and publishes it with its runtime, assets, and user guides. Internet access is needed for uncached dependencies.
-
-   ```powershell
-   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Build-AndPublish.ps1
-   ```
-
-4. Run the executable path printed by the script: `artifacts\hood-build-yyyyMMdd-HHmmss\app\DesktopPet.Windows.exe`. Keep the whole output folder together.
-
-To validate a source change, run the separate test workflow; packaging does not run tests:
+On Windows, install [Git for Windows](https://git-scm.com/downloads/win) and the **Windows x64 .NET SDK 10.0.401** from [Microsoft's download page](https://dotnet.microsoft.com/en-us/download/dotnet/10.0). Later `10.0.4xx` patches are supported. Open PowerShell and run:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Test.ps1
+git clone https://github.com/Bussler/DesktopPet.git
+Set-Location DesktopPet
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Build-AndPublish.ps1
 ```
 
-The scripts prefer `%USERPROFILE%\.dotnet\dotnet.exe` if present, otherwise `dotnet` on PATH. Add `-DotnetExe C:\path\to\dotnet.exe` to select the installed SDK explicitly. The process-only execution-policy option above avoids changing your PowerShell configuration. Developer commands, output options, and troubleshooting are in `docs/build.md` in the source checkout.
+Run the executable path printed by the script: `artifacts\hood-build-yyyyMMdd-HHmmss\app\DesktopPet.Windows.exe`. Internet access is needed for uncached dependencies. Packaging does not run tests; the source checkout's [build and development guide](https://github.com/Bussler/DesktopPet/blob/main/docs/build.md) covers tests, SDK selection, output options, and troubleshooting.
 
 ## More help
 

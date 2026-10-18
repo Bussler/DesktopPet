@@ -14,7 +14,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 ## Microsoft .NET runtime
 
-The self-contained Windows publish includes Microsoft .NET and Windows Desktop runtime files. Their license and third-party notice files are available in the restored .NET runtime packages and Windows Desktop SDK; `dotnet publish` does not emit them into the app folder. The behavior-test-only MSTest dependencies are not part of the app publish.
+The self-contained Windows publish includes Microsoft .NET and Windows Desktop runtime files. Their license and notice files are copied from the resolved runtime packages into `app/licenses/<runtime-package>/`. WPF and Windows Forms notices are included under `app/licenses/windowsdesktop/`; the source copies in `docs/licenses/windowsdesktop/` come from the [.NET 10.0.12 source commit](https://github.com/dotnet/dotnet/tree/95017c711e6afc1085133d440e42b4bd78155701) recorded by the Windows Desktop runtime package. Refresh these notices when updating the SDK/runtime. The behavior-test-only MSTest dependencies are not part of the app publish.
 
 The runtime is self-contained, so it does not receive updates from an installed .NET runtime. See Microsoft's [self-contained deployment guidance](https://learn.microsoft.com/en-us/dotnet/core/deploying/) and [.NET support policy](https://dotnet.microsoft.com/en-us/platform/support/policy/dotnet-core) for servicing requirements.
 

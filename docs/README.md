@@ -31,7 +31,6 @@ These references belong to the source checkout and are excluded from published p
 | [WPF frontend decision](adr/0001-wpf-windows-frontend.md) | Why the Windows frontend uses WPF with a portable core. |
 | [Session recovery decision](adr/0002-version-and-recover-local-session-state.md) | Versioned session data and acknowledged recovery. |
 | [Animation assets](previews/pet-animations/README.md) | Alternate-pet viewer, source assets, and regeneration. |
-| [Artwork concepts](previews/pet-prototypes/README.md) | Retained concept variants and selected character designs. |
 
 ## Specifications and history
 

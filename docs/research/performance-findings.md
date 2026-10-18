@@ -41,7 +41,7 @@ Latency values cover processing through the Dispatcher and layout queue. They ar
 
 ## Integrated Release results after implementation
 
-Ten implementation tickets are complete in the candidate worktree: DPI-sized sprite decoding, local inline formatting, unchanged-crop suppression, shared Notes appearance resources, targeted typing recognition, cheaper toolbar/selection work, coalesced Notes-list updates, incremental history totals, releasing decoded sprites while hidden, and compressed rollback retention for Settings previews. Focused regressions and paired probes for each change are recorded in `.codex/performance-ticket-01-20261008.md` through `.codex/performance-ticket-10-20261008.md`.
+Ten implementation tickets are complete in the candidate worktree: DPI-sized sprite decoding, local inline formatting, unchanged-crop suppression, shared Notes appearance resources, targeted typing recognition, cheaper toolbar/selection work, coalesced Notes-list updates, incremental history totals, releasing decoded sprites while hidden, and compressed rollback retention for Settings previews. Focused regressions and paired probes for each change were recorded during the investigation; the integrated evidence is summarized below.
 
 The integrated matrix compared the pre-change Release assemblies with the final candidate in three sequential fresh-process pairs per workload. Both sides used the same `MemoryProbe.dll` (SHA-256 `45E6AEC920FB70615EB1FFE4BC0EC4663B0DFB563DC4C2992C888F668E77396C`), SDK 10.0.401, .NET and Windows Desktop runtime 10.0.12, x64, the same process defaults, 1.25× DPI, and the same Hood manifest and PNG (SHA-256 `9D8377DB9186E6C62C7370FA252A77AF81E9B97B1A3C3C4147442408CDA448AE` and `81327C14B33AA3B17C678BFADE63D7D51B91E4909BD19E50D09F6B7CCBE7E200`). The original Windows/Core assembly hashes were `5A4CF85BB55B7499B0A11818B9AD5CCBC3B7527EC08E3174C324359CA795AB94` and `EFC2A01DBE15852A5EBC84B642E8877BB90EB739B61139F0056936C9FDDCB109`; the final candidate hashes were `1D32CEB171D4C4C6D64699519877A8E8AC83C33CD7B9DA990C6A1A4EF586CE38` and `B343912B214D88AAA8E318703EA36924DD178846BF6BA45D95923D7B64B985A6`. The same diagnostic probe was verified against both builds. Each run used the default runtime tiering settings and no extra warmup. The reported maximum is the maximum of periodic process samples, not a continuous trace.
 
@@ -275,32 +275,11 @@ The original investigation below records the pre-change baseline and candidate p
 
 ## Evidence and reproduction
 
-The session bundles are local and ignored by Git. They preserve detailed reports, raw data, and probe sources; the essential findings above remain readable without them.
+The measurements above are historical summaries. Detailed reports, raw measurements, and diagnostic probe sources were retained locally during the investigation and are not part of this repository. The original probes cannot be reproduced from this checkout alone.
 
-- RAM investigation bundle (`.codex/memory-diagnosis-20261008/REPORT.md`): `measurements.json`, raw scenario `.jsonl` files, `Program.cs`, and `MemoryProbe.csproj`.
-- Notes latency investigation bundle (`.codex/notes-latency-20261008/REPORT.md`): `matrix.json`, `components.json`, `formatting-pair.json`, `environment.json`, and probe source/project/runtime configuration.
-- Integrated ticket 11 evidence (`.codex/performance-ticket-11-20261008.md`) and raw paired runs in `.scratch/hood-performance/results-t11/`.
+For a new comparison, use the pinned SDK and matching Release builds with controlled notes, pet assets, DPI, elapsed time, and fresh processes. Use an isolated `HOOD_DATA_DIRECTORY`, exercise actual editor input and saving, and record the counter definitions and runtime settings described above. See the [build workflow](../build.md) for validation and packaging commands. Rerun native visual and interaction checks separately.
 
-The original RAM probe was run in `C:\github\DesktopPet`; its records are copied into this worktree for reference. Latency measurements were made in this worktree. Both reports identify the same source commit. This consolidated document reuses those measurements; it does not claim a new benchmark run.
-
-To reproduce, place the corresponding probe source/project in `.scratch/memory-diagnosis-20261008` or `.scratch/notes-latency-20261008`, and build with the pinned SDK. The projects reference the actual Windows app:
-
-```powershell
-$sdk = Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'
-& $sdk build .\.scratch\memory-diagnosis-20261008\MemoryProbe.csproj -c Release --disable-build-servers -m:1
-& $sdk .\.scratch\memory-diagnosis-20261008\bin\Release\net10.0-windows\MemoryProbe.dll $PWD.Path hood original 60
-& $sdk .\.scratch\memory-diagnosis-20261008\bin\Release\net10.0-windows\MemoryProbe.dll $PWD.Path hood reuse 60
-& $sdk .\.scratch\memory-diagnosis-20261008\bin\Release\net10.0-windows\MemoryProbe.dll $PWD.Path hood half-reuse 5
-
-& $sdk build .\.scratch\notes-latency-20261008\NotesLatencyProbe.csproj -c Release --disable-build-servers -m:1
-& $sdk .\.scratch\notes-latency-20261008\bin\Release\net10.0-windows\NotesLatencyProbe.dll .\.scratch\notes-latency-20261008 matrix
-& $sdk .\.scratch\notes-latency-20261008\bin\Release\net10.0-windows\NotesLatencyProbe.dll .\.scratch\notes-latency-20261008 components
-& $sdk .\.scratch\notes-latency-20261008\bin\Release\net10.0-windows\NotesLatencyProbe.dll .\.scratch\notes-latency-20261008 formatting-pair
-```
-
-Additional RAM modes are `hidden`, `preview`, `notes`, and `notes-shared`; the detailed report retains their commands and sampled boundaries. WPF probes require normal Windows access; the restricted sandbox can deny the editor menu's clipboard command-status query. No paste or clipboard overwrite was performed.
-
-RAM probes used operational 150/200 MiB diagnostic markers during development. Those markers are not agreed product limits; raw numbers and the named counters are authoritative. The initial latency probe replaced a selected character repeatedly and did not exercise repeated saving; those results were discarded. The documented latency runs use WPF text composition, assert accepted text length/style, and check save status after each operation.
+The original probes used synthetic notes rather than personal data. RAM probes used operational 150/200 MiB diagnostic markers; those markers are not agreed product limits. The initial latency probe replaced a selected character repeatedly without repeated saving, so those results were discarded. The documented latency runs used WPF text composition, asserted accepted text length/style, and checked save status after each operation.
 
 ### Source locations
 

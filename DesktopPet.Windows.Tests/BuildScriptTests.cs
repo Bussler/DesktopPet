@@ -67,6 +67,19 @@ public sealed class BuildScriptTests
         Assert.AreEqual(0, fixture.Commands.Length);
     }
 
+    [TestMethod]
+    public async Task PackageIncludesLicenseAndReadmePreviewWithoutSourceOnlyFiles()
+    {
+        using var fixture = new ScriptFixture();
+        fixture.PreparePackage();
+        var result = await fixture.RunAsync("Complete-ReleaseCandidate.ps1");
+        Assert.AreEqual(0, result.ExitCode, result.Error);
+        var candidate = Path.Combine(fixture.Root, "candidate");
+        Assert.AreEqual("project license", File.ReadAllText(Path.Combine(candidate, "LICENSE")));
+        Assert.AreEqual("preview", File.ReadAllText(Path.Combine(candidate, "docs", "previews", "hood-attention", "hood-attention.gif")));
+        Assert.IsFalse(File.Exists(Path.Combine(candidate, "docs", "developer-only.md")));
+    }
+
     private sealed class ScriptFixture : IDisposable
     {
         public string Root { get; } = Path.Combine(Path.GetTempPath(), "Hood script tests " + Guid.NewGuid());
@@ -94,6 +107,24 @@ public sealed class BuildScriptTests
                     """);
         }
 
+        public void PreparePackage()
+        {
+            File.Copy(Path.Combine(AppContext.BaseDirectory, "tools", "Complete-ReleaseCandidate.ps1"),
+                Path.Combine(Root, "tools", "Complete-ReleaseCandidate.ps1"), overwrite: true);
+            Directory.CreateDirectory(Path.Combine(Root, "candidate", "app"));
+            File.WriteAllText(Path.Combine(Root, "candidate", "app", "DesktopPet.Windows.exe"), "app");
+            File.WriteAllText(Path.Combine(Root, "README.md"), "readme");
+            File.WriteAllText(Path.Combine(Root, "LICENSE"), "project license");
+            foreach (var guide in new[] { "changing-sprites.md", "configuration.md", "focus.md", "hood-animations.md",
+                "notes.md", "placement.md", "recovery.md", "sleep-and-recovery.md", "ui-styles.md", "third-party-notices.md",
+                "previews/hood-actions.png", "previews/hood-attention/hood-attention.gif", "developer-only.md" })
+            {
+                var path = Path.Combine(Root, "docs", guide);
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.WriteAllText(path, "preview");
+            }
+        }
+
         public async Task<(int ExitCode, string Output, string Error)> RunAsync(string script, string failingStep = "")
         {
             var start = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe"))
@@ -103,12 +134,17 @@ public sealed class BuildScriptTests
                 WorkingDirectory = Path.Combine(Root, "caller")
             };
             foreach (var argument in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
-                Path.Combine(Root, "tools", script), "-DotnetExe", Path.Combine(Root, "dotnet.ps1") })
+                Path.Combine(Root, "tools", script) })
                 start.ArgumentList.Add(argument);
-            if (script == "Build-AndPublish.ps1")
+            if (script != "Complete-ReleaseCandidate.ps1")
+            {
+                start.ArgumentList.Add("-DotnetExe");
+                start.ArgumentList.Add(Path.Combine(Root, "dotnet.ps1"));
+            }
+            if (script != "Test.ps1")
             {
                 start.ArgumentList.Add("-CandidateDirectory");
-                start.ArgumentList.Add("candidate");
+                start.ArgumentList.Add(script == "Complete-ReleaseCandidate.ps1" ? Path.Combine(Root, "candidate") : "candidate");
             }
             start.Environment["SCRIPT_TEST_ROOT"] = Root;
             start.Environment["SCRIPT_TEST_FAIL"] = failingStep;

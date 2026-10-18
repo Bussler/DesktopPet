@@ -12,7 +12,7 @@ The Pet attention poses can be regenerated independently with `tools/Generate-He
 
 Wave uses the original twelve calibrations retained in `wave-12-poses.json`, remapped around four new in-between poses. Run `tools/Generate-HeadphonePoses.ps1 -Action wave` to regenerate only Wave: retained poses keep their calibration; new poses interpolate adjacent fits, with Crumb's new earbuds measured from the pink ears.
 
-Crumb's chubby Cozy artwork was replaced on 2026-10-16. His fitting now measures the saturated pink inner-ear regions in every packed frame, keeps clearance around each bud and follows the ear tilt. Head turns hide an occluded far bud; walking retains the inward-facing rose tip. Hood, Pip and Puddle retain their existing fitted poses. See [Crumb's current earbud preview](../../docs/previews/pet-animations/crumb-earbuds.png).
+Crumb's chubby Cozy artwork was replaced on 2026-10-16. His fitting now measures the saturated pink inner-ear regions in every packed frame, keeps clearance around each bud and follows the ear tilt. Head turns hide an occluded far bud; walking retains the inward-facing rose tip. Hood, Pip and Puddle retain their existing fitted poses.
 
 Walking places each bud 12 logical pixels below its measured inner-ear anchor, nearer the ear entrance as shown in the user's marked reference. This adjustment applies to both walking directions and leaves other poses unchanged.
 

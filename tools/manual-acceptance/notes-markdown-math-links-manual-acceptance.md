@@ -4,7 +4,7 @@ Run this checklist only against the final package recorded below. Use an isolate
 
 ## Tested artifact and setup
 
-- Package folder: C:\Users\matri\.codex\worktrees\notes-markdown-math-links\DesktopPet\artifacts\notes-markdown-math-links-20261006.
+- Package folder: `artifacts/notes-markdown-math-links-20261006` (relative to the source checkout).
 - Executable SHA-256: F870F8947EB7239B5D0C7842ACDE8217ED24324F45B2CE14B34A9EF53AE8B99A.
 - Windows edition/build and primary display resolution: Windows 11 Home, build 26200; 2752 x 1152.
 - Package startup smoke: the executable remained alive for five seconds with isolated data; this confirms process startup only, not visual or interaction acceptance.

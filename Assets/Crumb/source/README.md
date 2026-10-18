@@ -1,6 +1,6 @@
 # Chubby Cozy Crumb animation sources
 
-Approved baseline: `reference.png`, copied from `docs/previews/pet-prototypes/crumb-redesign-2026-10-16/04-cozy-chubby.png`.
+Approved character baseline: `reference.png`, retained here alongside the animation sources.
 
 Original hairstyle and two mouse incisors retained. No glasses. New source sheets generated using built-in imagegen on 2026-10-16. Pack with PowerShell 7: `tools/Pack-AlternatePetSprites.ps1 -Pet Crumb`. Runtime keeps the existing Hood-compatible action, timing, scale and persistence contract. Walking uses the existing footless-body/one-leg rig and exact leftward mirroring. Earbuds are a separate calibrated runtime layer, not painted onto these source images.
 

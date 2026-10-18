@@ -25,5 +25,16 @@
 
   <ItemGroup>
     <PackageReference Include="WpfMath" />
+    <Content Include="..\docs\licenses\windowsdesktop\*.txt" Link="licenses\windowsdesktop\%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <Target Name="IncludeRuntimeNotices" AfterTargets="ComputeFilesToPublish" Condition="'$(SelfContained)' == 'true'">
+    <ItemGroup>
+      <_RuntimeNotice Include="%(ResolvedRuntimePack.PackageDirectory)\LICENSE*;%(ResolvedRuntimePack.PackageDirectory)\THIRD-PARTY-NOTICES*"
+                      Condition="'%(ResolvedRuntimePack.FrameworkName)' == 'Microsoft.NETCore.App' or '%(ResolvedRuntimePack.FrameworkName)' == 'Microsoft.WindowsDesktop.App'">
+        <RuntimePack>%(ResolvedRuntimePack.NuGetPackageId)</RuntimePack>
+      </_RuntimeNotice>
+      <ResolvedFileToPublish Include="@(_RuntimeNotice)" RelativePath="licenses\%(_RuntimeNotice.RuntimePack)\%(_RuntimeNotice.Filename)%(_RuntimeNotice.Extension)" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+  </Target>
 </Project>
