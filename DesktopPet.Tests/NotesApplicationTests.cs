@@ -1272,7 +1272,8 @@ public sealed class NotesApplicationTests
             .SetListKind(firstStart, listLength, NoteBlockKind.Bulleted);
 
         Assert.AreEqual("topic\r\nfirst\r\nsecond\r\nafter", listed.GetPlainText());
-        Assert.AreEqual(NoteBlockKind.Bulleted, listed.GetListKind(firstStart, listLength));
+        Assert.AreEqual(NoteBlockKind.Bulleted, listed.Paragraphs[1].Kind);
+        Assert.AreEqual(NoteBlockKind.Bulleted, listed.Paragraphs[2].Kind);
         Assert.AreEqual(NoteTextStyle.Bold, listed.Paragraphs[1].Runs.Single().Style);
 
         var numbered = listed.SetListKind(firstStart, listLength, NoteBlockKind.Numbered);

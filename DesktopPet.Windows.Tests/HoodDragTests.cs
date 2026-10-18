@@ -18,15 +18,13 @@ public sealed class HoodDragTests
         var workArea = new PetBounds(1920, 60, 2560, 1380);
         var display = new DisplayInfo("Right", new PetBounds(1920 / primaryScale, 60 / secondaryScale,
             workArea.Width / secondaryScale, workArea.Height / secondaryScale), false, secondaryScale);
-        var convert = typeof(HoodOverlayWindow).Assembly.GetType("DesktopPet.Windows.WindowsDisplayProvider")!
-            .GetMethod("ToScreenPosition", BindingFlags.Static | BindingFlags.NonPublic)!;
         foreach (var position in new[]
         {
             new PetPosition(display.WorkArea.X, display.WorkArea.Y),
             new PetPosition(display.WorkArea.Right - 480, display.WorkArea.Bottom - 208)
         })
         {
-            var actual = (PetPosition)convert.Invoke(null, [position, display, workArea])!;
+            var actual = WindowsDisplayProvider.ToScreenPosition(position, display, workArea);
             Assert.AreEqual(workArea.X + (position.X - display.WorkArea.X) * secondaryScale, actual.X, 0.001);
             Assert.AreEqual(workArea.Y + (position.Y - display.WorkArea.Y) * secondaryScale, actual.Y, 0.001);
         }
@@ -39,9 +37,8 @@ public sealed class HoodDragTests
     [DataRow(-1d, 1.5d, 1d)]
     public void SlowDrag_CrossesMonitorBoundaryWithoutLosingPointerMovement(double direction, double startScale, double endScale)
     {
-        var assets = typeof(HoodOverlayWindow).Assembly.GetType("DesktopPet.Windows.HoodAssets")!.GetMethod("Load")!
-            .Invoke(null, [Path.Combine(AppContext.BaseDirectory, "Assets", "Hood")])!;
-        var definition = (PetDefinition)assets.GetType().GetProperty("Definition")!.GetValue(assets)!;
+        var assets = HoodAssets.Load(Path.Combine(AppContext.BaseDirectory, "Assets", "Hood"));
+        var definition = assets.Definition;
         var secondary = new DisplayInfo("Secondary", new PetBounds(direction > 0 ? 1920 : -1920, 0, 1920, 1040), false, endScale);
         var session = HoodSession.Start(definition,
             [new("Primary", new PetBounds(0, 0, 1920, 1040), true, startScale), secondary],
@@ -51,8 +48,7 @@ public sealed class HoodDragTests
         var areaOffset = new PetPosition(start.X - session.RoamingArea.X, start.Y - session.RoamingArea.Y);
         session.BeginDragging();
         Action noop = () => { };
-        var pet = (HoodOverlayWindow)Activator.CreateInstance(typeof(HoodOverlayWindow), BindingFlags.Instance | BindingFlags.NonPublic,
-            null, [session, assets, noop, noop, noop, noop, noop, noop], null)!;
+        var pet = new HoodOverlayWindow(session, assets, noop, noop, noop, noop, noop, noop);
         try
         {
             typeof(HoodOverlayWindow).GetField("_dragStartPosition", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(pet, start);
@@ -90,8 +86,6 @@ public sealed class HoodDragTests
 
     private sealed class NoopSessionStore : ISessionStore
     {
-        public HoodSessionSnapshot? Load() => null;
         public void Save(HoodSessionSnapshot snapshot) { }
-        public string? ResetAfterAcknowledgement() => null;
     }
 }

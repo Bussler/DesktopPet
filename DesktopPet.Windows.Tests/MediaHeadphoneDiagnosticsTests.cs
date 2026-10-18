@@ -4,8 +4,33 @@ using DesktopPet.Windows;
 namespace DesktopPet.Windows.Tests;
 
 [TestClass]
+[DoNotParallelize]
 public sealed class MediaHeadphoneDiagnosticsTests
 {
+    [TestMethod]
+    public void DataDirectoryOverrideAndExplicitDiagnosticDirectoryRemainIndependent()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "hood-diagnostic-paths-" + Guid.NewGuid().ToString("N"));
+        var profile = Path.Combine(root, "profile");
+        var explicitDirectory = Path.Combine(root, "explicit");
+        var previousOverride = Environment.GetEnvironmentVariable("HOOD_DATA_DIRECTORY");
+        try
+        {
+            Environment.SetEnvironmentVariable("HOOD_DATA_DIRECTORY", profile);
+            MediaHeadphoneDiagnostics.Report("Profile diagnostic.");
+            MediaHeadphoneDiagnostics.Report("Explicit diagnostic.", explicitDirectory);
+            Assert.AreEqual(profile, HoodDataDirectory.Resolve());
+            Assert.AreEqual("Profile diagnostic.", File.ReadAllText(Path.Combine(profile, "media-headphones.log"))
+                .Split(' ', 2)[1].Trim());
+            StringAssert.Contains(File.ReadAllText(Path.Combine(explicitDirectory, "media-headphones.log")), "Explicit diagnostic.");
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("HOOD_DATA_DIRECTORY", previousOverride);
+            if (Directory.Exists(root)) Directory.Delete(root, true);
+        }
+    }
+
     [TestMethod]
     public void OptionalFeatureFailuresCreateAnAccessibleBoundedLog()
     {

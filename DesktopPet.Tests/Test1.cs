@@ -958,9 +958,6 @@ public sealed class HoodSessionTests
         public int SaveCount { get; private set; }
         public DesktopPet.Core.HoodSessionSnapshot? Snapshot { get; private set; }
 
-        public DesktopPet.Core.HoodSessionSnapshot? Load() => null;
-
-        public string? ResetAfterAcknowledgement() => null;
 
         public void Save(DesktopPet.Core.HoodSessionSnapshot snapshot)
         {

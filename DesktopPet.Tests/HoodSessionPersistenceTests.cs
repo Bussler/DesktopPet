@@ -341,8 +341,6 @@ public sealed class HoodSessionPersistenceTests
 
     private sealed class NoopSessionStore : ISessionStore
     {
-        public HoodSessionSnapshot? Load() => null;
         public void Save(HoodSessionSnapshot snapshot) { }
-        public string? ResetAfterAcknowledgement() => null;
     }
 }

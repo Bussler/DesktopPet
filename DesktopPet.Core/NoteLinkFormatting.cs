@@ -451,25 +451,6 @@ public static class NoteLinkFormatting
     private static int GetTextLength(NoteParagraph paragraph) =>
         NormalizeLineBreaks(string.Concat(paragraph.Runs.Select(run => run.Text))).Length;
 
-    private static void GetCharacterData(IReadOnlyList<NoteTextRun> runs, int length,
-        out NoteTextStyle[] styles, out NoteInlineKind[] kinds, out string?[] destinations)
-    {
-        styles = new NoteTextStyle[length];
-        kinds = new NoteInlineKind[length];
-        destinations = new string?[length];
-        var offset = 0;
-        foreach (var run in runs)
-        {
-            var count = NormalizeLineBreaks(run.Text).Length;
-            for (var index = 0; index < count && offset < length; index++, offset++)
-            {
-                styles[offset] = run.Style;
-                kinds[offset] = run.Kind;
-                destinations[offset] = run.LinkDestination;
-            }
-        }
-    }
-
     private static bool OverlapsInput(int start, int length, (int Start, int Length) input) =>
         input.Length > 0 && start < input.Start + input.Length && start + length > input.Start;
 

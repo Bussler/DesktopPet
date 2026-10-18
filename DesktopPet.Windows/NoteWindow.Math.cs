@@ -29,7 +29,7 @@ public partial class NoteWindow
         {
             ApplyPendingMarkupFormatting();
             var document = ReadEditorDocument();
-            var (start, length) = GetSelectionOffsets(document);
+            var (start, length) = GetSelectionOffsets();
             NotesDocument updated;
             int blockIndex;
             if (length > 0)
@@ -50,8 +50,7 @@ public partial class NoteWindow
             NotesSnapshotValidator.ValidateDocument(updated);
             var sourceStart = updated.GetParagraphRange(blockIndex).Start;
             SetEditorDocument(updated, sourceStart, 0);
-            SetSaveStatus(_updateDocument(_noteId, updated));
-            _lastAcceptedDocument = updated.Copy();
+            SaveEditorDocument(updated);
             UpdateToolbar();
             var paragraph = GetEditorParagraphs(Editor.Document).ElementAt(blockIndex);
             var button = Flatten(paragraph.Inlines).OfType<InlineUIContainer>()
@@ -177,8 +176,7 @@ public partial class NoteWindow
         var scrollPosition = CaptureEditorScrollPosition();
         SetEditorDocument(document, before ? range.Start : range.Start + range.Length + 2, 0);
         RestoreEditorScrollPosition(scrollPosition);
-        SetSaveStatus(_updateDocument(_noteId, document));
-        _lastAcceptedDocument = document.Copy();
+        SaveEditorDocument(document);
         UpdateToolbar();
         return true;
     }
@@ -187,7 +185,7 @@ public partial class NoteWindow
     {
         if (_activeMathSource is not null) return false;
         var document = ReadEditorDocument();
-        var (caret, selectionLength) = GetSelectionOffsets(document);
+        var (caret, selectionLength) = GetSelectionOffsets();
         var target = -1;
         if (selectionLength > 0)
         {
@@ -237,8 +235,7 @@ public partial class NoteWindow
         if (updated.Paragraphs.Count == 0) updated.Paragraphs.Add(new NoteParagraph());
         caretOffset = Math.Min(caretOffset, updated.GetPlainText().Length);
         SetEditorDocument(updated, caretOffset, 0);
-        SetSaveStatus(_updateDocument(_noteId, updated));
-        _lastAcceptedDocument = updated.Copy();
+        SaveEditorDocument(updated);
         UpdateToolbar();
         return true;
     }
@@ -265,7 +262,7 @@ public partial class NoteWindow
             try
             {
                 var document = ReadEditorDocument();
-                var (start, length) = GetSelectionOffsets(document);
+                var (start, length) = GetSelectionOffsets();
                 _activeMathSource = null;
                 SetEditorDocument(document, start, length);
                 UpdateToolbar();

@@ -565,7 +565,7 @@ public partial class NoteWindow : Window
         try
         {
             var document = ReadEditorDocument();
-            var (start, length) = GetSelectionOffsets(document);
+            var (start, length) = GetSelectionOffsets();
             var text = document.GetPlainText();
             var original = _markupOriginalText ?? text;
             var input = GetInsertedRange(original, text);
@@ -680,8 +680,7 @@ public partial class NoteWindow : Window
                 if (emphasisConverted) ApplyTypingEmphasis(typingStyle);
                 if (endsInlineCode) ResetCodeTypingFormat();
             }
-            SetSaveStatus(_updateDocument(_noteId, formatted));
-            _lastAcceptedDocument = formatted.Copy();
+            SaveEditorDocument(formatted);
             UpdateToolbar();
             if (openedMath)
             {
@@ -745,7 +744,7 @@ public partial class NoteWindow : Window
 
     private void ResetDeletedInlineCodeTyping(NotesDocument document)
     {
-        var (start, length) = GetSelectionOffsets(document);
+        var (start, length) = GetSelectionOffsets();
         var (index, offset) = document.GetParagraphPositionAt(start);
         var row = document.Paragraphs[index];
         if (length != 0 || row.Kind == NoteBlockKind.Code) return;
@@ -794,7 +793,7 @@ public partial class NoteWindow : Window
     private bool ContinueHeadingAtCaret()
     {
         var document = ReadEditorDocument();
-        var (start, length) = GetSelectionOffsets(document);
+        var (start, length) = GetSelectionOffsets();
         var (paragraphIndex, localOffset) = document.GetParagraphPositionAt(start);
         if (length != 0 || GetHeadingLevel(document.Paragraphs[paragraphIndex].Kind) == 0) return false;
 
@@ -803,15 +802,14 @@ public partial class NoteWindow : Window
         var scrollPosition = CaptureEditorScrollPosition();
         SetEditorDocument(updated, start + 2, 0);
         RestoreEditorScrollPosition(scrollPosition);
-        SetSaveStatus(_updateDocument(_noteId, updated));
-        _lastAcceptedDocument = updated.Copy();
+        SaveEditorDocument(updated);
         UpdateToolbar();
         return true;
     }
     private bool ContinueCodeAtCaret()
     {
         var document = ReadEditorDocument();
-        var (start, length) = GetSelectionOffsets(document);
+        var (start, length) = GetSelectionOffsets();
         var index = document.GetParagraphIndexAt(start);
         if (document.Paragraphs[index].Kind != NoteBlockKind.Code) return false;
         var (paragraphStart, paragraphLength) = document.GetParagraphRange(index);
@@ -830,7 +828,7 @@ public partial class NoteWindow : Window
             var paragraph = paragraphs.FirstOrDefault(row => Flatten(row.Inlines).OfType<InlineUIContainer>()
                 .Any(inline => inline.Child?.IsKeyboardFocusWithin == true)) ?? Editor.CaretPosition.Paragraph;
             var index = Array.IndexOf(paragraphs, paragraph);
-            if (index < 0) index = document.GetParagraphIndexAt(GetSelectionOffsets(document).Start);
+            if (index < 0) index = document.GetParagraphIndexAt(GetSelectionOffsets().Start);
             var source = document.Paragraphs[index];
             if (source.Cell is { } cell)
                 index = document.Paragraphs.FindLastIndex(row => row.Cell?.TableId == cell.TableId);
@@ -879,7 +877,7 @@ public partial class NoteWindow : Window
         }
 
         var document = ReadEditorDocument();
-        var (start, length) = GetSelectionOffsets(document);
+        var (start, length) = GetSelectionOffsets();
         start = Math.Clamp(start, 0, document.GetPlainText().Length);
         length = Math.Clamp(length, 0, document.GetPlainText().Length - start);
         if (length == 0)
@@ -891,8 +889,7 @@ public partial class NoteWindow : Window
         if (CanApplyInlineStyleLocally(document, start, length) &&
             TryApplyInlineStyleLocally(style, enabled))
         {
-            SetSaveStatus(_updateDocument(_noteId, updated));
-            _lastAcceptedDocument = updated.Copy();
+            SaveEditorDocument(updated);
             UpdateToolbar();
             return;
         }
@@ -900,8 +897,7 @@ public partial class NoteWindow : Window
         var scrollPosition = CaptureEditorScrollPosition();
         SetEditorDocument(updated, start, length);
         RestoreEditorScrollPosition(scrollPosition);
-        SetSaveStatus(_updateDocument(_noteId, updated));
-        _lastAcceptedDocument = updated.Copy();
+        SaveEditorDocument(updated);
         UpdateToolbar();
     }
 
@@ -1143,9 +1139,15 @@ public partial class NoteWindow : Window
         return false;
     }
 
+    private void SaveEditorDocument(NotesDocument document)
+    {
+        SetSaveStatus(_updateDocument(_noteId, document));
+        _lastAcceptedDocument = document.Copy();
+    }
+
     private void RestoreHistory(bool undo)
     {
-        var (start, length) = GetSelectionOffsets(ReadEditorDocument());
+        var (start, length) = GetSelectionOffsets();
         var result = _editHistory(_noteId, undo);
         if (result.Document is null)
         {
@@ -1161,13 +1163,12 @@ public partial class NoteWindow : Window
     private void ApplyListKind(NoteBlockKind kind)
     {
         var document = ReadEditorDocument();
-        var (start, length) = GetSelectionOffsets(document);
+        var (start, length) = GetSelectionOffsets();
         var updated = document.ToggleListKind(start, length, kind);
         var scrollPosition = CaptureEditorScrollPosition();
         SetEditorDocument(updated, start, length);
         RestoreEditorScrollPosition(scrollPosition);
-        SetSaveStatus(_updateDocument(_noteId, updated));
-        _lastAcceptedDocument = updated.Copy();
+        SaveEditorDocument(updated);
         UpdateToolbar();
     }
 
@@ -1180,8 +1181,7 @@ public partial class NoteWindow : Window
             _updatingEditor = true;
             try { ApplyChecklistCompletionAppearance(paragraph, isChecked); }
             finally { _updatingEditor = false; }
-            SetSaveStatus(_updateDocument(_noteId, document));
-            _lastAcceptedDocument = document.Copy();
+            SaveEditorDocument(document);
             UpdateToolbar();
         }
         catch (Exception exception) when (exception is InvalidDataException or ArgumentException or InvalidOperationException)
@@ -1194,7 +1194,7 @@ public partial class NoteWindow : Window
     {
         if (!Editor.Selection.IsEmpty) return false;
         var document = ReadEditorDocument();
-        var (start, _) = GetSelectionOffsets(document);
+        var (start, _) = GetSelectionOffsets();
         var (index, offset) = document.GetParagraphPositionAt(start);
         if (offset != 0 || document.Paragraphs[index].Kind != NoteBlockKind.Checklist) return false;
 
@@ -1207,7 +1207,7 @@ public partial class NoteWindow : Window
     {
         if (!Editor.Selection.IsEmpty) return false;
         var document = ReadEditorDocument();
-        var (caret, _) = GetSelectionOffsets(document);
+        var (caret, _) = GetSelectionOffsets();
         var (index, offset) = document.GetParagraphPositionAt(caret);
         var paragraphLength = document.GetParagraphRange(index).Length;
         var dividerIndex = -1;
@@ -1227,8 +1227,7 @@ public partial class NoteWindow : Window
         if (updated.Paragraphs.Count == 0) updated.Paragraphs.Add(new NoteParagraph());
         caretOffset = Math.Min(caretOffset, updated.GetPlainText().Length);
         SetEditorDocument(updated, caretOffset, 0);
-        SetSaveStatus(_updateDocument(_noteId, updated));
-        _lastAcceptedDocument = updated.Copy();
+        SaveEditorDocument(updated);
         UpdateToolbar();
         return true;
     }
@@ -1237,7 +1236,7 @@ public partial class NoteWindow : Window
     {
         if (!Editor.IsKeyboardFocused || !Editor.Selection.IsEmpty) return false;
         var document = ReadEditorDocument();
-        var (start, _) = GetSelectionOffsets(document);
+        var (start, _) = GetSelectionOffsets();
         var index = document.GetParagraphIndexAt(start);
         if (document.Paragraphs[index].Kind is not (NoteBlockKind.Checklist or NoteBlockKind.Numbered) ||
             document.GetParagraphRange(index).Length != 0) return false;
@@ -1249,7 +1248,7 @@ public partial class NoteWindow : Window
     private bool ContinueListAtCaret()
     {
         var document = ReadEditorDocument();
-        var (start, _) = GetSelectionOffsets(document);
+        var (start, _) = GetSelectionOffsets();
         var paragraphIndex = document.GetParagraphIndexAt(start);
         if (document.Paragraphs[paragraphIndex].Kind is not (NoteBlockKind.Checklist or NoteBlockKind.Numbered))
         {
@@ -1277,8 +1276,7 @@ public partial class NoteWindow : Window
         }
 
         SetEditorDocument(updated, caretOffset, 0);
-        SetSaveStatus(_updateDocument(_noteId, updated));
-        _lastAcceptedDocument = updated.Copy();
+        SaveEditorDocument(updated);
         UpdateToolbar();
         return true;
     }
@@ -2062,7 +2060,7 @@ public partial class NoteWindow : Window
 
     private EditorOffsetMap GetEditorOffsetMap() => _editorOffsetMap ??= new EditorOffsetMap(Editor.Document);
 
-    private (int Start, int Length) GetSelectionOffsets(NotesDocument _) =>
+    private (int Start, int Length) GetSelectionOffsets() =>
         GetEditorOffsetMap().GetSelectionOffsets(Editor.Selection);
 
     private static NoteBlockKind GetEditorParagraphKind(Paragraph paragraph)

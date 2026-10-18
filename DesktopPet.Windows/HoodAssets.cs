@@ -134,10 +134,9 @@ internal sealed class HoodAssetRollbackSnapshot
         TryHashFile(path) is { } actual && CryptographicOperations.FixedTimeEquals(actual, expected);
 }
 
-internal sealed record LoadedHoodAssets(PetDefinition Definition, BitmapSource SpriteSheet)
+internal sealed record LoadedHoodAssets(HoodAssetSource Source, BitmapSource SpriteSheet)
 {
-    public string SourceDirectory { get; init; } = "";
-    public HoodAssetSource? Source { get; init; }
+    public PetDefinition Definition => Source.Definition;
     public byte[]? SpriteSheetHash { get; init; }
     public double DpiScaleX { get; init; } = 1;
     public double DpiScaleY { get; init; } = 1;
@@ -171,14 +170,6 @@ internal static class HoodAssets
 
     public static LoadedHoodAssets LoadPet(string assetsDirectory, string pet, PetDefinition? currentDefinition = null)
         => LoadAtScale(LoadPetSource(assetsDirectory, pet, currentDefinition), 1, 1);
-
-    public static LoadedHoodAssets LoadPetAtScale(
-        string assetsDirectory,
-        string pet,
-        PetDefinition? currentDefinition,
-        double dpiScaleX,
-        double dpiScaleY)
-        => LoadAtScale(LoadPetSource(assetsDirectory, pet, currentDefinition), dpiScaleX, dpiScaleY);
 
     public static HoodAssetSource LoadPetSource(string assetsDirectory, string pet, PetDefinition? currentDefinition = null)
     {
@@ -300,10 +291,8 @@ internal static class HoodAssets
                 sheet.EndInit();
             }
             sheet.Freeze();
-            return new LoadedHoodAssets(source.Definition, sheet)
+            return new LoadedHoodAssets(source, sheet)
             {
-                SourceDirectory = source.Directory,
-                Source = source,
                 SpriteSheetHash = spriteSheetHash,
                 DpiScaleX = dpiScaleX,
                 DpiScaleY = dpiScaleY

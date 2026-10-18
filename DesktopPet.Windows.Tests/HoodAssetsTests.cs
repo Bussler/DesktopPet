@@ -46,19 +46,17 @@ public sealed class HoodAssetsTests
     [DataRow(2.0, 1.5, 6144, 4576)]
     public void PetSizeAndDisplayDpiDetermineDecodedResolution(double petScale, double dpi, int width, int height)
     {
-        var assetsType = typeof(HoodOverlayWindow).Assembly.GetType("DesktopPet.Windows.HoodAssets")!;
-        var source = assetsType.GetMethod("LoadPetSource")!
-            .Invoke(null, [Path.Combine(AppContext.BaseDirectory, "Assets"), PetCatalog.Hood, null])!;
-        var assets = assetsType.GetMethod("LoadForDisplay")!.Invoke(null, [source, dpi, dpi, petScale])!;
-        var sheet = (BitmapSource)assets.GetType().GetProperty("SpriteSheet")!.GetValue(assets)!;
+        var source = HoodAssets.LoadPetSource(Path.Combine(AppContext.BaseDirectory, "Assets"), PetCatalog.Hood, null);
+        var assets = HoodAssets.LoadForDisplay(source, dpi, dpi, petScale);
+        var sheet = assets.SpriteSheet;
         Assert.AreEqual(width, sheet.PixelWidth);
         Assert.AreEqual(height, sheet.PixelHeight);
-        Assert.AreEqual(dpi, assets.GetType().GetProperty("DpiScaleX")!.GetValue(assets));
-        var definition = (PetDefinition)assets.GetType().GetProperty("Definition")!.GetValue(assets)!;
+        Assert.AreEqual(dpi, assets.DpiScaleX);
+        var definition = assets.Definition;
         Assert.AreEqual(192d, definition.DisplayWidth, "Source manifest dimensions must remain unscaled.");
         foreach (var frame in definition.Animations.SelectMany(animation => animation.Frames))
         {
-            var rect = (Int32Rect)assets.GetType().GetMethod("GetFrameRectangle")!.Invoke(assets, [frame])!;
+            var rect = assets.GetFrameRectangle(frame);
             Assert.IsTrue(rect.X >= 0 && rect.Y >= 0 && rect.Width > 0 && rect.Height > 0);
             Assert.IsTrue(rect.X + rect.Width <= width && rect.Y + rect.Height <= height);
         }
@@ -67,15 +65,13 @@ public sealed class HoodAssetsTests
     [TestMethod]
     public void PackagedSpriteAtlasDecodesToThe100PercentDisplaySize()
     {
-        var assetsType = typeof(HoodOverlayWindow).Assembly.GetType("DesktopPet.Windows.HoodAssets")!;
-        var loadPet = assetsType.GetMethod("LoadPet", BindingFlags.Static | BindingFlags.Public)!;
         var root = Path.Combine(AppContext.BaseDirectory, "Assets");
 
         foreach (var pet in new[] { "hood", "pip", "crumb", "puddle" })
         {
-            var loaded = loadPet.Invoke(null, [root, pet, null])!;
-            var definition = (PetDefinition)loaded.GetType().GetProperty("Definition")!.GetValue(loaded)!;
-            var sheet = (BitmapSource)loaded.GetType().GetProperty("SpriteSheet")!.GetValue(loaded)!;
+            var loaded = HoodAssets.LoadPet(root, pet, null);
+            var definition = loaded.Definition;
+            var sheet = loaded.SpriteSheet;
 
             Assert.AreEqual(definition.SheetWidth / definition.SpriteScale, sheet.PixelWidth,
                 $"{pet} should decode only the pixels needed for its 100% logical display size.");
@@ -89,22 +85,18 @@ public sealed class HoodAssetsTests
     [TestMethod]
     public void PackagedAssetsKeepOriginalManifestsAndCropEveryFrameAtSupportedDpi()
     {
-        var assembly = typeof(HoodOverlayWindow).Assembly;
-        var assetsType = assembly.GetType("DesktopPet.Windows.HoodAssets")!;
-        var readSource = assetsType.GetMethod("ReadSource", BindingFlags.Static | BindingFlags.Public)!;
-        var loadAtScale = assetsType.GetMethod("LoadAtScale", BindingFlags.Static | BindingFlags.Public)!;
         var root = Path.Combine(AppContext.BaseDirectory, "Assets");
 
         foreach (var pet in new[] { "hood", "pip", "crumb", "puddle" })
         {
-            var source = readSource.Invoke(null, [Path.Combine(root, char.ToUpperInvariant(pet[0]) + pet[1..])])!;
-            AssertScaledFrames(source, loadAtScale.Invoke(null, [source, 1d, 1d])!, 1d, pet);
+            var source = HoodAssets.ReadSource(Path.Combine(root, char.ToUpperInvariant(pet[0]) + pet[1..]));
+            AssertScaledFrames(source, HoodAssets.LoadAtScale(source, 1d, 1d), 1d, pet);
         }
 
-        var hoodSource = readSource.Invoke(null, [Path.Combine(root, "Hood")])!;
+        var hoodSource = HoodAssets.ReadSource(Path.Combine(root, "Hood"));
         foreach (var scale in new[] { 1.25, 1.5, 2d })
         {
-            AssertScaledFrames(hoodSource, loadAtScale.Invoke(null, [hoodSource, scale, scale])!, scale, $"Hood at {scale:P0}");
+            AssertScaledFrames(hoodSource, HoodAssets.LoadAtScale(hoodSource, scale, scale), scale, $"Hood at {scale:P0}");
         }
     }
 
@@ -116,19 +108,16 @@ public sealed class HoodAssetsTests
         try
         {
             WriteCustomAsset(directory);
-            var assetsType = typeof(HoodOverlayWindow).Assembly.GetType("DesktopPet.Windows.HoodAssets")!;
-            var readSource = assetsType.GetMethod("ReadSource", BindingFlags.Static | BindingFlags.Public)!;
-            var loadAtScale = assetsType.GetMethod("LoadAtScale", BindingFlags.Static | BindingFlags.Public)!;
-            var source = readSource.Invoke(null, [directory])!;
-            var loaded = loadAtScale.Invoke(null, [source, 1.25, 1.25])!;
-            var sheet = (BitmapSource)loaded.GetType().GetProperty("SpriteSheet")!.GetValue(loaded)!;
-            var definition = (PetDefinition)loaded.GetType().GetProperty("Definition")!.GetValue(loaded)!;
+            var source = HoodAssets.ReadSource(directory);
+            var loaded = HoodAssets.LoadAtScale(source, 1.25, 1.25);
+            var sheet = loaded.SpriteSheet;
+            var definition = loaded.Definition;
             Assert.AreEqual(28, sheet.PixelWidth);
             Assert.AreEqual(41, sheet.PixelHeight);
 
             foreach (var frame in new[] { new SpriteFrame(0, 0), new SpriteFrame(1, 0), new SpriteFrame(3, 4) })
             {
-                var rectangle = GetFrameRectangle(loaded, frame);
+                var rectangle = loaded.GetFrameRectangle(frame);
                 Assert.IsTrue(rectangle.Width > 0 && rectangle.Height > 0);
                 Assert.IsTrue(rectangle.X >= 0 && rectangle.Y >= 0);
                 Assert.IsTrue(rectangle.X + rectangle.Width <= sheet.PixelWidth && rectangle.Y + rectangle.Height <= sheet.PixelHeight);
@@ -152,19 +141,16 @@ public sealed class HoodAssetsTests
         try
         {
             WriteCustomAsset(directory, spriteScale: 20);
-            var assetsType = typeof(HoodOverlayWindow).Assembly.GetType("DesktopPet.Windows.HoodAssets")!;
-            var readSource = assetsType.GetMethod("ReadSource", BindingFlags.Static | BindingFlags.Public)!;
-            var loadAtScale = assetsType.GetMethod("LoadAtScale", BindingFlags.Static | BindingFlags.Public)!;
-            var source = readSource.Invoke(null, [directory])!;
-            var loaded = loadAtScale.Invoke(null, [source, 1d, 1d])!;
-            var sheet = (BitmapSource)loaded.GetType().GetProperty("SpriteSheet")!.GetValue(loaded)!;
-            var definition = (PetDefinition)loaded.GetType().GetProperty("Definition")!.GetValue(loaded)!;
+            var source = HoodAssets.ReadSource(directory);
+            var loaded = HoodAssets.LoadAtScale(source, 1d, 1d);
+            var sheet = loaded.SpriteSheet;
+            var definition = loaded.Definition;
 
             Assert.AreEqual(definition.SheetWidth, sheet.PixelWidth);
             Assert.AreEqual(definition.SheetHeight, sheet.PixelHeight);
             foreach (var frame in definition.Animations.SelectMany(animation => animation.Frames).Distinct())
             {
-                var rectangle = GetFrameRectangle(loaded, frame);
+                var rectangle = loaded.GetFrameRectangle(frame);
                 Assert.AreEqual(definition.FrameWidth, rectangle.Width);
                 Assert.AreEqual(definition.FrameHeight, rectangle.Height);
             }
@@ -178,17 +164,13 @@ public sealed class HoodAssetsTests
     [TestMethod]
     public void EffectiveDisplayScaleChangeReloadsPixelsWithoutChangingPetStateOrGeometry()
     {
-        var assetsType = typeof(HoodOverlayWindow).Assembly.GetType("DesktopPet.Windows.HoodAssets")!;
-        var loadPet = assetsType.GetMethod("LoadPet", BindingFlags.Static | BindingFlags.Public)!;
-        var assets = loadPet.Invoke(null, [Path.Combine(AppContext.BaseDirectory, "Assets"), "hood", null])!;
-        var definition = (PetDefinition)assets.GetType().GetProperty("Definition")!.GetValue(assets)!;
+        var assets = HoodAssets.LoadPet(Path.Combine(AppContext.BaseDirectory, "Assets"), "hood", null);
+        var definition = assets.Definition;
         var session = HoodSession.Start(definition,
             [new DisplayInfo("Primary", new PetBounds(0, 0, 1920, 1080), true)],
             new ZeroRandom(), new NoopSessionStore());
         Action noop = () => { };
-        var constructor = typeof(HoodOverlayWindow).GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
-            .Single(candidate => candidate.GetParameters().Length == 9);
-        var pet = (HoodOverlayWindow)constructor.Invoke([session, assets, noop, noop, noop, noop, noop, noop, UiStyleCatalog.StickyNotes]);
+        var pet = new HoodOverlayWindow(session, assets, noop, noop, noop, noop, noop, noop, UiStyleCatalog.StickyNotes);
         try
         {
             var size = (pet.Width, pet.Height);
@@ -197,8 +179,8 @@ public sealed class HoodAssetsTests
             var dpiChanged = typeof(HoodOverlayWindow).GetMethod("OnDpiChanged", BindingFlags.Instance | BindingFlags.NonPublic)!;
             dpiChanged.Invoke(pet, [new DpiScale(1, 1), new DpiScale(1.5, 1.5)]);
 
-            var currentAssets = typeof(HoodOverlayWindow).GetProperty("CurrentAssets", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(pet)!;
-            var sheet = (BitmapSource)currentAssets.GetType().GetProperty("SpriteSheet")!.GetValue(currentAssets)!;
+            var currentAssets = pet.CurrentAssets!;
+            var sheet = currentAssets.SpriteSheet;
             var image = (Image)pet.FindName("PetImage");
             var crop = (CroppedBitmap)image.Source;
             Assert.AreEqual(4608, sheet.PixelWidth);
@@ -227,19 +209,14 @@ public sealed class HoodAssetsTests
         try
         {
             WriteCustomAsset(directory);
-            var assetsType = typeof(HoodOverlayWindow).Assembly.GetType("DesktopPet.Windows.HoodAssets")!;
-            var readSource = assetsType.GetMethod("ReadSource", BindingFlags.Static | BindingFlags.Public)!;
-            var loadAtScale = assetsType.GetMethod("LoadAtScale", BindingFlags.Static | BindingFlags.Public)!;
-            var source = readSource.Invoke(null, [directory])!;
-            var assets = loadAtScale.Invoke(null, [source, 1d, 1d])!;
-            var definition = (PetDefinition)assets.GetType().GetProperty("Definition")!.GetValue(assets)!;
+            var source = HoodAssets.ReadSource(directory);
+            var assets = HoodAssets.LoadAtScale(source, 1d, 1d);
+            var definition = assets.Definition;
             var session = HoodSession.Start(definition,
                 [new DisplayInfo("Primary", new PetBounds(0, 0, 1920, 1080), true)],
                 new ZeroRandom(), new NoopSessionStore());
             Action noop = () => { };
-            var constructor = typeof(HoodOverlayWindow).GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
-                .Single(candidate => candidate.GetParameters().Length == 9);
-            var pet = (HoodOverlayWindow)constructor.Invoke([session, assets, noop, noop, noop, noop, noop, noop, UiStyleCatalog.StickyNotes]);
+            var pet = new HoodOverlayWindow(session, assets, noop, noop, noop, noop, noop, noop, UiStyleCatalog.StickyNotes);
             try
             {
                 var image = (Image)pet.FindName("PetImage");
@@ -249,12 +226,9 @@ public sealed class HoodAssetsTests
                 var position = session.Position;
                 File.WriteAllText(Path.Combine(directory, "hood_spritesheet.png"), "corrupt after initial load");
 
-                var reload = typeof(HoodOverlayWindow).GetMethod("ReloadAssetsForDpi", BindingFlags.Instance | BindingFlags.NonPublic)!;
-                var failedReload = Assert.Throws<TargetInvocationException>(() => reload.Invoke(pet, [1.25, 1.25]));
-                Assert.IsInstanceOfType<PetAssetException>(failedReload.InnerException);
+                Assert.Throws<PetAssetException>(() => pet.ReloadAssetsForDpi(1.25, 1.25));
 
-                var currentAssets = typeof(HoodOverlayWindow).GetProperty("CurrentAssets", BindingFlags.Instance | BindingFlags.NonPublic)!;
-                Assert.AreSame(assets, currentAssets.GetValue(pet));
+                Assert.AreSame(assets, pet.CurrentAssets);
                 Assert.AreSame(originalImage, image.Source);
                 Assert.AreEqual(presentation, session.Presentation);
                 Assert.AreEqual(needs, session.Needs);
@@ -274,18 +248,14 @@ public sealed class HoodAssetsTests
     [TestMethod]
     public void StartupUsesTheScaleOfTheDisplayContainingThePet()
     {
-        var assetsType = typeof(HoodOverlayWindow).Assembly.GetType("DesktopPet.Windows.HoodAssets")!;
-        var loadPet = assetsType.GetMethod("LoadPet", BindingFlags.Static | BindingFlags.Public)!;
-        var loaded = loadPet.Invoke(null, [Path.Combine(AppContext.BaseDirectory, "Assets"), "hood", null])!;
-        var definition = (PetDefinition)loaded.GetType().GetProperty("Definition")!.GetValue(loaded)!;
+        var loaded = HoodAssets.LoadPet(Path.Combine(AppContext.BaseDirectory, "Assets"), "hood", null);
+        var definition = loaded.Definition;
         var displays = new[]
         {
             new DisplayInfo("left", new PetBounds(0, 0, 1920, 1080), true, 1.25),
             new DisplayInfo("right", new PetBounds(1920, 0, 2560, 1440), false, 2)
         };
-        var providerType = typeof(HoodOverlayWindow).Assembly.GetType("DesktopPet.Windows.WindowsDisplayProvider")!;
-        var getScale = providerType.GetMethod("GetScaleForPet", BindingFlags.Static | BindingFlags.Public)!;
-        var scale = (double)getScale.Invoke(null, [new PetPosition(2300, 200), definition, displays])!;
+        var scale = WindowsDisplayProvider.GetScaleForPet(new PetPosition(2300, 200), definition, displays);
 
         Assert.AreEqual(2d, scale);
     }
@@ -298,10 +268,8 @@ public sealed class HoodAssetsTests
         try
         {
             WriteCustomAsset(directory, solidColor: [0, 0, 180, 255]);
-            var assembly = typeof(HoodOverlayWindow).Assembly;
-            var assetType = assembly.GetType("DesktopPet.Windows.HoodAssets")!;
-            var source = assetType.GetMethod("ReadSource")!.Invoke(null, [directory])!;
-            var original = assetType.GetMethod("LoadAtScale")!.Invoke(null, [source, 1d, 1d])!;
+            var source = HoodAssets.ReadSource(directory);
+            var original = HoodAssets.LoadAtScale(source, 1d, 1d);
             var sheetPath = Path.Combine(directory, "hood_spritesheet.png");
             var manifestPath = Path.Combine(directory, "hood.animations.json");
             var length = new FileInfo(sheetPath).Length;
@@ -311,12 +279,10 @@ public sealed class HoodAssetsTests
             File.SetLastWriteTimeUtc(sheetPath, sheetTimestamp);
             File.SetLastWriteTimeUtc(manifestPath, manifestTimestamp);
             Assert.AreEqual(length, new FileInfo(sheetPath).Length, "The regression requires identical PNG lengths.");
-            var snapshotType = assembly.GetType("DesktopPet.Windows.HoodAssetRollbackSnapshot")!;
-            var snapshot = snapshotType.GetMethod("Capture")!.Invoke(null, [source, original])!;
-            var pair = snapshotType.GetMethod("LoadAtScale")!.Invoke(snapshot, [2d, 2d])!;
-            var restored = pair.GetType().GetField("Item2")!.GetValue(pair)!;
-            var sheet = (BitmapSource)restored.GetType().GetProperty("SpriteSheet")!.GetValue(restored)!;
-            AssertSolidFrame(sheet, GetFrameRectangle(restored, new SpriteFrame(0, 0)), [0, 0, 180, 255], "rollback");
+            var snapshot = HoodAssetRollbackSnapshot.Capture(source, original);
+            var (_, restored) = snapshot.LoadAtScale(2d, 2d);
+            var sheet = restored.SpriteSheet;
+            AssertSolidFrame(sheet, restored.GetFrameRectangle(new SpriteFrame(0, 0)), [0, 0, 180, 255], "rollback");
         }
         finally { Directory.Delete(directory, recursive: true); }
     }
@@ -327,8 +293,6 @@ public sealed class HoodAssetsTests
         var original = Path.Combine(AppContext.BaseDirectory, "Assets", "Hood");
         var directory = Path.Combine(Path.GetTempPath(), $"HoodAssetValidation-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
-        var assetsType = typeof(HoodOverlayWindow).Assembly.GetType("DesktopPet.Windows.HoodAssets")!;
-        var readSource = assetsType.GetMethod("ReadSource", BindingFlags.Static | BindingFlags.Public)!;
         try
         {
             File.Copy(Path.Combine(original, "hood.animations.json"), Path.Combine(directory, "hood.animations.json"));
@@ -337,25 +301,21 @@ public sealed class HoodAssetsTests
             var manifest = JsonNode.Parse(File.ReadAllText(manifestPath))!;
             manifest["sheetWidth"] = 6143;
             File.WriteAllText(manifestPath, manifest.ToJsonString());
-            var mismatch = Assert.Throws<TargetInvocationException>(() => readSource.Invoke(null, [directory]));
-            Assert.IsInstanceOfType<PetAssetException>(mismatch.InnerException);
-            StringAssert.Contains(mismatch.InnerException!.Message, "manifest expects");
+            var mismatch = Assert.Throws<PetAssetException>(() => HoodAssets.ReadSource(directory));
+            StringAssert.Contains(mismatch.Message, "manifest expects");
 
             File.Copy(Path.Combine(original, "hood.animations.json"), manifestPath, overwrite: true);
             File.WriteAllText(Path.Combine(directory, "hood_spritesheet.png"), "invalid image");
-            var corrupt = Assert.Throws<TargetInvocationException>(() => readSource.Invoke(null, [directory]));
-            Assert.IsInstanceOfType<PetAssetException>(corrupt.InnerException);
-            StringAssert.Contains(corrupt.InnerException!.Message, "could not be decoded");
+            var corrupt = Assert.Throws<PetAssetException>(() => HoodAssets.ReadSource(directory));
+            StringAssert.Contains(corrupt.Message, "could not be decoded");
 
             using var image = File.OpenRead(Path.Combine(original, "hood_spritesheet.png"));
             var validHeader = new byte[24];
             Assert.AreEqual(validHeader.Length, image.Read(validHeader));
             File.WriteAllBytes(Path.Combine(directory, "hood_spritesheet.png"), validHeader);
-            var source = readSource.Invoke(null, [directory])!;
-            var loadAtScale = assetsType.GetMethod("LoadAtScale", BindingFlags.Static | BindingFlags.Public)!;
-            var decodeFailure = Assert.Throws<TargetInvocationException>(() => loadAtScale.Invoke(null, [source, 1d, 1d]));
-            Assert.IsInstanceOfType<PetAssetException>(decodeFailure.InnerException);
-            StringAssert.Contains(decodeFailure.InnerException!.Message, "could not be decoded");
+            var source = HoodAssets.ReadSource(directory);
+            var decodeFailure = Assert.Throws<PetAssetException>(() => HoodAssets.LoadAtScale(source, 1d, 1d));
+            StringAssert.Contains(decodeFailure.Message, "could not be decoded");
         }
         finally
         {
@@ -363,11 +323,11 @@ public sealed class HoodAssetsTests
         }
     }
 
-    private static void AssertScaledFrames(object source, object loaded, double dpiScale, string label)
+    private static void AssertScaledFrames(HoodAssetSource source, LoadedHoodAssets loaded, double dpiScale, string label)
     {
-        var definition = (PetDefinition)source.GetType().GetProperty("Definition")!.GetValue(source)!;
-        Assert.AreSame(definition, loaded.GetType().GetProperty("Definition")!.GetValue(loaded));
-        var sheet = (BitmapSource)loaded.GetType().GetProperty("SpriteSheet")!.GetValue(loaded)!;
+        var definition = source.Definition;
+        Assert.AreSame(definition, loaded.Definition);
+        var sheet = loaded.SpriteSheet;
         var expectedWidth = (int)Math.Round(definition.SheetWidth * Math.Min(1, dpiScale / definition.SpriteScale), MidpointRounding.AwayFromZero);
         var expectedHeight = (int)Math.Round(definition.SheetHeight * Math.Min(1, dpiScale / definition.SpriteScale), MidpointRounding.AwayFromZero);
         Assert.AreEqual(expectedWidth, sheet.PixelWidth, label);
@@ -377,7 +337,7 @@ public sealed class HoodAssetsTests
 
         foreach (var frame in definition.Animations.SelectMany(animation => animation.Frames).Distinct())
         {
-            var rectangle = GetFrameRectangle(loaded, frame);
+            var rectangle = loaded.GetFrameRectangle(frame);
             var expectedLeft = (int)Math.Round(frame.Column * definition.FrameWidth * sheet.PixelWidth / (double)definition.SheetWidth, MidpointRounding.AwayFromZero);
             var expectedTop = (int)Math.Round(frame.Row * definition.FrameHeight * sheet.PixelHeight / (double)definition.SheetHeight, MidpointRounding.AwayFromZero);
             Assert.AreEqual(expectedLeft, rectangle.X, $"{label}: {frame}");
@@ -386,9 +346,6 @@ public sealed class HoodAssetsTests
             Assert.IsTrue(rectangle.X + rectangle.Width <= sheet.PixelWidth && rectangle.Y + rectangle.Height <= sheet.PixelHeight, $"{label}: {frame}");
         }
     }
-
-    private static Int32Rect GetFrameRectangle(object loaded, SpriteFrame frame) =>
-        (Int32Rect)loaded.GetType().GetMethod("GetFrameRectangle")!.Invoke(loaded, [frame])!;
 
     private static void WriteCustomAsset(string directory, double spriteScale = 2, byte[]? solidColor = null)
     {
@@ -449,8 +406,6 @@ public sealed class HoodAssetsTests
 
     private sealed class NoopSessionStore : ISessionStore
     {
-        public HoodSessionSnapshot? Load() => null;
         public void Save(HoodSessionSnapshot snapshot) { }
-        public string? ResetAfterAcknowledgement() => null;
     }
 }

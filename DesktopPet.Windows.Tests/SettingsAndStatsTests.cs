@@ -22,6 +22,33 @@ namespace DesktopPet.Windows.Tests;
 public sealed class SettingsAndStatsTests
 {
     [TestMethod]
+    public void HoodSettingsUsesTheActiveConfigurationStoreDirectory()
+    {
+        using var fixture = new Fixture("light");
+        var pet = fixture.Pet();
+        var app = System.Windows.Application.Current as App ?? new TestApp { ShutdownMode = ShutdownMode.OnExplicitShutdown };
+        var fields = new[] { "_session", "_petWindow", "_configurationStore", "_settingsWindow" }
+            .Select(name => typeof(App).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!).ToArray();
+        var previousValues = fields.Select(field => field.GetValue(app)).ToArray();
+        object?[] values = [fixture.Session, pet, fixture.Store, null];
+        for (var index = 0; index < fields.Length; index++) fields[index].SetValue(app, values[index]);
+        SettingsWindow? settings = null;
+        try
+        {
+            typeof(App).GetMethod("ShowSettings", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(app, null);
+            settings = (SettingsWindow)fields[3].GetValue(app)!;
+            Assert.AreEqual(Path.GetDirectoryName(fixture.Store.Path), settings.ConfigurationDirectory,
+                "Open config folder must use the active store, including an isolated data profile.");
+        }
+        finally
+        {
+            settings?.Close();
+            for (var index = 0; index < fields.Length; index++) fields[index].SetValue(app, previousValues[index]);
+            pet.Close();
+        }
+    }
+
+    [TestMethod]
     public void TrayDoubleClickCreatesThenHidesAndRestoresNotes()
     {
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
@@ -125,7 +152,7 @@ public sealed class SettingsAndStatsTests
             Assert.AreEqual(1d, fixture.Session.PetScale);
             Assert.AreEqual(expectedPosition, fixture.StateStore.Snapshot!.Position);
             Assert.AreEqual(expectedArea, fixture.StateStore.Snapshot.RoamingArea);
-            var definition = (PetDefinition)fixture.Assets.GetType().GetProperty("Definition")!.GetValue(fixture.Assets)!;
+            var definition = fixture.Assets.Definition;
             var restarted = HoodSession.Start(definition, [new("Primary", new PetBounds(0, 0, 1920, 1040), true)],
                 new FixedRandomSource(), fixture.StateStore, fixture.Controller.Current, fixture.StateStore.Snapshot);
             Assert.AreEqual(expectedPosition, restarted.Position);
@@ -263,8 +290,7 @@ public sealed class SettingsAndStatsTests
             Assert.AreSame(firstSheet, ((CroppedBitmap)((Image)pet.FindName("PetImage")).Source).Source,
                 "Growing again must reuse the atlas already decoded for the slider's maximum.");
             ((Slider)settings.FindName("PetSizeSlider")).Value = 50;
-            typeof(HoodOverlayWindow).GetMethod("ReloadAssetsForDpi", BindingFlags.Instance | BindingFlags.NonPublic)!
-                .Invoke(pet, [1.5, 1.5]);
+            pet.ReloadAssetsForDpi(1.5, 1.5);
             Assert.AreEqual(96d, pet.Width);
             Assert.AreEqual(104d, pet.Height);
             var crop = (CroppedBitmap)((Image)pet.FindName("PetImage")).Source;
@@ -320,16 +346,16 @@ public sealed class SettingsAndStatsTests
             ((Slider)settings.FindName("PetSizeSlider")).Value = 50;
             Assert.IsFalse(pet.IsVisible);
             Assert.IsNull(((Image)pet.FindName("PetImage")).Source);
-            Assert.IsNull(typeof(HoodOverlayWindow).GetProperty("CurrentAssets", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(pet));
+            Assert.IsNull(pet.CurrentAssets);
             typeof(SettingsWindow).GetMethod("OnSaveClick", BindingFlags.Instance | BindingFlags.NonPublic)!
                 .Invoke(settings, [settings, new RoutedEventArgs(Button.ClickEvent)]);
             Assert.AreEqual(0.5, fixture.Store.LoadOrCreate().PetScale);
-            typeof(HoodOverlayWindow).GetMethod("EnsureSpriteAssetsLoaded", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(pet, null);
+            pet.EnsureSpriteAssetsLoaded();
             fixture.Controller.SaveAndApply("behavior", fixture.Controller.Current with
             {
                 Behavior = fixture.Controller.Current.Behavior with { ShowSprites = true }
             });
-            typeof(HoodOverlayWindow).GetMethod("RefreshBehaviorSettings", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(pet, null);
+            pet.RefreshBehaviorSettings();
             Assert.IsTrue(pet.IsVisible);
             Assert.AreEqual(96d, pet.Width);
             Assert.AreEqual(104d, pet.Height);
@@ -347,15 +373,13 @@ public sealed class SettingsAndStatsTests
         notes.DropDownItems.Add("Notes list");
         notes.DropDownItems.Add("Notes settings");
         tray.Items.Add(notes);
-        var apply = typeof(App).Assembly.GetType("DesktopPet.Windows.TrayMenuAppearance")!
-            .GetMethod("Apply", BindingFlags.Static | BindingFlags.Public)!;
         foreach (var style in UiStyleCatalog.Supported)
         foreach (var (theme, systemIsDark, dark) in new[]
         {
             ("dark", false, true), ("light", true, false), ("system", true, true), ("system", false, false)
         })
         {
-            apply.Invoke(null, [tray, theme, style, systemIsDark]);
+            TrayMenuAppearance.Apply(tray, theme, style, systemIsDark);
             Assert.IsTrue(dark ? tray.ForeColor.GetBrightness() > .8 : tray.ForeColor.GetBrightness() < .3);
             Assert.AreEqual(tray.ForeColor, notes.ForeColor);
             Assert.AreEqual(tray.ForeColor, notes.DropDown.ForeColor, $"Notes submenu: {theme}/{style}/{systemIsDark}");
@@ -635,8 +659,7 @@ public sealed class SettingsAndStatsTests
     {
         using var fixture = new Fixture(theme);
         var pet = fixture.Pet();
-        var settings = (SettingsWindow)Activator.CreateInstance(typeof(SettingsWindow), BindingFlags.Instance | BindingFlags.NonPublic,
-            null, [fixture.Controller, pet], null)!;
+        var settings = new SettingsWindow(fixture.Controller, pet);
         try
         {
             ShowHidden(settings);
@@ -650,8 +673,7 @@ public sealed class SettingsAndStatsTests
             menu.Items.Add("Settings");
             menu.Items.Add(new Forms.ToolStripSeparator());
             menu.Items.Add("Quit");
-            typeof(App).Assembly.GetType("DesktopPet.Windows.TrayMenuAppearance")!
-                .GetMethod("Apply", BindingFlags.Static | BindingFlags.Public)!.Invoke(null, [menu, theme, UiStyleCatalog.StickyNotes, null]);
+            TrayMenuAppearance.Apply(menu, theme, UiStyleCatalog.StickyNotes, null);
             var expectedTray = (Color)ColorConverter.ConvertFromString(trayColor)!;
             Assert.AreEqual(DrawingColor.FromArgb(255, expectedTray.R, expectedTray.G, expectedTray.B), menu.BackColor);
             Assert.AreEqual(3, menu.Items.Count, "Appearance must preserve tray actions and separators.");
@@ -724,10 +746,8 @@ public sealed class SettingsAndStatsTests
     [DataRow("studio", true, "#FFBBA5FF")]
     public void SystemPaletteCanBeCheckedAtBothBrightnessResolutions(string style, bool systemIsDark, string accent)
     {
-        var resolve = typeof(App).Assembly.GetType("DesktopPet.Windows.ApplicationAppearance")!
-            .GetMethod("Resolve", BindingFlags.Static | BindingFlags.Public)!;
-        var palette = resolve.Invoke(null, ["system", style, (bool?)systemIsDark])!;
-        var actualAccent = (Color)palette.GetType().GetProperty("Accent")!.GetValue(palette)!;
+        var palette = ApplicationAppearance.Resolve("system", style, (bool?)systemIsDark);
+        var actualAccent = palette.Accent;
 
         Assert.AreEqual((Color)ColorConverter.ConvertFromString(accent)!, actualAccent);
     }
@@ -743,14 +763,13 @@ public sealed class SettingsAndStatsTests
         var pet = fixture.Pet();
         var refreshCount = 0;
         var effectiveStyle = UiStyleCatalog.StickyNotes;
-        var settings = (SettingsWindow)Activator.CreateInstance(typeof(SettingsWindow), BindingFlags.Instance | BindingFlags.NonPublic,
-            null, [fixture.Controller, pet, effectiveStyle, (Action<string>)(selected =>
+        var settings = new SettingsWindow(fixture.Controller, pet, effectiveStyle, (Action<string>)(selected =>
             {
                 Assert.AreEqual(UiStyleCatalog.StickyNotes, fixture.Store.LoadOrCreate().UiStyle,
                     "A preview must happen before persistence.");
                 effectiveStyle = selected;
                 refreshCount++;
-            })], null)!;
+            }));
         try
         {
             var originalAccent = ((SolidColorBrush)settings.Resources["AppAccentBrush"]).Color;
@@ -777,9 +796,8 @@ public sealed class SettingsAndStatsTests
         using var fixture = new Fixture("light");
         fixture.Store.LoadOrCreate();
         var pet = fixture.Pet();
-        var settings = (SettingsWindow)Activator.CreateInstance(typeof(SettingsWindow), BindingFlags.Instance | BindingFlags.NonPublic,
-            null, [fixture.Controller, pet, UiStyleCatalog.StickyNotes,
-                (Action<string>)(_ => throw new InvalidOperationException("simulated appearance failure"))], null)!;
+        var settings = new SettingsWindow(fixture.Controller, pet, UiStyleCatalog.StickyNotes,
+                (Action<string>)(_ => throw new InvalidOperationException("simulated appearance failure")));
         try
         {
             ((ComboBox)settings.FindName("UiStyleComboBox")).SelectedValue = style;
@@ -801,32 +819,30 @@ public sealed class SettingsAndStatsTests
         var pet = fixture.Pet();
         var settings = fixture.HoodSettings(pet, UiStyleCatalog.StickyNotes);
         using var tray = new Forms.ContextMenuStrip();
-        var applyTray = typeof(App).Assembly.GetType("DesktopPet.Windows.TrayMenuAppearance")!
-            .GetMethod("Apply", BindingFlags.Static | BindingFlags.Public)!;
         try
         {
             settings.ApplyTheme("light", UiStyleCatalog.Minimal);
-            applyTray.Invoke(null, [tray, "light", UiStyleCatalog.Minimal, null]);
+            TrayMenuAppearance.Apply(tray, "light", UiStyleCatalog.Minimal, null);
             Assert.AreEqual(new CornerRadius(4), (CornerRadius)settings.Resources["AppWindowRadius"]);
             Assert.AreEqual((Color)ColorConverter.ConvertFromString("#FF2878D0")!,
                 ((SolidColorBrush)settings.Resources["AppAccentBrush"]).Color);
 
             settings.ApplyTheme("dark", UiStyleCatalog.Soft);
-            applyTray.Invoke(null, [tray, "dark", UiStyleCatalog.Soft, null]);
+            TrayMenuAppearance.Apply(tray, "dark", UiStyleCatalog.Soft, null);
             Assert.AreEqual(new CornerRadius(12), (CornerRadius)settings.Resources["AppWindowRadius"]);
             Assert.AreEqual((Color)ColorConverter.ConvertFromString("#FF96C8B2")!,
                 ((SolidColorBrush)settings.Resources["AppAccentBrush"]).Color);
             Assert.AreEqual(DrawingColor.FromArgb(255, 48, 46, 41), tray.BackColor);
 
             settings.ApplyTheme("dark", UiStyleCatalog.Studio);
-            applyTray.Invoke(null, [tray, "dark", UiStyleCatalog.Studio, null]);
+            TrayMenuAppearance.Apply(tray, "dark", UiStyleCatalog.Studio, null);
             Assert.AreEqual(new CornerRadius(5), (CornerRadius)settings.Resources["AppWindowRadius"]);
             Assert.AreEqual((Color)ColorConverter.ConvertFromString("#FFBBA5FF")!,
                 ((SolidColorBrush)settings.Resources["AppAccentBrush"]).Color);
             Assert.AreEqual(DrawingColor.FromArgb(255, 39, 38, 51), tray.BackColor);
 
             settings.ApplyTheme("light", UiStyleCatalog.StickyNotes);
-            applyTray.Invoke(null, [tray, "light", UiStyleCatalog.StickyNotes, null]);
+            TrayMenuAppearance.Apply(tray, "light", UiStyleCatalog.StickyNotes, null);
             Assert.AreEqual(new CornerRadius(8), (CornerRadius)settings.Resources["AppWindowRadius"]);
             Assert.AreEqual((Color)ColorConverter.ConvertFromString("#FF446DA5")!,
                 ((SolidColorBrush)settings.Resources["AppAccentBrush"]).Color);
@@ -977,16 +993,13 @@ public sealed class SettingsAndStatsTests
             () => { }, () => { }, () => { }, (_, _) => null, _ => null, () => null,
             new NotesConfiguration { Theme = theme }, style);
         var hoodSettings = fixture.HoodSettings(pet, style);
-        var notesSettings = (NotesSettingsWindow)Activator.CreateInstance(typeof(NotesSettingsWindow),
-            BindingFlags.Instance | BindingFlags.NonPublic, null, [fixture.Controller, (Action<NotesConfiguration>)(_ => { }), style], null)!;
+        var notesSettings = new NotesSettingsWindow(fixture.Controller, (Action<NotesConfiguration>)(_ => { }), style);
         var notesList = new NotesListWindow(
             _ => Array.Empty<NoteListItem>(), _ => Array.Empty<TrashedNoteListItem>(), _ => { }, () => { },
             _ => null, _ => null, () => null, theme, uiStyle: style);
         using var tray = new Forms.ContextMenuStrip();
         tray.Items.Add("Settings");
-        typeof(App).Assembly.GetType("DesktopPet.Windows.TrayMenuAppearance")!
-            .GetMethod("Apply", BindingFlags.Static | BindingFlags.Public)!
-            .Invoke(null, [tray, theme, style, null]);
+        TrayMenuAppearance.Apply(tray, theme, style, null);
         try
         {
             var expectedAccent = (Color)ColorConverter.ConvertFromString(accentHex)!;
@@ -1389,18 +1402,15 @@ public sealed class SettingsAndStatsTests
             Action = fixture.Session.Presentation.Action, FrameIndex = fixture.Session.Presentation.FrameIndex,
             Needs = fixture.Session.Needs, RemainingRandomInterval = fixture.Session.RemainingRandomInterval
         };
-        var load = typeof(HoodOverlayWindow).Assembly.GetType("DesktopPet.Windows.HoodAssets")!.GetMethod("LoadPet")!;
         var saved = fixture.Store.LoadOrCreate();
-        var assets = load.Invoke(null, [Path.Combine(AppContext.BaseDirectory, "Assets"), saved.Pet, null])!;
-        var definition = (PetDefinition)assets.GetType().GetProperty("Definition")!.GetValue(assets)!;
+        var assets = HoodAssets.LoadPet(Path.Combine(AppContext.BaseDirectory, "Assets"), saved.Pet, null);
+        var definition = assets.Definition;
         var session = HoodSession.Start(definition, [new("Primary", new PetBounds(0, 0, 1920, 1040), true)],
             new FixedRandomSource(), new NoopSessionStore(), saved, snapshot);
         Action noop = () => { };
-        var pet = (HoodOverlayWindow)Activator.CreateInstance(typeof(HoodOverlayWindow), BindingFlags.Instance | BindingFlags.NonPublic,
-            null, [session, assets, noop, noop, noop, noop, noop, noop, UiStyleCatalog.StickyNotes], null)!;
+        var pet = new HoodOverlayWindow(session, assets, noop, noop, noop, noop, noop, noop, UiStyleCatalog.StickyNotes);
         var controller = new HoodConfigurationController(session, fixture.Store);
-        var settings = (SettingsWindow)Activator.CreateInstance(typeof(SettingsWindow), BindingFlags.Instance | BindingFlags.NonPublic,
-            null, [controller, pet], null)!;
+        var settings = new SettingsWindow(controller, pet);
         try
         {
             Assert.AreEqual(fixture.Session.Presentation, session.Presentation);
@@ -1413,7 +1423,7 @@ public sealed class SettingsAndStatsTests
             Assert.AreEqual(fixture.Session.Presentation, session.Presentation);
             Assert.AreEqual(snapshot.Needs, session.Needs);
             session.Advance(TimeSpan.FromMilliseconds(60));
-            typeof(HoodOverlayWindow).GetMethod("RefreshBehaviorSettings", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(pet, null);
+            pet.RefreshBehaviorSettings();
             Assert.AreEqual(ExpectedFrameRectangle(pet, session), ((CroppedBitmap)image.Source).SourceRect);
             Assert.AreEqual(PetCatalog.Hood, fixture.Store.LoadOrCreate().Pet);
         }
@@ -1460,19 +1470,16 @@ public sealed class SettingsAndStatsTests
         try
         {
             var original = ((Image)pet.FindName("PetImage")).Source;
-            var definition = (PetDefinition)fixture.Assets.GetType().GetProperty("Definition")!.GetValue(fixture.Assets)!;
-            var load = typeof(HoodOverlayWindow).Assembly.GetType("DesktopPet.Windows.HoodAssets")!.GetMethod("LoadPet")!;
-            var missing = Assert.Throws<TargetInvocationException>(() => load.Invoke(null, [root, PetCatalog.Pip, definition]));
-            Assert.IsInstanceOfType<PetAssetException>(missing.InnerException);
+            var definition = fixture.Assets.Definition;
+            var missing = Assert.Throws<PetAssetException>(() => HoodAssets.LoadPet(root, PetCatalog.Pip, definition));
             var directory = Path.Combine(root, "Pip");
             Directory.CreateDirectory(directory);
             File.Copy(Path.Combine(AppContext.BaseDirectory, "Assets", "Pip", "hood_spritesheet.png"), Path.Combine(directory, "hood_spritesheet.png"));
             var json = JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Assets", "Pip", "hood.animations.json")))!;
             json["animations"]![0]!["frameDurationMilliseconds"] = 81;
             File.WriteAllText(Path.Combine(directory, "hood.animations.json"), json.ToJsonString());
-            var incompatible = Assert.Throws<TargetInvocationException>(() => load.Invoke(null, [root, PetCatalog.Pip, definition]));
-            Assert.IsInstanceOfType<PetAssetException>(incompatible.InnerException);
-            StringAssert.Contains(incompatible.InnerException!.Message, "must match");
+            var incompatible = Assert.Throws<PetAssetException>(() => HoodAssets.LoadPet(root, PetCatalog.Pip, definition));
+            StringAssert.Contains(incompatible.Message, "must match");
             Assert.AreSame(original, ((Image)pet.FindName("PetImage")).Source);
             Assert.AreEqual(PetCatalog.Hood, fixture.Controller.Current.Pet);
         }
@@ -1580,11 +1587,10 @@ public sealed class SettingsAndStatsTests
         fixture.Store.LoadOrCreate();
         var pet = fixture.Pet();
         var failRestore = true;
-        var settings = (SettingsWindow)Activator.CreateInstance(typeof(SettingsWindow), BindingFlags.Instance | BindingFlags.NonPublic,
-            null, [fixture.Controller, pet, UiStyleCatalog.StickyNotes, (Action<string>)(style =>
+        var settings = new SettingsWindow(fixture.Controller, pet, UiStyleCatalog.StickyNotes, (Action<string>)(style =>
             {
                 if (style == UiStyleCatalog.StickyNotes && failRestore) throw new InvalidOperationException("restore failed");
-            })], null)!;
+            }));
         try
         {
             ShowHidden(settings);
@@ -1651,9 +1657,8 @@ public sealed class SettingsAndStatsTests
         var originalValues = fields.Select(field => field.GetValue(app)).ToArray();
         var apply = typeof(App).GetMethod("ApplyUiStyle", BindingFlags.Instance | BindingFlags.NonPublic)!;
         var applyTheme = typeof(App).GetMethod("ApplyTheme", BindingFlags.Instance | BindingFlags.NonPublic)!;
-        var settings = (SettingsWindow)Activator.CreateInstance(typeof(SettingsWindow), BindingFlags.Instance | BindingFlags.NonPublic,
-            null, [fixture.Controller, pet, UiStyleCatalog.StickyNotes, (Action<string>)(style => apply.Invoke(app, [style])),
-                "light", (Action<string>)(theme => applyTheme.Invoke(app, [theme]))], null)!;
+        var settings = new SettingsWindow(fixture.Controller, pet, UiStyleCatalog.StickyNotes, (Action<string>)(style => apply.Invoke(app, [style])),
+                "light", (Action<string>)(theme => applyTheme.Invoke(app, [theme])));
         var windows = (Dictionary<Guid, NoteWindow>)typeof(App).GetField("_noteWindows", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(app)!;
         object[] values = [fixture.Session, notes, pet, settings, notesSettings, notesList, icon, fixture.Controller.Current.Notes, UiStyleCatalog.StickyNotes];
         for (var index = 0; index < fields.Length; index++) fields[index].SetValue(app, values[index]);
@@ -1879,8 +1884,7 @@ public sealed class SettingsAndStatsTests
         var saved = fixture.Controller.Current.Notes;
         var original = saved with { TextSize = 20, LineSpacing = 1, Theme = "dark" };
         var effective = original;
-        var settings = (NotesSettingsWindow)Activator.CreateInstance(typeof(NotesSettingsWindow), BindingFlags.Instance | BindingFlags.NonPublic,
-            null, [fixture.Controller, (Action<NotesConfiguration>)(candidate => effective = candidate), UiStyleCatalog.StickyNotes, original], null)!;
+        var settings = new NotesSettingsWindow(fixture.Controller, (Action<NotesConfiguration>)(candidate => effective = candidate), UiStyleCatalog.StickyNotes, original);
         try
         {
             Assert.AreEqual(original, effective, "Opening settings must not apply the saved fields before editing.");
@@ -1904,12 +1908,11 @@ public sealed class SettingsAndStatsTests
         var baseline = File.ReadAllText(fixture.ConfigPath);
         var pet = fixture.Pet();
         var effective = "light";
-        var settings = (SettingsWindow)Activator.CreateInstance(typeof(SettingsWindow), BindingFlags.Instance | BindingFlags.NonPublic,
-            null, [fixture.Controller, pet, UiStyleCatalog.StickyNotes, (Action<string>)(_ => { }), "light", (Action<string>)(theme =>
+        var settings = new SettingsWindow(fixture.Controller, pet, UiStyleCatalog.StickyNotes, (Action<string>)(_ => { }), "light", (Action<string>)(theme =>
             {
                 if (failure == "preview" && theme == "dark") throw new InvalidOperationException("simulated preview failure");
                 effective = theme;
-            })], null)!;
+            }));
         try
         {
             var selector = (ComboBox)settings.FindName("ThemeComboBox");
@@ -1943,12 +1946,11 @@ public sealed class SettingsAndStatsTests
         var pet = fixture.Pet();
         SettingsWindow? hood = null;
         var notes = fixture.Settings(candidate => { effective = candidate; hood?.ApplyTheme(candidate.Theme); });
-        hood = (SettingsWindow)Activator.CreateInstance(typeof(SettingsWindow), BindingFlags.Instance | BindingFlags.NonPublic,
-            null, [fixture.Controller, pet, UiStyleCatalog.StickyNotes, (Action<string>)(_ => { }), "light", (Action<string>)(theme =>
+        hood = new SettingsWindow(fixture.Controller, pet, UiStyleCatalog.StickyNotes, (Action<string>)(_ => { }), "light", (Action<string>)(theme =>
             {
                 effective = effective with { Theme = theme };
                 notes.ApplyEffectiveSettings(effective);
-            })], null)!;
+            }));
         try
         {
             ((Slider)notes.FindName("TextSizeSlider")).Value = 24;
@@ -1984,22 +1986,20 @@ public sealed class SettingsAndStatsTests
 
     private static Int32Rect ExpectedFrameRectangle(HoodOverlayWindow pet, HoodSession session)
     {
-        var assets = typeof(HoodOverlayWindow).GetProperty("CurrentAssets", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(pet)!;
-        var definition = (PetDefinition)assets.GetType().GetProperty("Definition")!.GetValue(assets)!;
+        var assets = pet.CurrentAssets!;
+        var definition = assets.Definition;
         var presentation = session.Presentation;
         var frame = definition.GetAnimation(presentation.Action).Frames[presentation.FrameIndex];
-        return (Int32Rect)assets.GetType().GetMethod("GetFrameRectangle")!.Invoke(assets, [frame])!;
+        return assets.GetFrameRectangle(frame);
     }
 
     private static void AssertCurrentPetSource(HoodOverlayWindow pet, string expectedPet)
     {
-        var source = typeof(HoodOverlayWindow).GetProperty("CurrentSource", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .GetValue(pet)!;
-        var directory = (string)source.GetType().GetProperty("Directory")!.GetValue(source)!;
+        var source = pet.CurrentSource;
+        var directory = source.Directory;
         StringAssert.Contains(directory.ToLowerInvariant(), $"{Path.DirectorySeparatorChar}{expectedPet.ToLowerInvariant()}");
-        var assets = typeof(HoodOverlayWindow).GetProperty("CurrentAssets", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .GetValue(pet)!;
-        var sheet = assets.GetType().GetProperty("SpriteSheet")!.GetValue(assets);
+        var assets = pet.CurrentAssets!;
+        var sheet = assets.SpriteSheet;
         Assert.AreSame(sheet, ((CroppedBitmap)((Image)pet.FindName("PetImage")).Source).Source,
             "The expected pet's loaded sheet must be the visible crop source.");
     }
@@ -2022,7 +2022,7 @@ public sealed class SettingsAndStatsTests
     private sealed class Fixture : IDisposable
     {
         public string ConfigPath { get; } = Path.Combine(Path.GetTempPath(), $"HoodSettingsTest-{Guid.NewGuid():N}.yaml");
-        public object Assets { get; }
+        public LoadedHoodAssets Assets { get; }
         public HoodSession Session { get; }
         public NoopSessionStore StateStore { get; } = new();
         public YamlConfigurationStore Store { get; }
@@ -2030,9 +2030,8 @@ public sealed class SettingsAndStatsTests
 
         public Fixture(string theme, string uiStyle = UiStyleCatalog.StickyNotes)
         {
-            Assets = typeof(HoodOverlayWindow).Assembly.GetType("DesktopPet.Windows.HoodAssets")!.GetMethod("Load")!
-                .Invoke(null, [Path.Combine(AppContext.BaseDirectory, "Assets", "Hood")])!;
-            var definition = (PetDefinition)Assets.GetType().GetProperty("Definition")!.GetValue(Assets)!;
+            Assets = HoodAssets.Load(Path.Combine(AppContext.BaseDirectory, "Assets", "Hood"));
+            var definition = Assets.Definition;
             Session = HoodSession.Start(definition, [new("Primary", new PetBounds(0, 0, 1920, 1040), true)],
                 new FixedRandomSource(), StateStore, HoodConfiguration.Defaults with
                 { UiStyle = uiStyle, Notes = HoodConfiguration.Defaults.Notes with { Theme = theme } });
@@ -2040,18 +2039,15 @@ public sealed class SettingsAndStatsTests
             Controller = new HoodConfigurationController(Session, Store);
         }
 
-        public NotesSettingsWindow Settings(Action<NotesConfiguration>? preview = null) => (NotesSettingsWindow)Activator.CreateInstance(typeof(NotesSettingsWindow),
-            BindingFlags.Instance | BindingFlags.NonPublic, null, [Controller, preview ?? (_ => { })], null)!;
+        public NotesSettingsWindow Settings(Action<NotesConfiguration>? preview = null) => new NotesSettingsWindow(Controller, preview ?? (_ => { }));
 
         public SettingsWindow HoodSettings(HoodOverlayWindow pet, string effectiveStyle) =>
-            (SettingsWindow)Activator.CreateInstance(typeof(SettingsWindow), BindingFlags.Instance | BindingFlags.NonPublic,
-                null, [Controller, pet, effectiveStyle], null)!;
+            new SettingsWindow(Controller, pet, effectiveStyle);
 
         public HoodOverlayWindow Pet(string uiStyle = UiStyleCatalog.StickyNotes)
         {
             Action noop = () => { };
-            return (HoodOverlayWindow)Activator.CreateInstance(typeof(HoodOverlayWindow), BindingFlags.Instance | BindingFlags.NonPublic,
-                null, [Session, Assets, noop, noop, noop, noop, noop, noop, uiStyle], null)!;
+            return new HoodOverlayWindow(Session, Assets, noop, noop, noop, noop, noop, noop, uiStyle);
         }
 
         public void Dispose() => File.Delete(ConfigPath);
@@ -2060,9 +2056,7 @@ public sealed class SettingsAndStatsTests
     private sealed class NoopSessionStore : ISessionStore
     {
         public HoodSessionSnapshot? Snapshot { get; private set; }
-        public HoodSessionSnapshot? Load() => null;
         public void Save(HoodSessionSnapshot snapshot) => Snapshot = snapshot;
-        public string? ResetAfterAcknowledgement() => null;
     }
 
     private sealed class FixedRandomSource : IPetRandomSource

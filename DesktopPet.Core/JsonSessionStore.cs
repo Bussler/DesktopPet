@@ -76,10 +76,6 @@ public sealed class JsonSessionStore : ISessionStore
             HoodSessionSnapshotValidator.Validate(snapshot);
             return snapshot;
         }
-        catch (SessionStateException)
-        {
-            throw;
-        }
         catch (Exception exception) when (exception is JsonException or InvalidDataException or IOException or UnauthorizedAccessException)
         {
             throw new SessionStateException(
