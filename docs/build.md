@@ -36,7 +36,7 @@ For a focused iteration after restore:
 dotnet test .\DesktopPet.Tests\DesktopPet.Tests.csproj --configuration Release --no-restore --filter "FullyQualifiedName~NotesApplicationTests"
 ```
 
-Use `DesktopPet.Windows.Tests\DesktopPet.Windows.Tests.csproj` for frontend tests. Run the complete workflow before handing off a behavior change. Automated results do not establish native visual quality, physical keyboard/clipboard behavior, tray interaction, or mixed-DPI monitor behavior. Relevant checklists live in [tools/manual-acceptance](../tools/manual-acceptance); run them against the packaged executable with a separate data folder.
+Use `DesktopPet.Windows.Tests\DesktopPet.Windows.Tests.csproj` for frontend tests. Run the complete workflow before handing off a behavior change. Check native visual quality, physical keyboard/clipboard behavior, tray interaction, and mixed-DPI monitor behavior against the packaged executable with a separate data folder.
 
 ## Publish a runnable package
 
@@ -62,7 +62,7 @@ The script prints the executable path. Run that copy to check a release. To choo
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Build-AndPublish.ps1 -CandidateDirectory .\artifacts\my-build -DotnetExe C:\path\to\dotnet.exe
 ```
 
-The output directory must not already exist; relative paths resolve from the repository root. [Complete-ReleaseCandidate.ps1](../tools/Complete-ReleaseCandidate.ps1) checks the executable and copies the project license and an explicit list of user guides. Runtime license files are included under `app/licenses/`. Developer documentation and manual checklists stay in the source checkout. Keep generated output and verification evidence out of Git.
+The output directory must not already exist; relative paths resolve from the repository root. [Complete-ReleaseCandidate.ps1](../tools/Complete-ReleaseCandidate.ps1) checks the executable and copies the project license and an explicit list of user guides. Runtime license files are included under `app/licenses/`. Developer documentation stays in the source checkout. Keep generated output and verification evidence out of Git.
 
 The bundled runtime does not receive updates from an installed runtime. To service it, update the pinned SDK and any affected dependency locks deliberately, validate, and publish a new package.
 

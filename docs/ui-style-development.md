@@ -20,4 +20,4 @@ Use the shared resources across windows, menus, and the tray so a live preview u
 
 ## Verify
 
-Run `tools\Test.ps1`, then check light, dark, and system themes, all five note colors, focused/unfocused notes, menus, and Settings Save/Cancel in a packaged build. The [UI acceptance checklist](../tools/manual-acceptance/ui-styles-manual-acceptance.md) covers native appearance checks. See [build and development](build.md) for packaging.
+Run `tools\Test.ps1`, then check light, dark, and system themes, all five note colors, focused/unfocused notes, menus, and Settings Save/Cancel in a packaged build. See [build and development](build.md) for packaging.

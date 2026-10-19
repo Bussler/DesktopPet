@@ -29,4 +29,4 @@ These references belong to the source checkout and are excluded from published p
 | [Project overview](project.md) | Repository structure, runtime responsibilities, persistence, and validation boundaries. |
 | [UI style development](ui-style-development.md) | Shared style tokens and extending the existing styles. |
 
-Native acceptance checklists live in [tools/manual-acceptance](../tools/manual-acceptance). Session findings and scratch evidence go in the ignored `.codex/` directory; durable behavior, architecture, and workflow documentation belongs here.
+Session findings and scratch evidence go in the ignored `.codex/` directory; durable behavior, architecture, and workflow documentation belongs here.

@@ -11,7 +11,7 @@ Hood is a local Windows desktop app built with C# and .NET 10. The WPF frontend 
 | [DesktopPet.Tests](../DesktopPet.Tests) | Portable behavior and persistence tests. |
 | [DesktopPet.Windows.Tests](../DesktopPet.Windows.Tests) | Frontend interaction, rendering, and script tests on Windows. |
 | [Assets](../Assets) | Runtime sprite sheets/manifests, retained artwork sources, and the embedded Hood icon. |
-| [tools](../tools) | Build, test, packaging, artwork helpers, and manual acceptance checklists. |
+| [tools](../tools) | Build, test, packaging, and artwork helpers. |
 | [docs](README.md) | User guides and developer references. |
 
 `DesktopPet.sln` brings the four projects together. `global.json` pins the SDK, `Directory.Packages.props` pins package versions, and `Directory.Build.props` enables nullable references, implicit usings, and restore lock files. See [build and development](build.md) for the supported workflows.
