@@ -3,7 +3,7 @@
   "name": "Puddle",
   "spriteSheet": "hood_spritesheet.png",
   "sheetWidth": 6144,
-  "sheetHeight": 4576,
+  "sheetHeight": 4992,
   "frameWidth": 384,
   "frameHeight": 416,
   "spriteScale": 2,
@@ -1284,6 +1284,51 @@
       ],
       "frameDurationMilliseconds": 120,
       "loops": false,
+      "motionBounds": {
+        "height": 208,
+        "width": 192,
+        "y": 0,
+        "x": 0
+      }
+    },
+    {
+      "action": "write",
+      "frames": [
+        {
+          "row": 11,
+          "column": 0
+        },
+        {
+          "row": 11,
+          "column": 1
+        },
+        {
+          "row": 11,
+          "column": 2
+        },
+        {
+          "row": 11,
+          "column": 3
+        },
+        {
+          "row": 11,
+          "column": 4
+        },
+        {
+          "row": 11,
+          "column": 5
+        },
+        {
+          "row": 11,
+          "column": 6
+        },
+        {
+          "row": 11,
+          "column": 7
+        }
+      ],
+      "frameDurationMilliseconds": 120,
+      "loops": true,
       "motionBounds": {
         "height": 208,
         "width": 192,

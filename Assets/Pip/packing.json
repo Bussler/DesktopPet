@@ -64,5 +64,11 @@
     "source": "pet",
     "frames": 16,
     "scale": 1.2
+  },
+  {
+    "action": "write",
+    "source": "write",
+    "frames": 8,
+    "scale": 0.8333333333333334
   }
 ]

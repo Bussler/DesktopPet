@@ -158,7 +158,7 @@ foreach ($pet in 'Hood','Pip','Crumb','Puddle') {
                 }
                 continue
             }
-            if ($pet -eq 'Crumb' -and $animation.action -eq 'pet') {
+            if ($pet -eq 'Crumb' -and $animation.action -in 'pet','write') {
                 $entries += ,([HeadphoneFrameTop]::Earbuds($pixels, $stride, $manifest.frameWidth, $manifest.frameHeight, $frame.row, $index, $manifest.spriteScale))
                 continue
             }

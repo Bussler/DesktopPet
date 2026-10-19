@@ -316,6 +316,10 @@ internal static class HoodAssets
             {
                 var current = currentDefinition.GetAnimation(action);
                 var next = definition.GetAnimation(action);
+                // Writing is optional in older replacement artwork; its idle fallback may differ.
+                if (action == PetAction.Write &&
+                    (!current.Action.Equals("write", StringComparison.OrdinalIgnoreCase) ||
+                     !next.Action.Equals("write", StringComparison.OrdinalIgnoreCase))) return false;
                 return current.Frames.Count != next.Frames.Count ||
                     current.FrameDurationMilliseconds != next.FrameDurationMilliseconds ||
                     current.Loops != next.Loops || current.MotionBounds != next.MotionBounds;

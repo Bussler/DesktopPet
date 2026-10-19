@@ -40,7 +40,8 @@ public sealed class HoodSessionTests
         Assert.AreEqual(new DesktopPet.Core.PetBounds(0, 0, 192, 208), definition.MinimumRoamingArea);
         foreach (var animation in definition.Animations)
         {
-            Assert.IsTrue(animation.Frames.Distinct().Count() >= 12, $"{animation.Action} needs additional poses.");
+            var minimum = animation.Action == "write" ? 8 : 12;
+            Assert.IsTrue(animation.Frames.Distinct().Count() >= minimum, $"{animation.Action} needs additional poses.");
         }
     }
 
@@ -74,6 +75,33 @@ public sealed class HoodSessionTests
         Assert.IsFalse(definition.GetAnimation(DesktopPet.Core.PetAction.Pet).Loops);
         CollectionAssert.AreEqual(definition.GetAnimation(DesktopPet.Core.PetAction.Wave).Frames,
             definition.GetAnimation(DesktopPet.Core.PetAction.Pet).Frames);
+    }
+
+    [TestMethod]
+    public void Assets_LegacyWritingFallbackUsesIdleWithoutAddingAnAction()
+    {
+        var (json, width, height) = ReadPackagedDefinition();
+        var root = System.Text.Json.Nodes.JsonNode.Parse(json)!;
+        var animations = root["animations"]!.AsArray();
+        animations.Remove(animations.Single(animation => animation!["action"]!.GetValue<string>() == "write"));
+
+        var definition = DesktopPet.Core.PetDefinition.Parse(root.ToJsonString(), width, height);
+
+        Assert.AreSame(definition.GetAnimation(DesktopPet.Core.PetAction.Idle),
+            definition.GetAnimation(DesktopPet.Core.PetAction.Write));
+        Assert.AreEqual(11, definition.Animations.Count);
+    }
+
+    [TestMethod]
+    public void Assets_RejectWritingAnimationsThatDoNotLoop()
+    {
+        var (json, width, height) = ReadPackagedDefinition();
+        var root = System.Text.Json.Nodes.JsonNode.Parse(json)!;
+        root["animations"]!.AsArray().Single(animation => animation!["action"]!.GetValue<string>() == "write")!["loops"] = false;
+
+        var error = Assert.Throws<DesktopPet.Core.PetAssetException>(
+            () => DesktopPet.Core.PetDefinition.Parse(root.ToJsonString(), width, height));
+        StringAssert.Contains(error.Message, "Write");
     }
 
     [TestMethod]

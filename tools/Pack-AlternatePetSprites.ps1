@@ -12,6 +12,31 @@ using System.Collections.Generic;
 using System.Linq;
 public static class PetSourceFrames {
     public sealed class Frame { public int[] Bounds; public byte[] Pixels; }
+    public static Frame[] Grid(byte[] pixels, int width, int height, int columns, int rows) {
+        var frames = new List<Frame>();
+        for (int row = 0; row < rows; row++) for (int column = 0; column < columns; column++) {
+            int left = column * width / columns, top = row * height / rows;
+            int cellWidth = (column + 1) * width / columns - left;
+            int cellHeight = (row + 1) * height / rows - top;
+            int minX = cellWidth, minY = cellHeight, maxX = -1, maxY = -1;
+            for (int y = 0; y < cellHeight; y++) for (int x = 0; x < cellWidth; x++) {
+                int source = ((top + y) * width + left + x) * 4;
+                if (pixels[source + 3] < 32) continue;
+                minX = Math.Min(minX, x); minY = Math.Min(minY, y);
+                maxX = Math.Max(maxX, x); maxY = Math.Max(maxY, y);
+            }
+            if (maxX < 0) throw new InvalidOperationException("Empty writing pose.");
+            minX = Math.Max(0, minX - 2); minY = Math.Max(0, minY - 2);
+            maxX = Math.Min(cellWidth - 1, maxX + 2); maxY = Math.Min(cellHeight - 1, maxY + 2);
+            int w = maxX - minX + 1, h = maxY - minY + 1;
+            var crop = new byte[w * h * 4];
+            for (int y = 0; y < h; y++)
+                Array.Copy(pixels, ((top + minY + y) * width + left + minX) * 4,
+                    crop, y * w * 4, w * 4);
+            frames.Add(new Frame { Bounds = new[] { minX, minY, w, h }, Pixels = crop });
+        }
+        return frames.ToArray();
+    }
     public static Frame[] Find(byte[] pixels, int width, int height, int columns, int count) {
         var seen = new int[width * height];
         var queue = new int[seen.Length];
@@ -133,10 +158,15 @@ foreach ($animation in $manifest.animations) {
         [System.Windows.Media.PixelFormats]::Bgra32, $null, 0)
     $pixels = [byte[]]::new($source.PixelWidth * $source.PixelHeight * 4)
     $source.CopyPixels($pixels, $source.PixelWidth * 4, 0)
-    $frames = [PetSourceFrames]::Find($pixels, $source.PixelWidth, $source.PixelHeight, $columns, $(if ($biped) { 2 } else { $count }))
+    $frames = if ($action -eq 'write') {
+        # Ground-writing strokes can be detached; retain every part inside its source cell.
+        [PetSourceFrames]::Grid($pixels, $source.PixelWidth, $source.PixelHeight, 4, 2)
+    } else {
+        [PetSourceFrames]::Find($pixels, $source.PixelWidth, $source.PixelHeight, $columns, $(if ($biped) { 2 } else { $count }))
+    }
     $bounds = @($frames | ForEach-Object { ,$_.Bounds })
     $targetHeight = if ($Pet -eq 'Puddle') {
-        switch ($sourceAction) { 'runRight' { 190 } 'wave' { 270 } 'sleep' { 145 } 'jump' { 270 } 'wake' { 270 } default { 240 } }
+        switch ($sourceAction) { 'runRight' { 190 } 'wave' { 270 } 'sleep' { 145 } 'jump' { 270 } 'wake' { 270 } 'write' { 280 } default { 240 } }
     } else {
         switch ($sourceAction) { 'runRight' { 320 } 'sleep' { 230 } default { 360 } }
     }

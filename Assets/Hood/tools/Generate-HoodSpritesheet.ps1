@@ -67,7 +67,8 @@ $actions = @(
     @('feed', 5, 15, 60, $false),
     @('sleep', 4, 12, 225, $true),
     @('wake', 5, 15, 60, $false),
-    @('pet', 4, 16, 120, $false))
+    @('pet', 4, 16, 120, $false),
+    @('write', 4, 8, 120, $true))
 function Save-Png($bitmap, [string]$path) {
     $encoder = [System.Windows.Media.Imaging.PngBitmapEncoder]::new()
     $encoder.Frames.Add([System.Windows.Media.Imaging.BitmapFrame]::Create($bitmap))

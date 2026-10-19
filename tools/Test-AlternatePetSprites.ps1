@@ -62,7 +62,7 @@ foreach ($pet in 'Pip','Crumb') {
     $manifest = Get-Content -LiteralPath (Join-Path $directory 'hood.animations.json') -Raw | ConvertFrom-Json
     $bitmap = [System.Drawing.Bitmap]::new((Join-Path $directory 'hood_spritesheet.png'))
     try {
-        if ($bitmap.Width -ne 6144 -or $bitmap.Height -ne 4576) { throw "$pet atlas dimensions changed." }
+        if ($bitmap.Width -ne 6144 -or $bitmap.Height -ne 4992) { throw "$pet atlas dimensions changed." }
         $data = $bitmap.LockBits([System.Drawing.Rectangle]::new(0,0,$bitmap.Width,$bitmap.Height),
             [System.Drawing.Imaging.ImageLockMode]::ReadOnly,[System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
         try {

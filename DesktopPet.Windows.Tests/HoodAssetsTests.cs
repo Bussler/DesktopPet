@@ -22,6 +22,59 @@ public sealed class HoodAssetsTests
     [DataRow("pip")]
     [DataRow("crumb")]
     [DataRow("puddle")]
+    public void WritingHasEightDistinctUnclippedLoopingPoses(string pet)
+    {
+        var assets = HoodAssets.LoadPet(Path.Combine(AppContext.BaseDirectory, "Assets"), pet);
+        var animation = assets.Definition.GetAnimation(PetAction.Write);
+        Assert.AreEqual("write", animation.Action);
+        Assert.IsTrue(animation.Loops);
+        Assert.AreEqual(120, animation.FrameDurationMilliseconds);
+        Assert.AreEqual(8, animation.Frames.Distinct().Count());
+        var hashes = new HashSet<string>();
+        foreach (var frame in animation.Frames)
+        {
+            var crop = new CroppedBitmap(assets.SpriteSheet, assets.GetFrameRectangle(frame));
+            var pixels = new byte[crop.PixelWidth * crop.PixelHeight * 4];
+            crop.CopyPixels(pixels, crop.PixelWidth * 4, 0);
+            Assert.IsTrue(Enumerable.Range(0, pixels.Length / 4).Count(i => pixels[i * 4 + 3] > 32) > 1000);
+            for (var y = 0; y < crop.PixelHeight; y++)
+            for (var x = 0; x < crop.PixelWidth; x++)
+                if (x == 0 || y == 0 || x == crop.PixelWidth - 1 || y == crop.PixelHeight - 1)
+                    Assert.AreEqual(0, (int)pixels[(y * crop.PixelWidth + x) * 4 + 3], $"{pet} writing frame {frame.Column} is clipped.");
+            hashes.Add(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(pixels)));
+        }
+        Assert.AreEqual(8, hashes.Count, "The writing poses must contain different artwork.");
+    }
+
+    [TestMethod]
+    public void OlderArtworkWithoutWritingStillLoadsAndSwitchesToPackagedPets()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), $"HoodLegacyWriting-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var root = Path.Combine(AppContext.BaseDirectory, "Assets");
+            var original = Path.Combine(root, "Hood");
+            var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(original, "hood.animations.json")))!;
+            var animations = manifest["animations"]!.AsArray();
+            animations.Remove(animations.Single(animation => animation!["action"]!.GetValue<string>() == "write"));
+            File.WriteAllText(Path.Combine(directory, "hood.animations.json"), manifest.ToJsonString());
+            File.Copy(Path.Combine(original, "hood_spritesheet.png"), Path.Combine(directory, "hood_spritesheet.png"));
+
+            var legacy = HoodAssets.ReadSource(directory);
+            Assert.AreSame(legacy.Definition.GetAnimation(PetAction.Idle), legacy.Definition.GetAnimation(PetAction.Write));
+            var packaged = HoodAssets.LoadPetSource(root, "pip", legacy.Definition);
+            var restored = HoodAssets.ReadSourceForPet(directory, packaged.Definition);
+            Assert.AreSame(restored.Definition.GetAnimation(PetAction.Idle), restored.Definition.GetAnimation(PetAction.Write));
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [TestMethod]
+    [DataRow("hood")]
+    [DataRow("pip")]
+    [DataRow("crumb")]
+    [DataRow("puddle")]
     public void WaveHasSixteenDistinctPosesAtOneHundredTwentyMilliseconds(string pet)
     {
         var assets = HoodAssets.LoadPet(Path.Combine(AppContext.BaseDirectory, "Assets"), pet);
@@ -41,9 +94,9 @@ public sealed class HoodAssetsTests
     }
 
     [TestMethod]
-    [DataRow(0.5, 1.0, 1536, 1144)]
-    [DataRow(1.5, 1.25, 5760, 4290)]
-    [DataRow(2.0, 1.5, 6144, 4576)]
+    [DataRow(0.5, 1.0, 1536, 1248)]
+    [DataRow(1.5, 1.25, 5760, 4680)]
+    [DataRow(2.0, 1.5, 6144, 4992)]
     public void PetSizeAndDisplayDpiDetermineDecodedResolution(double petScale, double dpi, int width, int height)
     {
         var source = HoodAssets.LoadPetSource(Path.Combine(AppContext.BaseDirectory, "Assets"), PetCatalog.Hood, null);
@@ -184,7 +237,7 @@ public sealed class HoodAssetsTests
             var image = (Image)pet.FindName("PetImage");
             var crop = (CroppedBitmap)image.Source;
             Assert.AreEqual(4608, sheet.PixelWidth);
-            Assert.AreEqual(3432, sheet.PixelHeight);
+            Assert.AreEqual(3744, sheet.PixelHeight);
             Assert.AreSame(sheet, crop.Source);
             Assert.AreEqual(size, (pet.Width, pet.Height));
             Assert.AreEqual(192d, image.Width);
@@ -373,7 +426,7 @@ public sealed class HoodAssetsTests
             FrameWidth = 11,
             FrameHeight = 13,
             SpriteScale = spriteScale,
-            Animations = Enum.GetValues<PetAction>().Select(action => new PetAnimation
+            Animations = Enum.GetValues<PetAction>().Where(action => action != PetAction.Write).Select(action => new PetAnimation
             {
                 Action = action.ToString(),
                 Frames = [new SpriteFrame(0, 0), new SpriteFrame(1, 0), new SpriteFrame(3, 4)],

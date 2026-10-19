@@ -68,6 +68,7 @@ public sealed record BehaviorSettings
     public bool MediaHeadphones { get; init; } = true;
     public bool Roaming { get; init; } = true;
     public bool IdleAnimations { get; init; } = true;
+    public bool WritingAnimations { get; init; } = true;
     public bool RandomEvents { get; init; } = true;
     public bool AlwaysOnTop { get; init; } = true;
     public bool StartWithWindows { get; init; }

@@ -2,7 +2,9 @@
 
 This source-project reference covers the alternate-pet assets and their regeneration. Pip wears a forest-green wool shawl with fringed ends; Crumb wears a mustard hoodie with the hood down; Puddle has no accessory. Pip and Crumb hold a bowl in both paws while eating upright.
 
-Each pet has a transparent **6144×4576** atlas, **165 pose cells** and **285 playback entries**, covering all eleven Hood actions. The manifests preserve Hood's frame layout, timing, looping, idle hold, sprite scale and motion bounds; only the pet name differs. Pet uses the new final row and plays the happy attention gesture once in 1.92 seconds. Movement and reactions remain controlled by the existing application.
+Each pet has a transparent **6144×4992** atlas, **173 pose cells** and **293 playback entries**, covering all twelve Hood actions. The manifests preserve Hood's frame layout, timing, looping, idle hold, sprite scale and motion bounds; only the pet name differs. Pet uses row 10 and plays the happy attention gesture once in 1.92 seconds. Write uses row 11 and loops eight poses at 120 ms each. Movement and reactions remain controlled by the existing application.
+
+The [writing animation review](../writing-animations/index.html) shows Hood and Pip writing in notebooks, Crumb typing on a keyboard, and Puddle writing on the ground. It includes audio accessories, pause/replay, frame scrubbing, and light/dark backgrounds. In the app, **Play writing animations** controls the Notes typing response independently of idle animations; the response ends after 0.8 seconds without typing or immediately on editing-field focus loss. The viewer repeats artwork for review rather than simulating Notes input.
 
 | Pet | Full sprite sheet | Manifest | Contact sheet |
 | --- | --- | --- | --- |

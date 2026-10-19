@@ -116,7 +116,8 @@ public partial class NoteWindow
         };
         if (siblings is null) return;
 
-        var source = new NoteInlineMathSourceSpan { IsDisplayMath = button.IsDisplayMath };
+        StopWritingActivity();
+        var source = new NoteInlineMathSourceSpan { IsDisplayMath = button.IsDisplayMath, SourceIdentity = new object() };
         if (button.NoteRun.Style.HasFlag(NoteTextStyle.Bold))
             source.FontWeight = FontWeights.Bold;
         if (button.NoteRun.Style.HasFlag(NoteTextStyle.Italic))
@@ -263,6 +264,7 @@ public partial class NoteWindow
             {
                 var document = ReadEditorDocument();
                 var (start, length) = GetSelectionOffsets();
+                StopWritingActivity(currentSource);
                 _activeMathSource = null;
                 SetEditorDocument(document, start, length);
                 UpdateToolbar();
@@ -274,11 +276,15 @@ public partial class NoteWindow
         }));
     }
 
-    // A display source owns its paragraph, even when WPF splits it into multiple spans.
-    private static bool IsInsideMathSource(TextPointer position, NoteInlineMathSourceSpan source) =>
-        source.IsDisplayMath
-            ? position.Paragraph == source.ContentStart.Paragraph
-            : position.CompareTo(source.ContentStart) >= 0 && position.CompareTo(source.ContentEnd) <= 0;
+    private static bool IsInsideMathSource(TextPointer position, NoteInlineMathSourceSpan source)
+    {
+        // WPF copies dependency properties when editing splits a source into several spans.
+        if (source.IsDisplayMath) return position.Paragraph == source.ContentStart.Paragraph;
+        for (var element = position.Parent as TextElement; element is not null; element = element.Parent as TextElement)
+            if (element is NoteInlineMathSourceSpan part && source.SourceIdentity is not null &&
+                ReferenceEquals(part.SourceIdentity, source.SourceIdentity)) return true;
+        return position.CompareTo(source.ContentStart) >= 0 && position.CompareTo(source.ContentEnd) <= 0;
+    }
 
     private void RefreshInlineMathAppearance()
     {

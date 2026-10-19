@@ -225,7 +225,9 @@ public sealed class HoodOverlayRenderingTests
             var action = Enum.Parse<PetAction>(animation.Action, true);
             var snapshot = new HoodSessionSnapshot
             {
-                Position = new(500, 400), Action = action, FrameIndex = index,
+                Position = new(500, 400),
+                Action = action == PetAction.Write ? PetAction.Idle : action,
+                FrameIndex = action == PetAction.Write ? 0 : index,
                 Mode = action == PetAction.Sleep ? HoodSessionMode.Sleeping : HoodSessionMode.Awake,
                 Needs = new(25, 40, 30), RemainingRandomInterval = TimeSpan.FromSeconds(30),
                 RemainingNap = action == PetAction.Sleep ? TimeSpan.FromSeconds(20) : TimeSpan.Zero,
@@ -237,7 +239,20 @@ public sealed class HoodOverlayRenderingTests
                 new FixedRandomSource(), new NoopSessionStore(), configuration, snapshot);
             var reference = HoodSession.Start(assets.Definition, [new DisplayInfo("Primary", new(0, 0, 1920, 1080), true)],
                 new FixedRandomSource(), new NoopSessionStore(), configuration, snapshot);
-            var pet = CreatePet(session, assets, new UnavailableMediaAudioProbe());
+            var clock = new WritingClock();
+            var pet = CreatePet(session, assets, new UnavailableMediaAudioProbe(), clock);
+            if (action == PetAction.Write)
+            {
+                // Writing is transient input presentation, never a restorable session action.
+                pet.ReportNoteWriting(pet, true);
+                for (var frame = 0; frame < index; frame++)
+                {
+                    clock.Advance(TimeSpan.FromMilliseconds(animation.FrameDurationMilliseconds));
+                    pet.ReportNoteWriting(pet, true);
+                }
+                reference.SetWritingPresentation(true);
+                Assert.AreEqual(new HoodPresentation(action, index, session.Position), pet.CurrentPresentation);
+            }
             var cups = (Image)pet.FindName("HeadphoneCupsImage");
             var ordinary = ((Image)pet.FindName("PetImage")).Source;
             var expected = State();
@@ -259,6 +274,13 @@ public sealed class HoodOverlayRenderingTests
                 Assert.AreEqual(reference.Presentation, session.Presentation, "The next frame and movement must continue at the original timing.");
                 Assert.AreEqual(reference.Needs, session.Needs);
                 Assert.AreEqual(reference.RemainingNap, session.RemainingNap);
+                if (action == PetAction.Write)
+                {
+                    clock.Advance(step);
+                    pet.RefreshWritingPresentation();
+                    Assert.AreEqual((index + 1) % animation.Frames.Count, pet.CurrentPresentation.FrameIndex);
+                    Assert.AreEqual(PetAction.Write, pet.CurrentPresentation.Action);
+                }
             }
             finally { pet.Close(); }
 
@@ -811,11 +833,13 @@ public sealed class HoodOverlayRenderingTests
         return new HoodOverlayWindow(session, assets, noop, noop, noop, noop, noop, noop, UiStyleCatalog.StickyNotes);
     }
 
-    private static HoodOverlayWindow CreatePet(HoodSession session, LoadedHoodAssets assets, IMediaAudioProbe mediaAudioProbe)
+    private static HoodOverlayWindow CreatePet(HoodSession session, LoadedHoodAssets assets, IMediaAudioProbe mediaAudioProbe,
+        TimeProvider? writingClock = null)
     {
         Action noop = () => { };
         var source = assets.Source;
-        return new HoodOverlayWindow(session, source, assets, noop, noop, noop, noop, noop, noop, UiStyleCatalog.StickyNotes, mediaAudioProbe);
+        return new HoodOverlayWindow(session, source, assets, noop, noop, noop, noop, noop, noop, UiStyleCatalog.StickyNotes,
+            mediaAudioProbe, writingClock);
     }
 
     private static HoodAssetSource LoadSource(string assetsDirectory, string pet) =>
@@ -851,6 +875,14 @@ public sealed class HoodOverlayRenderingTests
     private sealed class NoopSessionStore : ISessionStore
     {
         public void Save(HoodSessionSnapshot snapshot) { }
+    }
+
+    private sealed class WritingClock : TimeProvider
+    {
+        private long _ticks;
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+        public override long GetTimestamp() => _ticks;
+        public void Advance(TimeSpan elapsed) => _ticks += elapsed.Ticks;
     }
 
     private sealed class UnavailableMediaAudioProbe : IMediaAudioProbe

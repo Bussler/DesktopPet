@@ -33,6 +33,8 @@ In **Settings > Appearance**, choose a pet, size (50%–200%), UI style, and Sys
 
 ## Use notes
 
+Your pet writes alongside actual Notes typing. **Settings > Behavior > Play writing animations** controls this independently of idle animations; it is enabled by default.
+
 - Create a note through **Notes > New note** in the pet or tray menu, or **+ New note** in a note header. Click its name to rename it, drag unused header space to move it, and drag an edge or corner to resize it.
 - Click the body to type. When the note has focus, its toolbar offers text formatting, bullets, numbering, and checklists. **Ctrl+B/I/U** applies bold/italic/underline; **Ctrl+Z/Y** undoes/redoes. Type `- `, `1) `, or `- [ ] ` to start a list. Markdown shortcuts also support headings, code, equations, and web links; right-click the editor to create a table or math block.
 - Use the **⋯ Note menu** for color, Notes settings, and **Delete note**. Closing a note keeps it in the Notes list; deleting moves it to recoverable **Trash**. **Notes > Notes list** searches names and content and lets you reopen, restore, or permanently delete notes.

@@ -116,9 +116,11 @@ public partial class HoodOverlayWindow : Window
         Action showNotesList,
         Action showNotesSettings,
         string uiStyle,
-        IMediaAudioProbe mediaAudioProbe)
+        IMediaAudioProbe mediaAudioProbe,
+        TimeProvider? writingClock = null)
     {
         _session = session;
+        _writingClock = writingClock ?? TimeProvider.System;
         _mediaAudioProbe = mediaAudioProbe;
         _mediaHeadphonesEnabled = session.Configuration.Behavior.MediaHeadphones;
         _assetSource = assetSource;
@@ -220,6 +222,7 @@ public partial class HoodOverlayWindow : Window
 
     private void OnOverlayClosed(object? sender, EventArgs e)
     {
+        ClearWritingActivity();
         if (_focus is not null) _focus.Changed -= SyncFocusPresentation;
         _session.SetFocusPresentation(false);
         _session.EndDragging();
@@ -254,6 +257,7 @@ public partial class HoodOverlayWindow : Window
             ApplyPlacement();
         }
 
+        UpdateWritingPresentation();
         RenderPresentation();
         UpdateTimerInterval();
     }
@@ -270,6 +274,7 @@ public partial class HoodOverlayWindow : Window
 
         if (mode == PowerModes.Suspend)
         {
+            ClearWritingActivity();
             StopMediaHeadphoneObservation();
             Interlocked.Exchange(ref _suspended, 1);
             Interlocked.Exchange(ref _lastTick, Stopwatch.GetTimestamp());
@@ -279,6 +284,7 @@ public partial class HoodOverlayWindow : Window
         }
         else if (mode == PowerModes.Resume)
         {
+            ClearWritingActivity();
             Interlocked.Exchange(ref _lastTick, Stopwatch.GetTimestamp());
             Interlocked.Exchange(ref _suspended, 0);
             _mediaHeadphonePolicy.Reset();
@@ -748,7 +754,7 @@ public partial class HoodOverlayWindow : Window
                 var frameTicks = TimeSpan.FromMilliseconds(celebration.FrameDurationMilliseconds).Ticks;
                 return new(PetAction.Pet, (int)(ticks / frameTicks), _session.Position);
             }
-            if (_focusAction is not { } action) return _session.Presentation;
+            if (_focusAction is not { } action) return WritingPresentation ?? _session.Presentation;
             var animation = _assetSource.Definition.GetAnimation(action);
             var duration = TimeSpan.FromMilliseconds(animation.FrameDurationMilliseconds);
             return new(action, (int)(_focusAnimationTicks / duration.Ticks % animation.Frames.Count), _session.Position);
@@ -757,6 +763,7 @@ public partial class HoodOverlayWindow : Window
 
     internal void RefreshBehaviorSettings()
     {
+        UpdateWritingPresentation();
         ApplyMediaHeadphones(_session.Configuration.Behavior.MediaHeadphones);
         ApplyPlacement();
         UpdateTimerInterval();
@@ -788,8 +795,12 @@ public partial class HoodOverlayWindow : Window
         _areaEditor?.ApplyPlacement();
     }
 
-    private void UpdateTimerInterval() => _frameTimer.Interval = TimeSpan.FromMilliseconds(
-        _checklistAnimationTicks is not null || _focusAction is not null || _session.RequiresAnimationFrames ? 33 : 1000);
+    private void UpdateTimerInterval()
+    {
+        var interval = TimeSpan.FromMilliseconds(
+            _writingOwner is not null || _checklistAnimationTicks is not null || _focusAction is not null || _session.RequiresAnimationFrames ? 33 : 1000);
+        if (_frameTimer.Interval != interval) _frameTimer.Interval = interval;
+    }
 
     private static IntPtr WindowMessageHook(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
     {

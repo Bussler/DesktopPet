@@ -14,7 +14,8 @@ public enum PetAction
     Feed,
     Sleep,
     Wake,
-    Pet
+    Pet,
+    Write
 }
 
 public sealed class PetAssetException(string message, Exception? innerException = null)
@@ -80,7 +81,9 @@ public sealed class PetDefinition
     }
 
     public PetAnimation GetAnimation(PetAction action) =>
-        Animations.First(animation => Enum.Parse<PetAction>(animation.Action, ignoreCase: true) == action);
+        Animations.FirstOrDefault(animation => Enum.Parse<PetAction>(animation.Action, ignoreCase: true) == action)
+        ?? (action == PetAction.Write ? GetAnimation(PetAction.Idle)
+            : throw new InvalidOperationException($"The '{action}' animation is missing."));
 
     public PetBounds MinimumRoamingArea => new(
         0,
@@ -173,7 +176,7 @@ public sealed class PetDefinition
         foreach (var requiredAction in Enum.GetValues<PetAction>())
         {
             // Older custom artwork can use its friendly wave for the new interaction.
-            if (requiredAction != PetAction.Pet && !actions.Contains(requiredAction))
+            if (requiredAction is not (PetAction.Pet or PetAction.Write) && !actions.Contains(requiredAction))
             {
                 throw new PetAssetException($"The Hood animation manifest is missing the required '{requiredAction}' animation.");
             }
@@ -202,6 +205,11 @@ public sealed class PetDefinition
         if (GetAnimation(PetAction.Pet).Loops)
         {
             throw new PetAssetException("The 'Pet' reaction must finish instead of looping.");
+        }
+
+        if (!GetAnimation(PetAction.Write).Loops)
+        {
+            throw new PetAssetException("The 'Write' animation must loop.");
         }
     }
 }

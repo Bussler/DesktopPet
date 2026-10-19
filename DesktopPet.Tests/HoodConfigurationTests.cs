@@ -7,6 +7,41 @@ namespace DesktopPet.Tests;
 public sealed class HoodConfigurationTests
 {
     [TestMethod]
+    [DataRow(false, false)]
+    [DataRow(false, true)]
+    [DataRow(true, false)]
+    [DataRow(true, true)]
+    public void WritingDefaultsForOlderFilesAndRoundTripsIndependently(bool idle, bool writing)
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new YamlConfigurationStore(Path.Combine(directory.Path, "config.yaml"));
+        var initial = store.LoadOrCreate();
+        Assert.IsTrue(initial.Behavior.WritingAnimations);
+        StringAssert.Contains(File.ReadAllText(store.Path), "writing_animations: true");
+        store.Save(initial with { Behavior = initial.Behavior with { IdleAnimations = idle } });
+        File.WriteAllText(store.Path, Regex.Replace(File.ReadAllText(store.Path), @"(?m)^  writing_animations:.*\r?\n", string.Empty));
+        var legacy = store.LoadOrCreate();
+        Assert.IsTrue(legacy.Behavior.WritingAnimations);
+        Assert.AreEqual(idle, legacy.Behavior.IdleAnimations);
+        store.Save(legacy with { Behavior = legacy.Behavior with { WritingAnimations = writing } });
+        var restored = store.LoadOrCreate();
+        Assert.AreEqual(writing, restored.Behavior.WritingAnimations);
+        Assert.AreEqual(idle, restored.Behavior.IdleAnimations);
+    }
+
+    [TestMethod]
+    public void WritingRejectsNonBooleanYamlWithoutReplacingIt()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new YamlConfigurationStore(Path.Combine(directory.Path, "config.yaml"));
+        store.LoadOrCreate();
+        var invalid = File.ReadAllText(store.Path).Replace("writing_animations: true", "writing_animations: maybe", StringComparison.Ordinal);
+        File.WriteAllText(store.Path, invalid);
+        Assert.Throws<HoodConfigurationException>(() => store.LoadOrCreate());
+        Assert.AreEqual(invalid, File.ReadAllText(store.Path));
+    }
+
+    [TestMethod]
     [DataRow(10d)]
     [DataRow(25d)]
     public void PetReliefDefaultsForOlderFilesAndRoundTrips(double relief)

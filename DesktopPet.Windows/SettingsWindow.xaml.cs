@@ -280,6 +280,7 @@ public partial class SettingsWindow : Window
         ShowSpritesCheckBox.IsChecked = configuration.Behavior.ShowSprites;
         RoamingCheckBox.IsChecked = configuration.Behavior.Roaming;
         IdleAnimationsCheckBox.IsChecked = configuration.Behavior.IdleAnimations;
+        WritingAnimationsCheckBox.IsChecked = configuration.Behavior.WritingAnimations;
         RandomEventsCheckBox.IsChecked = configuration.Behavior.RandomEvents;
         MediaHeadphonesCheckBox.IsChecked = configuration.Behavior.MediaHeadphones;
         StartWithWindowsCheckBox.IsChecked = configuration.Behavior.StartWithWindows;
@@ -322,6 +323,7 @@ public partial class SettingsWindow : Window
                 ShowSprites = ShowSpritesCheckBox.IsChecked == true,
                 Roaming = RoamingCheckBox.IsChecked == true,
                 IdleAnimations = IdleAnimationsCheckBox.IsChecked == true,
+                WritingAnimations = WritingAnimationsCheckBox.IsChecked == true,
                 RandomEvents = RandomEventsCheckBox.IsChecked == true,
                 StartWithWindows = StartWithWindowsCheckBox.IsChecked == true,
                 AlwaysOnTop = AlwaysOnTopCheckBox.IsChecked == true,

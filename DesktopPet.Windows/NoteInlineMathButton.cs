@@ -230,6 +230,14 @@ internal sealed class NoteInlineMathButton : WpfButton
 
 internal sealed class NoteInlineMathSourceSpan : System.Windows.Documents.Span
 {
+    internal static readonly DependencyProperty SourceIdentityProperty = DependencyProperty.Register(
+        nameof(SourceIdentity), typeof(object), typeof(NoteInlineMathSourceSpan), new PropertyMetadata(null));
+    internal object? SourceIdentity
+    {
+        get => GetValue(SourceIdentityProperty);
+        set => SetValue(SourceIdentityProperty, value);
+    }
+
     // WPF copies dependency properties when it splits a span during typing.
     public static readonly DependencyProperty IsDisplayMathProperty = DependencyProperty.Register(
         nameof(IsDisplayMath), typeof(bool), typeof(NoteInlineMathSourceSpan), new PropertyMetadata(false));

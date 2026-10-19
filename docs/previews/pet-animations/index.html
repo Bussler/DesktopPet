@@ -9,7 +9,7 @@
 <div class="pets"><article><header><h2>Pip</h2><small>Forest-green wool shawl</small></header><div class="stage"><canvas id="Pip" width="384" height="640" aria-label="Pip animated sprite"></canvas></div></article><article><header><h2>Crumb</h2><small>Mustard hoodie · hood down</small></header><div class="stage"><canvas id="Crumb" width="384" height="640" aria-label="Crumb animated sprite"></canvas></div></article><article><header><h2>Puddle</h2><small>Mint jelly · no accessory</small></header><div class="stage"><canvas id="Puddle" width="384" height="640" aria-label="Puddle animated sprite"></canvas></div></article></div>
 <footer>Actions repeat for review. Timing matches the manifest; idle hold is optional here. Jump includes Hood’s 90-unit lift. Desktop movement, reactions and settings stay in the existing app.</footer></main>
 <script>
-const schedule=[{"action":"idle","row":0,"count":16,"ms":80},{"action":"runRight","row":1,"count":16,"ms":55},{"action":"runLeft","row":2,"count":16,"ms":55},{"action":"wave","row":3,"count":16,"ms":120},{"action":"lookUp","row":4,"count":12,"ms":60},{"action":"lookAround","row":5,"count":16,"ms":143},{"action":"jump","row":6,"count":15,"ms":80},{"action":"feed","row":7,"count":15,"ms":60},{"action":"sleep","row":8,"count":12,"ms":225},{"action":"wake","row":9,"count":15,"ms":60},{"action":"pet","row":10,"count":16,"ms":120}];
+const schedule=[{"action":"idle","row":0,"count":16,"ms":80},{"action":"runRight","row":1,"count":16,"ms":55},{"action":"runLeft","row":2,"count":16,"ms":55},{"action":"wave","row":3,"count":16,"ms":120},{"action":"lookUp","row":4,"count":12,"ms":60},{"action":"lookAround","row":5,"count":16,"ms":143},{"action":"jump","row":6,"count":15,"ms":80},{"action":"feed","row":7,"count":15,"ms":60},{"action":"sleep","row":8,"count":12,"ms":225},{"action":"wake","row":9,"count":15,"ms":60},{"action":"pet","row":10,"count":16,"ms":120},{"action":"write","row":11,"count":8,"ms":120}];
 const select=document.getElementById('action'), timing=document.getElementById('timing'), hold=document.getElementById('hold');
 for(const a of schedule){const o=document.createElement('option');o.value=a.action;o.textContent=a.action.replace(/([A-Z])/g,' $1').toLowerCase();select.append(o)}
 select.value='runRight';
@@ -19,7 +19,7 @@ function restart(){start=performance.now();pauseTime=start}
 select.onchange=hold.onchange=restart;document.getElementById('replay').onclick=restart;
 document.getElementById('pause').onclick=()=>{if(paused)start+=performance.now()-pauseTime;else pauseTime=performance.now();paused=!paused;document.getElementById('pause').textContent=paused?'Play':'Pause'};
 document.getElementById('dark').onchange=e=>document.body.classList.toggle('dark',e.target.checked);
-for(const p of pets){p.image.src='../../../Assets/'+p.name+'/hood_spritesheet.png?v=wave-16-120-1';p.image.onerror=()=>timing.textContent='Could not load '+p.name+' atlas'}
+for(const p of pets){p.image.src='../../../Assets/'+p.name+'/hood_spritesheet.png?v=writing-8-120';p.image.onerror=()=>timing.textContent='Could not load '+p.name+' atlas'}
 function draw(now){const a=schedule.find(s=>s.action===select.value), count=a.count+(a.action==='idle'&&hold.checked?120:0), elapsed=(paused?pauseTime:now)-start;
 const entry=Math.floor(elapsed/a.ms)%count, col=a.action==='idle'&&hold.checked?Math.max(0,entry-120):entry;
 const fraction=(elapsed/a.ms)%count, flight=Math.min(1,Math.max(0,(fraction/count-4/15)/(8/15))), lift=a.action==='jump'?180*4*flight*(1-flight):0;

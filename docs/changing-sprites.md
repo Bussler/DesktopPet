@@ -8,7 +8,7 @@ Hood loads `hood_spritesheet.png` and `hood.animations.json` from the selected p
 
 ## Replace artwork with the same layout
 
-Use a transparent PNG measuring **6144x4576 pixels**, arranged in **16 columns and 11 rows** of **384x416 pixel** cells. Keep each pose inside its cell, including wings, feet, and props, with transparent margins. Align the character consistently between frames.
+Use a transparent PNG measuring **6144x4992 pixels**, arranged in **16 columns and 12 rows** of **384x416 pixel** cells. Keep each pose inside its cell, including wings, feet, and props, with transparent margins. Align the character consistently between frames.
 
 The [animation table and preview](hood-animations.md) list the rows, pose counts, and playback timings. Rows and columns start at zero. Each action uses columns zero through its pose count minus one; idle begins with 120 extra references to column zero for its quiet hold. Unreferenced cells remain empty.
 
@@ -19,8 +19,8 @@ Edit `hood.animations.json` along with the PNG:
 - Keep `schemaVersion` at `1`, `spriteSheet` at `hood_spritesheet.png`, and a nonempty `name`.
 - Set `sheetWidth` and `sheetHeight` to the PNG's pixel dimensions, and `frameWidth` and `frameHeight` to one cell's pixel dimensions.
 - Set `spriteScale` to a finite positive number of pixels per logical unit. The current value `2` displays a 384x416 frame at 192x208. Omitting it defaults to `1` for legacy manifests. Display size and placement use pixel frame dimensions divided by this scale.
-- Define all eleven supported actions exactly once, with at least one frame. Each nonnegative `column` and `row` must identify an entire cell inside the sheet. The new `pet` action uses row 10, preserving the original ten rows and saved frame indices. Legacy custom manifests without `pet` still load and use a one-shot copy of their wave animation for petting.
-- Set a positive `frameDurationMilliseconds` and explicit `loops` value. Idle must loop; jump and pet must finish. Retain the other playback rules unless intentionally changing them.
+- Define the supported actions exactly once, with at least one frame. Each nonnegative `column` and `row` must identify an entire cell inside the sheet. `pet` uses row 10 and `write` uses row 11, preserving older rows and saved frame indices. Legacy custom manifests without `pet` use a one-shot copy of their wave animation for petting; missing `write` uses existing idle artwork. Older valid sheet dimensions remain supported.
+- Set a positive `frameDurationMilliseconds` and explicit `loops` value. Idle and write must loop; jump and pet must finish. Retain the other playback rules unless intentionally changing them.
 - Keep `motionBounds` in **logical units**, inside the displayed frame. A full bound of `{ "x": 0, "y": 0, "width": 192, "height": 208 }` suits the current assets. Include every visible part of Hood and his props.
 
 For example, doubling artwork resolution again while preserving Hood's size means 768x832 pixel frames with `spriteScale: 4`; motion bounds remain 192x208.
@@ -28,6 +28,8 @@ For example, doubling artwork resolution again while preserving Hood's size mean
 ## Include sprites in future builds
 
 Runtime switching requires matching logical display dimensions and each action's frame count, duration, loop flag, and motion bounds. A different grid or frame coordinate layout is supported when those playback values remain the same. If custom sequences change these values, restore the matching manifests before switching pets; the app reports incompatible assets before saving the choice.
+
+The optional `write` sequence is exempt from its playback comparison when either manifest omits it and uses the legacy idle fallback. Existing required actions must still match. With idle animations disabled, that fallback is still artwork rather than an animated idle loop.
 
 In a source checkout, edit the selected pet's `hood_spritesheet.png` and `hood.animations.json` under `Assets`, run `tools\Test.ps1` to validate, then run `tools\Build-AndPublish.ps1` to package. Editing only a published build does not update the source assets.
 

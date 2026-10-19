@@ -17,6 +17,14 @@ The note name remains visible. Header buttons and formatting controls appear whe
 
 For notes alone, turn off **Show Hood sprites** in Settings and Save, or toggle it in the pet menu. The pet's animations, movement, needs, and timers pause; open notes remain visible. The tray's **Notes** submenu still works, and **Show Hood sprites** brings the pet back. This choice survives restart.
 
+## Writing together
+
+The selected pet writes while you type in note content, the title, or equation source: Hood and Pip use notebooks, Crumb uses a keyboard, and Puddle writes on the ground. This is enabled by default under **Hood Settings > Behavior > Play writing animations**, independently of idle animations.
+
+Characters, Enter, Tab, Backspace/Delete, and keyboard paste start or extend the response. Simply focusing a note, navigating, selecting or pasting with the mouse, using formatting shortcuts, or typing in search/settings does not. The pet returns to its normal behavior after 0.8 seconds without qualifying input. Leaving the editing field, hiding/closing the note, hiding the pet, or suspending/quitting ends the response immediately; fresh typing is needed afterward.
+
+Writing temporarily pauses roaming. Sleeping pets stay asleep, and feeding, dragging, click reactions, Focus reminders/break sleep, and checklist celebrations keep their existing priority. Writing does not change your text, history, or care gains.
+
 ## Search and Trash
 
 Open **Notes > Notes list** from the pet/tray menu or **Notes list** from a note menu. Search matches names and content. Enter or double-click opens an active note; Enter on a Trash item restores it to the active list as closed. Open and Restore operate on one selected note.

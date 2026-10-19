@@ -113,6 +113,7 @@ public partial class NoteWindow : Window
         _restingBounds = note.Bounds;
         _lastAcceptedDocument = note.Document.Copy();
         InitializeComponent();
+        InitializeWritingActivity();
         InitializeInlineMathEditing();
         InitializeLinkEditing();
         NoteTitle.Text = note.DisplayName;
@@ -258,6 +259,7 @@ public partial class NoteWindow : Window
 
     public void SetGroupVisibilityImmediately(bool visible)
     {
+        SetWritingVisibility(visible);
         CancelPositionTransition(restoreRestingPosition: true);
         if (visible)
         {
@@ -293,6 +295,7 @@ public partial class NoteWindow : Window
 
     public void BeginGroupVisibilityTransition(bool visible, System.Windows.Point hoodCenter, TimeSpan duration, Action completed)
     {
+        SetWritingVisibility(visible);
         var currentLeft = Left;
         var currentTop = Top;
         CancelPositionTransition(restoreRestingPosition: true);
@@ -464,26 +467,23 @@ public partial class NoteWindow : Window
 
     private void OnPreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
-        if (NoteTitle.IsKeyboardFocusWithin && e.Key == Key.Enter)
+        e.Handled = HandleNoteKey(e.Key, e.KeyboardDevice.Modifiers, e.OriginalSource);
+    }
+
+    internal bool HandleNoteKey(Key key, ModifierKeys modifiers, object originalSource)
+    {
+        if (ReferenceEquals(originalSource, Keyboard.FocusedElement)) ReportWritingKey(key, modifiers);
+
+        if (NoteTitle.IsKeyboardFocusWithin && key == Key.Enter)
         {
             Editor.Focus();
-            e.Handled = true;
-            return;
+            return true;
         }
 
-        if (!Editor.IsKeyboardFocusWithin)
-        {
-            return;
-        }
+        if (!Editor.IsKeyboardFocusWithin) return false;
+        if (_editorRecoveryPending) return true;
 
-        if (_editorRecoveryPending)
-        {
-            e.Handled = true;
-            return;
-        }
-
-        e.Handled = HandleEditorKey(e.Key, Keyboard.Modifiers.HasFlag(ModifierKeys.Control),
-            Keyboard.Modifiers.HasFlag(ModifierKeys.Shift));
+        return HandleEditorKey(key, modifiers.HasFlag(ModifierKeys.Control), modifiers.HasFlag(ModifierKeys.Shift));
     }
 
     private bool HandleEditorKey(Key key, bool control, bool shift)
@@ -1333,6 +1333,7 @@ public partial class NoteWindow : Window
 
     protected override void OnClosed(EventArgs e)
     {
+        StopWritingActivity();
         CancelPositionTransition(restoreRestingPosition: false);
         _windowSource?.RemoveHook(WindowMessageHook);
         _windowSource = null;
@@ -1416,6 +1417,7 @@ public partial class NoteWindow : Window
     private void SetEditorDocument(NotesDocument document, int? selectionStart, int? selectionLength)
     {
         NotesSnapshotValidator.ValidateDocument(document);
+        if (_activeMathSource is { } source) StopWritingActivity(source);
         _activeMathSource = null;
         _inlineMathCommitPending = false;
         _pendingPlainUrl = null;

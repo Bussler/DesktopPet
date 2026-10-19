@@ -67,7 +67,8 @@ public static class HoodSessionSnapshotValidator
             throw new InvalidDataException("The saved pet position must contain finite coordinates.");
         }
 
-        if (!Enum.IsDefined(snapshot.Action) || !Enum.IsDefined(snapshot.Mode) || snapshot.FrameIndex < 0)
+        if (!Enum.IsDefined(snapshot.Action) || snapshot.Action == PetAction.Write ||
+            !Enum.IsDefined(snapshot.Mode) || snapshot.FrameIndex < 0)
         {
             throw new InvalidDataException("The saved pet action, mode, or animation frame is invalid.");
         }
@@ -149,6 +150,7 @@ public sealed class HoodSession
     private bool _editingArea;
     private bool _dragging;
     private bool _focusPresentation;
+    private bool _writingPresentation;
     private PetAction? _dragAction;
     private TimeSpan _dragAnimationElapsed;
     private PetPosition _roamingDirection;
@@ -229,6 +231,10 @@ public sealed class HoodSession
     public bool IsEditingArea => _editingArea;
     // Presentation only: ordinary needs and legitimate naps continue; this flag is never saved.
     public void SetFocusPresentation(bool active) => _focusPresentation = active;
+    public void SetWritingPresentation(bool active) => _writingPresentation = active;
+    public bool IsWriting => _writingPresentation && _configuration.Behavior.WritingAnimations &&
+        _configuration.Behavior.ShowSprites && !_quitRequested && !_focusPresentation &&
+        Mode == HoodSessionMode.Awake && !_dragging && !_editingArea && !IsForegroundAction(_action);
     public bool RequiresAnimationFrames =>
         _configuration.Behavior.ShowSprites &&
         (_dragAction is not null ||
@@ -861,6 +867,7 @@ public sealed class HoodSession
 
     private bool CanAdvanceRandomInterval =>
         _configuration.Behavior.RandomEvents &&
+        !IsWriting &&
         Mode == HoodSessionMode.Awake &&
         !_dragging &&
         !_editingArea &&
@@ -870,6 +877,7 @@ public sealed class HoodSession
         Mode != HoodSessionMode.Awake ||
         !_configuration.Behavior.Roaming ||
         _focusPresentation ||
+        IsWriting ||
         _dragging ||
         _editingArea;
 

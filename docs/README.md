@@ -40,6 +40,8 @@ Specifications record agreed behavior and refinements. They preserve their origi
 | --- | --- |
 | [Base specification](specs/SPEC.md) | Pet behavior, placement, configuration, and local continuity. |
 | [Notes specification](specs/Notes-SPEC.md) | Notes lifecycle, editing, management, and persistence. |
+| [Notes writing animations](specs/Notes-Writing-Animations-SPEC.md) | Typing-driven custom animations for every pet, with independent settings and action priority. |
+| [Notes writing acceptance](specs/Notes-Writing-Animations-ACCEPTANCE.md) | Ticket review/test evidence, package identity, story coverage and native acceptance boundaries. |
 | [Markdown, math, and links](specs/Notes-Markdown-Math-Links-SPEC.md) | Rich Notes input, rendering, and clipboard contracts. |
 | [UI styles specification](specs/UI-Styles-SPEC.md) | Shared appearance and preview/rollback behavior. |
 | [Media headphones specification](specs/Media-Headphones-SPEC.md) | Audible Spotify/browser detection and headphones across all pet animations. |

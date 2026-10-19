@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Writing animation review</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#eef1f6;color:#253347;font:16px system-ui,sans-serif}main{max-width:1040px;margin:40px auto;padding:0 24px}h1{margin-bottom:8px}p{line-height:1.5}.controls{display:flex;gap:18px;align-items:center;flex-wrap:wrap;margin:24px 0}button,input{font:inherit}.pets{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}article{border:1px solid #cdd5e1;border-radius:12px;padding:16px;text-align:center;background:#fff}h2{margin:0 0 4px}small{color:#59687b}canvas{display:block;width:192px;height:208px;margin:16px auto 0}body.dark{background:#18212f;color:#edf2f9}.dark article{background:#253347;border-color:#536176}.dark small{color:#c8d2e1}input[type=range]{width:180px}
+</style>
+<main><h1>Writing animations</h1><p>Review the four loops at the app's default size. Each uses 8 distinct poses at 120 ms per pose. The app connects these to Notes typing through the independent Play writing animations setting; this page reviews artwork only.</p>
+<div class="controls"><button id="pause">Pause</button><button id="replay">Replay</button><label><input id="audio" type="checkbox"> Audio accessories</label><label><input id="dark" type="checkbox"> Dark background</label><label>Frame <input id="frame" type="range" min="0" max="7" value="0"></label><output id="counter">1 / 8</output></div>
+<div class="pets">
+<article><h2>Hood</h2><small>Notebook and pencil</small><canvas id="Hood" width="192" height="208" aria-label="Hood writes in a notebook"></canvas></article>
+<article><h2>Pip</h2><small>Notebook and pencil</small><canvas id="Pip" width="192" height="208" aria-label="Pip writes in a notebook"></canvas></article>
+<article><h2>Crumb</h2><small>Keyboard</small><canvas id="Crumb" width="192" height="208" aria-label="Crumb types on a keyboard"></canvas></article>
+<article><h2>Puddle</h2><small>Twig and ground doodles</small><canvas id="Puddle" width="192" height="208" aria-label="Puddle writes on the ground"></canvas></article>
+</div><p>Pause and scrub to inspect individual poses. Audio accessories use the application's actual rendering code. Artwork acknowledgement and native application acceptance are separate checks.</p></main>
+<script>
+const pets=['Hood','Pip','Crumb','Puddle'].map(name=>({name,canvas:document.getElementById(name),images:[new Image(),new Image()]}));
+const frame=document.getElementById('frame'),audio=document.getElementById('audio'),pause=document.getElementById('pause');
+let start=performance.now(),paused=false,current=0;
+for(const p of pets)for(let i=0;i<2;i++)p.images[i].src=p.name.toLowerCase()+'-write'+(i?'-audio':'')+'.png';
+function setPause(value){paused=value;pause.textContent=value?'Play':'Pause';if(!value)start=performance.now()-current*120}
+pause.onclick=()=>setPause(!paused);document.getElementById('replay').onclick=()=>{current=0;start=performance.now();setPause(false)};
+frame.oninput=()=>{current=Number(frame.value);setPause(true)};document.getElementById('dark').onchange=e=>document.body.classList.toggle('dark',e.target.checked);
+function draw(now){if(!paused)current=Math.floor((now-start)/120)%8;frame.value=current;document.getElementById('counter').value=(current+1)+' / 8';for(const p of pets){const context=p.canvas.getContext('2d'),image=p.images[audio.checked?1:0];context.clearRect(0,0,192,208);if(image.complete&&image.naturalWidth)context.drawImage(image,current*192,0,192,208,0,0,192,208)}requestAnimationFrame(draw)}requestAnimationFrame(draw);
+</script></html>

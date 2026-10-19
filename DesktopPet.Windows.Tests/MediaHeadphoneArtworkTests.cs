@@ -16,6 +16,22 @@ public sealed class MediaHeadphoneArtworkTests
     [DataRow("pip")]
     [DataRow("crumb")]
     [DataRow("puddle")]
+    public void WritingPosesKeepTheirAudioAccessories(string pet)
+    {
+        var assets = HoodAssets.LoadPet(Path.Combine(AppContext.BaseDirectory, "Assets"), pet);
+        foreach (var frame in assets.Definition.GetAnimation(PetAction.Write).Frames)
+        {
+            var art = MediaHeadphoneArtwork.Get(pet, PetAction.Write, frame);
+            Assert.IsTrue(CountOpaque(Render(art.InFront), new Int32Rect(0, 0, 192, 208)) > 100,
+                $"{pet} writing frame {frame.Column} must keep its headphones or earbuds.");
+        }
+    }
+
+    [TestMethod]
+    [DataRow("hood")]
+    [DataRow("pip")]
+    [DataRow("crumb")]
+    [DataRow("puddle")]
     public void AttentionPosesKeepTheirAudioAccessories(string pet)
     {
         var assets = HoodAssets.LoadPet(Path.Combine(AppContext.BaseDirectory, "Assets"), pet);

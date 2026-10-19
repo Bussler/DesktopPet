@@ -681,6 +681,7 @@ public partial class App : System.Windows.Application
                     _effectiveNotesSettings,
                     _effectiveUiStyle);
                 window.ChecklistItemCompleted += () => _petWindow?.CelebrateChecklistCompletion();
+                window.WritingActivityChanged += (owner, active) => _petWindow?.ReportNoteWriting(owner, active);
                 _noteWindows.Add(note.Id, window);
             }
 

@@ -295,7 +295,7 @@ public sealed class SettingsAndStatsTests
             Assert.AreEqual(104d, pet.Height);
             var crop = (CroppedBitmap)((Image)pet.FindName("PetImage")).Source;
             Assert.AreEqual(2304, crop.Source.PixelWidth);
-            Assert.AreEqual(1716, crop.Source.PixelHeight);
+            Assert.AreEqual(1872, crop.Source.PixelHeight);
             Assert.AreEqual(ExpectedFrameRectangle(pet, fixture.Session), crop.SourceRect);
         }
         finally { settings.Close(); pet.Close(); }
@@ -483,6 +483,68 @@ public sealed class SettingsAndStatsTests
             settings?.Close();
             pet.Close();
         }
+    }
+
+    [TestMethod]
+    [DataRow(false, false)]
+    [DataRow(false, true)]
+    [DataRow(true, false)]
+    [DataRow(true, true)]
+    public void WritingSettingSavesIndependentlyAndCancelRetainsItsValue(bool idle, bool writing)
+    {
+        using var fixture = new Fixture("light");
+        fixture.Store.Save(fixture.Controller.Current);
+        var pet = fixture.Pet();
+        var settings = fixture.HoodSettings(pet, UiStyleCatalog.StickyNotes);
+        try
+        {
+            var checkBox = (CheckBox)settings.FindName("WritingAnimationsCheckBox");
+            Assert.AreEqual("Play writing animations", checkBox.Content);
+            Assert.IsTrue(checkBox.IsChecked);
+            checkBox.IsChecked = writing;
+            ((CheckBox)settings.FindName("IdleAnimationsCheckBox")).IsChecked = idle;
+            Assert.IsTrue(fixture.Controller.Current.Behavior.WritingAnimations, "Behavior changes wait for Save.");
+            typeof(SettingsWindow).GetMethod("OnSaveClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(settings, [settings, new RoutedEventArgs(Button.ClickEvent)]);
+            Assert.AreEqual(writing, fixture.Controller.Current.Behavior.WritingAnimations);
+            Assert.AreEqual(writing, fixture.Store.LoadOrCreate().Behavior.WritingAnimations);
+            Assert.AreEqual(idle, fixture.Controller.Current.Behavior.IdleAnimations);
+            Assert.IsTrue(fixture.Controller.Current.Behavior.Roaming);
+
+            settings = fixture.HoodSettings(pet, UiStyleCatalog.StickyNotes);
+            ((CheckBox)settings.FindName("WritingAnimationsCheckBox")).IsChecked = !writing;
+            settings.Close();
+            Assert.AreEqual(writing, fixture.Store.LoadOrCreate().Behavior.WritingAnimations);
+            settings = fixture.HoodSettings(pet, UiStyleCatalog.StickyNotes);
+            ((CheckBox)settings.FindName("WritingAnimationsCheckBox")).IsChecked = !writing;
+            typeof(SettingsWindow).GetMethod("OnCancelClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(settings, [settings, new RoutedEventArgs(Button.ClickEvent)]);
+            Assert.AreEqual(writing, fixture.Store.LoadOrCreate().Behavior.WritingAnimations);
+            Assert.AreEqual(writing, fixture.Controller.Current.Behavior.WritingAnimations);
+        }
+        finally { settings.Close(); pet.Close(); }
+    }
+
+    [TestMethod]
+    public void FailedWritingSettingSaveKeepsTheEffectivePreferenceAndCheckbox()
+    {
+        using var fixture = new Fixture("light");
+        fixture.Store.Save(fixture.Controller.Current);
+        var yaml = File.ReadAllText(fixture.ConfigPath);
+        var pet = fixture.Pet();
+        var settings = fixture.HoodSettings(pet, UiStyleCatalog.StickyNotes);
+        try
+        {
+            ((CheckBox)settings.FindName("WritingAnimationsCheckBox")).IsChecked = false;
+            using (var locked = new FileStream(fixture.ConfigPath, FileMode.Open, FileAccess.Read, FileShare.None))
+                typeof(SettingsWindow).GetMethod("OnSaveClick", BindingFlags.Instance | BindingFlags.NonPublic)!
+                    .Invoke(settings, [settings, new RoutedEventArgs(Button.ClickEvent)]);
+            Assert.AreEqual(yaml, File.ReadAllText(fixture.ConfigPath));
+            Assert.IsTrue(fixture.Controller.Current.Behavior.WritingAnimations);
+            Assert.IsTrue(((CheckBox)settings.FindName("WritingAnimationsCheckBox")).IsChecked);
+            StringAssert.Contains(((TextBlock)settings.FindName("AppearanceErrorText")).Text, "Settings were not saved");
+        }
+        finally { settings.Close(); pet.Close(); }
     }
 
     [TestMethod]

@@ -8,6 +8,27 @@ namespace DesktopPet.Tests;
 public sealed class HoodSessionPersistenceTests
 {
     [TestMethod]
+    public void WritingCannotBeSavedOrRestoredAsDurableSessionAction()
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "state.json");
+        var store = new JsonSessionStore(path);
+        var valid = CreateAwakeSnapshot();
+        store.Save(valid);
+        var original = File.ReadAllText(path);
+        var transient = valid with { Action = PetAction.Write, FrameIndex = 0 };
+        Assert.Throws<SessionStateException>(() => store.Save(transient));
+        Assert.AreEqual(original, File.ReadAllText(path));
+        var edited = JsonNode.Parse(original)!;
+        edited["action"] = "write";
+        File.WriteAllText(path, edited.ToJsonString());
+        var malformed = File.ReadAllText(path);
+        Assert.Throws<SessionStateException>(() => store.Load());
+        Assert.AreEqual(malformed, File.ReadAllText(path));
+        Assert.Throws<InvalidDataException>(() => CreateSession(transient, HoodConfiguration.Defaults));
+    }
+
+    [TestMethod]
     [DataRow(PetAction.Idle)]
     [DataRow(PetAction.RunRight)]
     [DataRow(PetAction.Jump)]

@@ -4,6 +4,8 @@ Hood creates `%LOCALAPPDATA%\HoodDesktopPet\config.yaml` on first launch. The fi
 
 The file uses YAML schema version 1. Unknown or duplicate keys are errors. All numeric values must be finite. Rates and gains accept zero or greater; durations and dimensions must be greater than zero.
 
+**Behavior > Play writing animations** is enabled by default and independent of **Play idle animations**. Typing in Notes content, titles, or equation source makes the selected pet write alongside you. It stops 0.8 seconds after the last qualifying keystroke or immediately when you leave the editing field. Keyboard paste, Enter, Tab, Backspace, and Delete count; focus alone, navigation, mouse actions, search, and settings input do not. Writing pauses roaming and yields to care actions, sleep, Focus reminders, and checklist celebrations. Save applies the choice; Cancel or closing Settings retains the previous value. Older configuration files without `behavior.writing_animations` default to `true`; an explicit `false` remains off.
+
 Choose **Hood**, **Pip**, **Crumb**, or **Puddle** under **Appearance > Pet** in Hood Settings. The sprite previews immediately while the current action, needs, nap, and position continue. **Save** writes the choice to this file; **Cancel** or closing Settings restores the previous pet and UI style. All four pets have the same behavior. The saved choice loads at the next launch; older configurations without `pet` keep Hood. Missing or incompatible replacement assets prevent a preview and leave the previous choice in effect.
 
 Choose **Sticky Notes**, **Minimal**, **Soft**, or **Studio** in Hood Settings to preview the style across open surfaces immediately. The app-wide **System / Light / Dark** brightness selector sits beside it under Appearance. **Save** keeps these choices; **Cancel** or closing Settings restores the previous style and brightness. Previews do not rewrite configuration or note data. A failed preview or save reports an error and preserves the previous saved configuration.
@@ -30,6 +32,7 @@ behavior:
   media_headphones: true
   roaming: true
   idle_animations: true
+  writing_animations: true
   random_events: true
   always_on_top: true
   start_with_windows: false
@@ -67,6 +70,7 @@ notes:
 | `ui_style` | UI style | `sticky-notes`, `minimal`, `soft`, or `studio`, case-insensitive; defaults to `sticky-notes`. Other identifiers are invalid. Settings previews selections live; Save persists them. |
 | `behavior.roaming`, `idle_animations`, `random_events`, `always_on_top`, `start_with_windows` | Boolean | `true` or `false`; each option is independent. |
 | `behavior.media_headphones` | Boolean | Defaults to `true`, including in older files. Shows fitted headphones on the four built-in pets while Windows reports qualifying non-silent audio from Spotify desktop, Chrome, Edge, or Firefox. Settings changes take effect on Save; Cancel or closing restores the saved choice. |
+| `behavior.writing_animations` | Boolean | Defaults to `true`, including in older files. Responds to actual Notes typing independently of idle animations. Save applies the setting; typing activity itself is never restored after restart. |
 | `behavior.show_sprites` | Boolean | Defaults to `true`, including in older files. `false` hides the pet and pauses animations, roaming, needs, and timers; open notes stay visible. |
 | `needs.hunger_points_per_hour`, `boredom_points_per_hour`, `sleep_points_per_hour` | Need points per awake active hour | Finite and at least `0`. |
 | `needs.feed_gain` | Hunger points per Feed action | Finite and at least `0`. |
