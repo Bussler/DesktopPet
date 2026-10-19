@@ -12,7 +12,7 @@ Hood is a local Windows desktop app built with C# and .NET 10. The WPF frontend 
 | [DesktopPet.Windows.Tests](../DesktopPet.Windows.Tests) | Frontend interaction, rendering, and script tests on Windows. |
 | [Assets](../Assets) | Runtime sprite sheets/manifests, retained artwork sources, and the embedded Hood icon. |
 | [tools](../tools) | Build, test, packaging, artwork helpers, and manual acceptance checklists. |
-| [docs](README.md) | User guides, developer references, specifications, ADRs, and historical research. |
+| [docs](README.md) | User guides and developer references. |
 
 `DesktopPet.sln` brings the four projects together. `global.json` pins the SDK, `Directory.Packages.props` pins package versions, and `Directory.Build.props` enables nullable references, implicit usings, and restore lock files. See [build and development](build.md) for the supported workflows.
 
@@ -24,7 +24,7 @@ Hood is a local Windows desktop app built with C# and .NET 10. The WPF frontend 
 
 [NotesApplication](../DesktopPet.Core/NotesApplication.cs) owns active/trashed notes, visibility, document edits, saving, search, and session-local undo/redo. [NoteWindow](../DesktopPet.Windows/NoteWindow.xaml.cs) adapts WPF rich text and embedded editors to the semantic document; its partial files cover tables, Markdown, math, links, and list interactions. Notes persistence stores supported document structure rather than arbitrary WPF markup. [NotesListWindow](../DesktopPet.Windows/NotesListWindow.xaml.cs) presents search and lifecycle actions.
 
-Appearance previews update open UI immediately. Settings keep the original choices for Cancel/close rollback and persist choices on Save. Pet switching and sizing preserve the ongoing session. See [UI style development](ui-style-development.md) and the [style specification](specs/UI-Styles-SPEC.md).
+Appearance previews update open UI immediately. Settings keep the original choices for Cancel/close rollback and persist choices on Save. Pet switching and sizing preserve the ongoing session. See [UI style development](ui-style-development.md).
 
 ## Persistence contracts
 
@@ -38,10 +38,10 @@ The default root is `%LOCALAPPDATA%\HoodDesktopPet`, overridden at startup by a 
 
 [AtomicFile](../DesktopPet.Core/AtomicFile.cs) uses temporary files and replacement writes to retain the previous saved document when a replacement fails. Accepted Notes edits save immediately; a failure retains editable in-memory changes and exposes Retry save. Invalid session/Notes input requires an explicit recovery choice and is archived before resetting that store. Configuration errors require correction and relaunch.
 
-Preserve older supported formats when changing contracts. New schema fields need deliberate validation and migration. An upgrade may write a format an older executable cannot read; backups are necessary before rollback. The [session ADR](adr/0002-version-and-recover-local-session-state.md) explains the recovery decision.
+Preserve older supported formats when changing contracts. New schema fields need deliberate validation and migration. An upgrade may write a format an older executable cannot read; backups are necessary before rollback.
 
 ## Verification and documentation
 
 Keep behavior tests deterministic by controlling elapsed time, randomness, display descriptions, and storage at existing boundaries. Add regressions at the behavior or frontend seam affected by a change. `tools\Test.ps1` is the full automated workflow; `tools\Build-AndPublish.ps1` packages independently. Native acceptance covers visible rendering, physical input, tray, clipboard, and multiple monitor/DPI setups against the packaged app.
 
-Use [specifications](README.md#specifications-and-history) for agreed requirements and ADRs for significant architecture choices. The [performance investigation](research/performance-findings.md) preserves historical measurements and their limits; its figures are not measurements of the current checkout. Record session evidence in `.codex/` and update durable guides when supported behavior or workflows change.
+Record session evidence in `.codex/` and update durable guides when supported behavior or workflows change.

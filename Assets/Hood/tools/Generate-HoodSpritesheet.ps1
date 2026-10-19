@@ -178,5 +178,7 @@ Save-Png $sheet (Join-Path $assetDirectory 'hood_spritesheet.png')
     frameWidth = $cellWidth; frameHeight = $cellHeight; spriteScale = 2; animations = $animations
 } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $assetDirectory 'hood.animations.json') -Encoding utf8
 $preview = [System.Windows.Media.Imaging.TransformedBitmap]::new($sheet, [System.Windows.Media.ScaleTransform]::new(0.5, 0.5))
-Save-Png $preview (Join-Path $assetDirectory '..\..\docs\previews\hood-actions.png')
+$previewDirectory = Join-Path $assetDirectory '..\..\artifacts\previews'
+New-Item -ItemType Directory -Path $previewDirectory -Force | Out-Null
+Save-Png $preview (Join-Path $previewDirectory 'hood-actions.png')
 Write-Output "Created $($sheet.PixelWidth)x$($sheet.PixelHeight) sheet: 384x416 pixels per frame, displayed at 192x208."

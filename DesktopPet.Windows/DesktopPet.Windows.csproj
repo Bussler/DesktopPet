@@ -25,7 +25,7 @@
 
   <ItemGroup>
     <PackageReference Include="WpfMath" />
-    <Content Include="..\docs\licenses\windowsdesktop\*.txt" Link="licenses\windowsdesktop\%(Filename)%(Extension)" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="licenses\windowsdesktop\*.txt" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <Target Name="IncludeRuntimeNotices" AfterTargets="ComputeFilesToPublish" Condition="'$(SelfContained)' == 'true'">

@@ -1,4 +1,4 @@
-param([string]$OutputDirectory = (Join-Path $PSScriptRoot '..\docs\previews\writing-animations'))
+param([string]$OutputDirectory = (Join-Path $PSScriptRoot '..\artifacts\previews\writing-animations'))
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Add-Type -AssemblyName PresentationCore

@@ -1,6 +1,6 @@
 # Notes writing animations: native acceptance
 
-Use the exact candidate executable and hashes in the [acceptance record](../../docs/specs/Notes-Writing-Animations-ACCEPTANCE.md). Close older running copies first. Use a separate data profile when convenient so tests do not change daily notes or care progress.
+Record the candidate executable path and SHA-256 before testing. Close older running copies first. Use a separate data profile when convenient so tests do not change daily notes or care progress.
 
 - [x] The user acknowledged the four custom artwork loops in this chat: Hood/Pip notebooks, Crumb keyboard, Puddle ground writing.
 - [ ] In each pet, physically type in an empty note and existing rich content, the title, and inline/display formula source. Check prompt response, recognizable motion, stable scale/props and smooth transitions. Pause and verify return after about 0.8 seconds. Slow typing and held/repeated keys should sustain a continuous loop rather than restart its first pose.

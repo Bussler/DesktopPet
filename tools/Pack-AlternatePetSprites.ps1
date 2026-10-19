@@ -218,7 +218,7 @@ $sheet.Render($visual)
 Save-Png $sheet (Join-Path $directory 'hood_spritesheet.png')
 $manifest.name = $Pet
 $manifest | ConvertTo-Json -Depth 10 | Set-Content (Join-Path $directory 'hood.animations.json') -Encoding utf8
-$previewDirectory = Join-Path $root 'docs\previews\pet-animations'
+$previewDirectory = Join-Path $root 'artifacts\previews\pet-animations'
 New-Item -ItemType Directory -Path $previewDirectory -Force | Out-Null
 Save-Png ([System.Windows.Media.Imaging.TransformedBitmap]::new($sheet,
     [System.Windows.Media.ScaleTransform]::new(0.5,0.5))) (Join-Path $previewDirectory "$($Pet.ToLowerInvariant())-actions.png")

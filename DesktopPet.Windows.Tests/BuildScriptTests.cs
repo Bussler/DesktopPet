@@ -68,7 +68,7 @@ public sealed class BuildScriptTests
     }
 
     [TestMethod]
-    public async Task PackageIncludesLicenseAndReadmePreviewWithoutSourceOnlyFiles()
+    public async Task PackageIncludesLicenseAndGuidesWithoutPreviewsOrSourceOnlyFiles()
     {
         using var fixture = new ScriptFixture();
         fixture.PreparePackage();
@@ -76,7 +76,9 @@ public sealed class BuildScriptTests
         Assert.AreEqual(0, result.ExitCode, result.Error);
         var candidate = Path.Combine(fixture.Root, "candidate");
         Assert.AreEqual("project license", File.ReadAllText(Path.Combine(candidate, "LICENSE")));
-        Assert.AreEqual("preview", File.ReadAllText(Path.Combine(candidate, "docs", "previews", "hood-attention", "hood-attention.gif")));
+        Assert.AreEqual("readme", File.ReadAllText(Path.Combine(candidate, "README.md")));
+        Assert.AreEqual("guide", File.ReadAllText(Path.Combine(candidate, "docs", "hood-animations.md")));
+        Assert.IsFalse(Directory.Exists(Path.Combine(candidate, "docs", "previews")));
         Assert.IsFalse(File.Exists(Path.Combine(candidate, "docs", "developer-only.md")));
     }
 
@@ -117,11 +119,11 @@ public sealed class BuildScriptTests
             File.WriteAllText(Path.Combine(Root, "LICENSE"), "project license");
             foreach (var guide in new[] { "changing-sprites.md", "configuration.md", "focus.md", "hood-animations.md",
                 "notes.md", "placement.md", "recovery.md", "sleep-and-recovery.md", "ui-styles.md", "third-party-notices.md",
-                "previews/hood-actions.png", "previews/hood-attention/hood-attention.gif", "developer-only.md" })
+                "developer-only.md" })
             {
                 var path = Path.Combine(Root, "docs", guide);
                 Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-                File.WriteAllText(path, "preview");
+                File.WriteAllText(path, "guide");
             }
         }
 

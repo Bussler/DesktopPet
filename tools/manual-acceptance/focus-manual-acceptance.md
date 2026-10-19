@@ -1,6 +1,6 @@
 # Focus native acceptance
 
-Use the candidate executable and SHA-256 in [Focus acceptance](../../docs/specs/Focus-Mode-ACCEPTANCE.md). Run as a normal user with an isolated HOOD_DATA_DIRECTORY; do not change ordinary notes. Record Windows build, display scales, theme/style, pet, result (passed/failed/pending), and observed failures for each check. Automated window assertions do not replace these checks.
+Record the candidate executable path and SHA-256 before testing. Run as a normal user with an isolated HOOD_DATA_DIRECTORY; do not change ordinary notes. Record Windows build, display scales, theme/style, pet, result (passed/failed/pending), and observed failures for each check. Automated window assertions do not replace these checks.
 
 ## Original feature: passed
 

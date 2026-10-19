@@ -1,6 +1,6 @@
 # Hood run parts
 
-Created with the built-in imagegen tool using `docs/previews/hood-actions.png` as the character reference. The selected source is `run-parts.png`; existing v3 assets are retained. Three attempted frame grids were rejected because the feet did not exchange positions. The retained parts let the offline packing script control the stride instead.
+Created with the built-in imagegen tool using the former Hood action preview as the character reference. The selected source is `run-parts.png`; existing v3 assets are retained. Three attempted frame grids were rejected because the feet did not exchange positions. The retained parts let the offline packing script control the stride instead.
 
 The generated PNG contains actual transparent alpha; some image viewers display color stored under zero alpha. Preserve the alpha when packing it.
 

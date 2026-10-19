@@ -62,7 +62,7 @@ The script prints the executable path. Run that copy to check a release. To choo
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Build-AndPublish.ps1 -CandidateDirectory .\artifacts\my-build -DotnetExe C:\path\to\dotnet.exe
 ```
 
-The output directory must not already exist; relative paths resolve from the repository root. [Complete-ReleaseCandidate.ps1](../tools/Complete-ReleaseCandidate.ps1) checks the executable and copies the project license and an explicit list of user guides and previews. Runtime license files are included under `app/licenses/`. Developer documentation, specifications, research, and manual checklists stay in the source checkout. Keep generated output and verification evidence out of Git.
+The output directory must not already exist; relative paths resolve from the repository root. [Complete-ReleaseCandidate.ps1](../tools/Complete-ReleaseCandidate.ps1) checks the executable and copies the project license and an explicit list of user guides. Runtime license files are included under `app/licenses/`. Developer documentation and manual checklists stay in the source checkout. Keep generated output and verification evidence out of Git.
 
 The bundled runtime does not receive updates from an installed runtime. To service it, update the pinned SDK and any affected dependency locks deliberately, validate, and publish a new package.
 
@@ -87,6 +87,6 @@ The bundled runtime does not receive updates from an installed runtime. To servi
 | `tools\Test-HoodRunSprites.ps1` | Validate Hood foot visibility, clipping, mirrors, and stride continuity. |
 | `tools\Test-AlternatePetSprites.ps1` | Validate Pip/Crumb artwork, feet, strides, and mirrors. |
 | `tools\Generate-HoodTrayIcon.ps1` | Regenerate the embedded icon after changing its source artwork. |
-| `tools\Pack-AlternatePetSprites.ps1` | Repack alternate-pet art with PowerShell 7; see [animation assets](previews/pet-animations/README.md). |
+| `tools\Pack-AlternatePetSprites.ps1` | Repack alternate-pet art with PowerShell 7; writes pose previews under `artifacts/previews/pet-animations/`. |
 
-See the [project overview](project.md) for code ownership and persisted contracts, and the [documentation index](README.md) for specifications and architecture decisions.
+See the [project overview](project.md) for code ownership and persisted contracts, and the [documentation index](README.md) for user guides and developer references.
