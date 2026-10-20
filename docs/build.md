@@ -1,6 +1,6 @@
 # Build and development workflow
 
-This guide requires a source checkout. For installation, initial cloning, and the first packaged build, start with the [README](../README.md#build-from-source).
+To install the latest published release, [v1.0.0](https://github.com/Bussler/DesktopPet/releases/tag/v1.0.0), follow the [installation instructions](../README.md#install-and-run). This guide requires a source checkout; for initial cloning and the first packaged build, start with [Build from source](../README.md#build-from-source).
 
 ## Requirements
 

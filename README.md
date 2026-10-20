@@ -14,10 +14,11 @@ It’s designed to be low-maintenance and stay quietly by your side without dist
 
 ## Install and run
 
-Prebuilt downloads are not published yet. [Build from source](#build-from-source) to create a runnable package.
+The latest published release is [v1.0.0](https://github.com/Bussler/DesktopPet/releases/tag/v1.0.0).
 
-1. Build the package using the instructions below.
-2. Keep the entire package folder together, including `app/` and `docs/`.
+1. Download [hood-build-20261020-175550.zip](https://github.com/Bussler/DesktopPet/releases/download/v1.0.0/hood-build-20261020-175550.zip).
+   - Alternatively you can [Build from source](#build-from-source) to create a runnable package.
+2. Extract the ZIP to a folder of your choice. Keep the entire package folder together, including `app/` and `docs/`.
 3. Run `app\DesktopPet.Windows.exe`. The pet appears on your desktop and its icon appears in the Windows notification area.
 
 The published app targets **64-bit Windows (`win-x64`)** and includes its .NET runtime. There is no separate installer or runtime installation. Create a shortcut to the executable if desired. Enable **Start Hood when I sign in** in Settings after placing the app in its intended folder.
@@ -55,7 +56,11 @@ See the [Notes guide](docs/notes.md) for all shortcuts and editing features.
 
 ![The Focus timer counting down, pausing, finishing with a wave, and taking a break while Hood naps; preview time is compressed](docs/previews/showcase/focus.gif)
 
-Open **Focus** from either menu for a compact 25/5-minute timer. One button handles Start focus, Pause/Resume and Take break; Skip break appears only during breaks. Expand **Options** for durations, always-on-top and **Do not disturb during focus**. This option automatically silences Windows notifications with your priority exceptions, restoring the previous setting on pause, completion, Stop or close. A short chime plays when either timer finishes. Hood waves when focus finishes; click him to reopen the timer, then choose **Take break**. During breaks he looks asleep; clicking him reopens Focus and shows/hides Notes without waking him. **Break finished** restores the window and waits for **Start focus**. Closing stops the cycle; minimizing keeps it running. See the [Focus guide](docs/focus.md).
+- Open **Focus** from either menu for a compact 25/5-minute timer. One button handles Start focus, Pause/Resume and Take break; Skip break appears only during breaks.  
+- Expand **Options** for durations, always-on-top and **Do not disturb during focus**. This option automatically silences Windows notifications with your priority exceptions, restoring the previous setting on pause, completion, Stop or close.  
+- A short chime plays when either timer finishes. Hood waves when focus finishes; click him to reopen the timer, then choose **Take break**. During breaks he looks asleep; clicking him reopens Focus and shows/hides Notes without waking him. **Break finished** restores the window and waits for **Start focus**. Closing stops the cycle; minimizing keeps it running.  
+
+See the [Focus guide](docs/focus.md) for more information.
 
 ## Your local data
 
