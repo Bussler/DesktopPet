@@ -1,6 +1,7 @@
 # Hood desktop pet
 
-Hood is a little desktop companion, with sticky notes and a focus timer to keep you company while you work.
+Hood is a little desktop companion, with sticky notes and a focus timer to keep you company while you work.  
+It’s designed to be low-maintenance and stay quietly by your side without distracting you.
 
 ![Hood waving hello](docs/previews/showcase/pets.gif)
 
@@ -40,7 +41,7 @@ In **Settings > Appearance**, choose a pet, size (50%–200%), UI style, and Sys
 
 ## Use notes
 
-![A sticky note with formatted text, checklist completion, typing, a writing companion, and a color change](docs/previews/showcase/notes.gif)
+![Notes showing blue LaTeX equations, green Markdown formatting, and yellow checklists with a writing companion](docs/previews/showcase/notes-wide.gif)
 
 Your pet writes alongside actual Notes typing. **Settings > Behavior > Play writing animations** controls this independently of idle animations; it is enabled by default.
 
