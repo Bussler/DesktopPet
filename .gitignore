@@ -1,6 +1,7 @@
 # Local session notes and scratch work
 .codex/
 .scratch/
+/AGENTS.md
 
 # .NET build, test, and publish output
 **/bin/
