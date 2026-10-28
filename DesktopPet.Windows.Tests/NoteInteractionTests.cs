@@ -837,6 +837,84 @@ public sealed class NoteInteractionTests
     }
 
     [TestMethod]
+    [DataRow(12, 1, false)]
+    [DataRow(12, 2, false)]
+    [DataRow(16, 1, false)]
+    [DataRow(16, 2, false)]
+    [DataRow(16, 3, false)]
+    [DataRow(32, 1, false)]
+    [DataRow(32, 2, false)]
+    [DataRow(32, 3, false)]
+    [DataRow(16, 2, true)]
+    public void ChecklistStrikethroughAlignsAcrossCheckboxAndText(int textSize, int lineSpacing, bool initiallyChecked)
+    {
+        var window = CreateChecklistWindow(_ => { },
+            document: NotesDocument.FromText("    Task").SetListKind(0, 8, NoteBlockKind.Checklist)
+                .SetChecklistChecked(0, initiallyChecked));
+        try
+        {
+            window.ApplyAppearance(new NotesConfiguration { TextSize = textSize, LineSpacing = lineSpacing }, NoteColor.Yellow);
+            ShowHidden(window);
+            var editor = (RichTextBox)window.FindName("Editor");
+            var content = (FrameworkElement)window.Content;
+            var checkbox = ChecklistCheckbox(window);
+            var paragraph = (Paragraph)((InlineUIContainer)checkbox.Parent).Parent;
+            var run = paragraph.Inlines.OfType<Run>().Single();
+            var container = (InlineUIContainer)checkbox.Parent;
+            // Compare against the original centered layout, before the decoration-baseline correction.
+            var alignment = container.BaselineAlignment;
+            var baseline = checkbox.ReadLocalValue(TextBlock.BaselineOffsetProperty);
+            container.BaselineAlignment = BaselineAlignment.Center;
+            checkbox.ClearValue(TextBlock.BaselineOffsetProperty);
+            window.UpdateLayout();
+            var originalOffset = VerticalOffset();
+            container.BaselineAlignment = alignment;
+            if (baseline != DependencyProperty.UnsetValue) checkbox.SetValue(TextBlock.BaselineOffsetProperty, baseline);
+            window.UpdateLayout();
+            var marker = checkbox.TranslatePoint(new Point(checkbox.ActualWidth + 2, 0), content);
+            var text = run.ContentStart.GetCharacterRect(LogicalDirection.Forward);
+            text.Offset((Vector)editor.TranslatePoint(new Point(), content));
+            Assert.AreEqual(originalOffset, VerticalOffset(), 0.1,
+                "The checkbox must keep its original vertical position beside the text.");
+            var before = Render();
+            Click(checkbox);
+            var after = Render();
+            // Sample the marker's right margin and leading spaces to exclude the tick and text glyphs.
+            Assert.AreEqual(LineY((int)marker.X), LineY((int)text.X + 4), 0.5,
+                "The completion line must stay level from the checkbox into the text.");
+
+            double VerticalOffset() => checkbox.TranslatePoint(new Point(), editor).Y
+                - run.ContentStart.GetCharacterRect(LogicalDirection.Forward).Top;
+
+            double LineY(int x)
+            {
+                double weight = 0, weightedY = 0;
+                for (var y = (int)text.Top; y < (int)Math.Ceiling(text.Bottom); y++)
+                {
+                    var index = (y * (int)Math.Ceiling(content.ActualWidth) + x) * 4;
+                    var difference = Enumerable.Range(0, 4).Sum(channel => Math.Abs(after[index + channel] - before[index + channel]));
+                    weight += difference;
+                    weightedY += y * difference;
+                }
+                Assert.IsGreaterThan(0, weight, $"The completion line must render in both sampled gaps (x={x}).");
+                return weightedY / weight;
+            }
+
+            byte[] Render()
+            {
+                Pump(window);
+                var bitmap = new RenderTargetBitmap((int)Math.Ceiling(content.ActualWidth),
+                    (int)Math.Ceiling(content.ActualHeight), 96, 96, PixelFormats.Pbgra32);
+                bitmap.Render(content);
+                var pixels = new byte[bitmap.PixelWidth * bitmap.PixelHeight * 4];
+                bitmap.CopyPixels(pixels, bitmap.PixelWidth * 4, 0);
+                return pixels;
+            }
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
     public void CheckedChecklistRendersALineThroughItsText()
     {
         var window = CreateChecklistWindow(_ => { },

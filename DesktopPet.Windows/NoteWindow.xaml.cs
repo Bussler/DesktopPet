@@ -1766,7 +1766,13 @@ public partial class NoteWindow : Window
             var indent = -markerWidth;
             var margin = marker.Margin;
             if (marker is System.Windows.Controls.CheckBox)
+            {
                 margin = new Thickness(0, 0, markerWidth - marker.Width, 0);
+                var text = Measure("X");
+                if (_appearanceSettings.LineSpacing < 2) text.LineHeight = GetEditorLineHeight();
+                // Keep the box centered while its decorations share the text's baseline.
+                TextBlock.SetBaselineOffset(marker, marker.Height / 2 + text.Baseline - text.Height / 2);
+            }
             else if (marker is TextBlock number)
             {
                 if (number.Width != numberWidth) number.Width = numberWidth;
