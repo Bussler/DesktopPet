@@ -265,6 +265,7 @@ public partial class NoteWindow : Window
         {
             if (!IsVisible)
             {
+                WindowState = WindowState.Normal;
                 Show();
             }
         }
@@ -331,6 +332,7 @@ public partial class NoteWindow : Window
         BeginAnimation(TopProperty, yAnimation, HandoffBehavior.SnapshotAndReplace);
         if (visible && !IsVisible)
         {
+            WindowState = WindowState.Normal;
             Show();
         }
     }
@@ -2277,7 +2279,11 @@ public partial class NoteWindow : Window
 
     private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
 
+    private void OnMinimizeClick(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+
     private void OnNewNoteClick(object sender, RoutedEventArgs e) => _createNote();
+
+    private void OnNotesListClick(object sender, RoutedEventArgs e) => _showNotesList();
 
     private void OnHeaderMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
@@ -2304,14 +2310,11 @@ public partial class NoteWindow : Window
             colorItem.Click += (_, _) => OnColorClick(color);
             noteColors.Items.Add(colorItem);
         }
-        var notesList = new System.Windows.Controls.MenuItem { Header = "_Notes list" };
-        notesList.Click += (_, _) => _showNotesList();
         var deleteNote = new System.Windows.Controls.MenuItem { Header = "_Delete note" };
         deleteNote.Click += (_, _) => OnDeleteNoteClick();
         var notesSettings = new System.Windows.Controls.MenuItem { Header = "Notes _settings" };
         notesSettings.Click += (_, _) => _showNotesSettings();
         menu.Items.Add(noteColors);
-        menu.Items.Add(notesList);
         menu.Items.Add(deleteNote);
         menu.Items.Add(notesSettings);
         return menu;

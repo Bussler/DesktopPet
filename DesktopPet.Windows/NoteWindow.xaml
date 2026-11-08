@@ -6,7 +6,7 @@
         MinWidth="240" MinHeight="180" MaxWidth="1920" MaxHeight="1080"
         WindowStartupLocation="Manual"
         WindowStyle="None" ResizeMode="CanResize"
-        ShowInTaskbar="False" ShowActivated="False" Topmost="False"
+        ShowInTaskbar="True" ShowActivated="False" Topmost="False"
         FontFamily="{DynamicResource AppFontFamily}" FontSize="{DynamicResource AppBodyFontSize}"
         Background="#FFFFF1AC" Foreground="{DynamicResource NotesTextBrush}"
         LocationChanged="OnGeometryChanged" SizeChanged="OnGeometryChanged"
@@ -63,6 +63,9 @@
                             <Button x:Name="CloseButton" DockPanel.Dock="Right" Style="{StaticResource NoteIconButton}"
                                     FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" Content="&#xE8BB;"
                                     ToolTip="Close note" AutomationProperties.Name="Close note" Click="OnCloseClick" />
+                            <Button x:Name="MinimizeButton" DockPanel.Dock="Right" Style="{StaticResource NoteIconButton}"
+                                    FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" Content="&#xE921;"
+                                    ToolTip="Minimize note" AutomationProperties.Name="Minimize note" Click="OnMinimizeClick" />
                             <Button x:Name="MenuButton" DockPanel.Dock="Right" Style="{StaticResource NoteIconButton}"
                                     FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16" Content="&#xE712;"
                                     ToolTip="Note menu" AutomationProperties.Name="Note menu" Margin="0,0,4,0"
@@ -71,6 +74,10 @@
                                     FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16" Content="&#xE710;"
                                     ToolTip="New note" AutomationProperties.Name="New note" Margin="0,0,4,0"
                                     Click="OnNewNoteClick" />
+                            <Button x:Name="NotesListButton" DockPanel.Dock="Right" Style="{StaticResource NoteIconButton}"
+                                    FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="16" Content="&#xE8FD;"
+                                    ToolTip="Notes list" AutomationProperties.Name="Notes list" Margin="0,0,4,0"
+                                    Click="OnNotesListClick" />
                         </DockPanel>
                         <TextBox x:Name="NoteTitle" VerticalAlignment="Center" HorizontalAlignment="Left"
                                  FontWeight="{DynamicResource AppNoteTitleFontWeight}" FontSize="{DynamicResource AppNoteTitleFontSize}" Background="Transparent" BorderThickness="0"

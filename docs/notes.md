@@ -8,7 +8,9 @@ Left-click an awake pet to show or hide your open notes. The first use creates a
 
 - **New note:** choose **Notes > New note** in the pet or tray menu, or **+ New note** in a note header.
 - **Rename:** click the name in the header and type. Changes save immediately; Enter moves into the editor. Unnamed notes display **Note**.
-- **Move or resize:** drag unused header space, or drag the window's edges/corners. Notes have no minimize or maximize controls.
+- **Notes list:** use the header button to the left of **+ New note**.
+- **Move or resize:** drag unused header space, or drag the window's edges/corners.
+- **Minimize:** use **Minimize note** beside Close. Open notes appear in the Windows taskbar; click their taskbar entry to restore them. You can also restore them from the Notes list or by hiding and showing the open-note group.
 - **Close:** use **Close note** in its header. The note stays in the Notes list and does not return with the next group show.
 - **Hide:** left-click the pet. This preserves which notes are open so they return together.
 - **Delete:** choose **Delete note** in the **⋯ Note menu**. It moves the note to recoverable Trash and closes its window.
@@ -27,7 +29,7 @@ Writing temporarily pauses roaming. Sleeping pets stay asleep, and feeding, drag
 
 ## Search and Trash
 
-Open **Notes > Notes list** from the pet/tray menu or **Notes list** from a note menu. Search matches names and content. Enter or double-click opens an active note; Enter on a Trash item restores it to the active list as closed. Open and Restore operate on one selected note.
+Open **Notes > Notes list** from the pet/tray menu or **Notes list** from a note header. Search matches names and content. Enter or double-click opens an active note; Enter on a Trash item restores it to the active list as closed. Open and Restore operate on one selected note.
 
 Use Ctrl+click for individual selections, Shift+click for a range, or Ctrl+A for every current search result. **Trash** moves selected active notes. The **Trash** tab offers **Delete permanently**, with one confirmation showing the selected count; permanent deletion cannot be undone. If a bulk save fails, earlier successful changes stay saved and the failed/remaining notes stay selected with the reported progress.
 

@@ -27,7 +27,7 @@ public sealed class NoteInteractionTests
             var title = (TextBox)window.FindName("NoteTitle");
             var toolbar = (StackPanel)window.FindName("FormattingToolbar");
             var editor = (RichTextBox)window.FindName("Editor");
-            var buttons = new[] { "NewNoteButton", "MenuButton", "CloseButton" }
+            var buttons = new[] { "NotesListButton", "NewNoteButton", "MenuButton", "MinimizeButton", "CloseButton" }
                 .Select(name => (Button)window.FindName(name)).ToArray();
             Assert.IsTrue(window.IsActive);
             Assert.IsTrue(title.IsVisible);
@@ -43,8 +43,9 @@ public sealed class NoteInteractionTests
             window.UpdateLayout();
             Assert.AreEqual(editorBounds, editor.TransformToAncestor(window).TransformBounds(new Rect(editor.RenderSize)));
 
-            var menu = buttons[1].ContextMenu!;
-            menu.PlacementTarget = buttons[1];
+            var menuButton = (Button)window.FindName("MenuButton");
+            var menu = menuButton.ContextMenu!;
+            menu.PlacementTarget = menuButton;
             menu.IsOpen = true;
             Pump(window);
             Assert.IsTrue(title.IsVisible);
@@ -56,22 +57,90 @@ public sealed class NoteInteractionTests
     }
 
     [TestMethod]
-    public void NewNoteButtonIsInTheHeaderAndInvokesCreation()
+    [DataRow(240d)]
+    [DataRow(320d)]
+    public void HeaderButtonsKeepTheirOrderAndInvokeNewNoteAndNotesList(double width)
     {
         var created = 0;
+        var listed = 0;
         var window = new NoteWindow(new HoodNote(), (_, _) => null, (_, _) => null, (_, _) => null,
-            (_, _) => (null, null), _ => (true, null), () => created++, () => { }, () => { },
+            (_, _) => (null, null), _ => (true, null), () => created++, () => listed++, () => { },
             (_, _) => null, _ => null, () => null, new NotesConfiguration());
         try
         {
-            var button = (Button)window.FindName("NewNoteButton");
-            Assert.AreEqual(window.FindName("NoteHeader"), ((FrameworkElement)((DockPanel)button.Parent).Parent).Parent);
-            Assert.AreEqual("New note", System.Windows.Automation.AutomationProperties.GetName(button));
-            button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            window.Width = width;
+            ShowHidden(window);
+            var buttons = new[] { "NotesListButton", "NewNoteButton", "MenuButton", "MinimizeButton", "CloseButton" }
+                .Select(name => (Button)window.FindName(name)).ToArray();
+            var previousRight = ((TextBox)window.FindName("NoteTitle")).TransformToAncestor(window)
+                .TransformBounds(new Rect(((TextBox)window.FindName("NoteTitle")).RenderSize)).Right;
+            foreach (var button in buttons)
+            {
+                Assert.AreEqual(window.FindName("NoteHeader"), ((FrameworkElement)((DockPanel)button.Parent).Parent).Parent);
+                var bounds = button.TransformToAncestor(window).TransformBounds(new Rect(button.RenderSize));
+                Assert.IsTrue(bounds.Left >= previousRight, "Header buttons must follow the title in the requested order without overlapping.");
+                Assert.IsTrue(bounds.Right <= window.ActualWidth);
+                previousRight = bounds.Right;
+            }
+            Assert.AreEqual("Notes list", System.Windows.Automation.AutomationProperties.GetName(buttons[0]));
+            Assert.AreEqual("New note", System.Windows.Automation.AutomationProperties.GetName(buttons[1]));
+            buttons[0].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            buttons[1].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.AreEqual(1, listed);
             Assert.AreEqual(1, created);
             var menu = ((Button)window.FindName("MenuButton")).ContextMenu!;
-            CollectionAssert.AreEqual(new[] { "Note _color", "_Notes list", "_Delete note", "Notes _settings" },
+            CollectionAssert.AreEqual(new[] { "Note _color", "_Delete note", "Notes _settings" },
                 menu.Items.OfType<MenuItem>().Select(item => (string)item.Header).ToArray());
+        }
+        finally { window.CloseWithoutMembershipChange(); }
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void MinimizePreservesContentAndBoundsAndGroupShowRestoresTheNote(bool animate)
+    {
+        var closed = 0;
+        var savedBounds = new List<NoteBounds>();
+        var window = new NoteWindow(new HoodNote { Document = NotesDocument.FromText("Keep this note") },
+            (_, _) => null, (_, _) => null, (_, bounds) => { savedBounds.Add(bounds); return null; },
+            (_, _) => (null, null), _ => { closed++; return (true, null); }, () => { }, () => { }, () => { },
+            (_, _) => null, _ => null, () => null, new NotesConfiguration());
+        try
+        {
+            var normallyInTaskbar = window.ShowInTaskbar;
+            Assert.IsTrue(normallyInTaskbar, "Open notes must appear in the Windows taskbar.");
+            window.Opacity = 0;
+            window.Left = window.Top = -10000;
+            window.Show();
+            Pump(window);
+            var bounds = new NoteBounds(window.Left, window.Top, window.ActualWidth, window.ActualHeight);
+            savedBounds.Clear();
+            var button = (Button)window.FindName("MinimizeButton");
+            Assert.AreEqual("Minimize note", System.Windows.Automation.AutomationProperties.GetName(button));
+            button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Pump(window);
+            Assert.AreEqual(WindowState.Minimized, window.WindowState);
+            Assert.IsTrue(window.ShowInTaskbar, "A minimized note must have a taskbar entry so Windows can restore it.");
+            Assert.AreEqual(0, closed, "Minimizing must preserve open-note membership.");
+            Assert.AreEqual(0, savedBounds.Count, "Minimized geometry must not replace the note's resting bounds.");
+
+            window.WindowState = WindowState.Normal;
+            Pump(window);
+            Assert.AreEqual(normallyInTaskbar, window.ShowInTaskbar, "Restoring from the taskbar must preserve normal note visibility.");
+            button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.IsTrue(window.ShowInTaskbar);
+            window.SetGroupVisibilityImmediately(false);
+            if (animate) window.BeginGroupVisibilityTransition(true, new Point(96, 96), TimeSpan.Zero, () => { });
+            else window.SetGroupVisibilityImmediately(true);
+            Pump(window);
+            Assert.AreEqual(WindowState.Normal, window.WindowState);
+            Assert.AreEqual(normallyInTaskbar, window.ShowInTaskbar);
+            Assert.IsTrue(window.IsVisible);
+            Assert.AreEqual(bounds, new NoteBounds(window.Left, window.Top, window.ActualWidth, window.ActualHeight));
+            Assert.IsTrue(savedBounds.All(saved => saved == bounds));
+            StringAssert.Contains(new TextRange(((RichTextBox)window.FindName("Editor")).Document.ContentStart,
+                ((RichTextBox)window.FindName("Editor")).Document.ContentEnd).Text, "Keep this note");
         }
         finally { window.CloseWithoutMembershipChange(); }
     }

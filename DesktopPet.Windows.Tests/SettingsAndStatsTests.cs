@@ -72,6 +72,13 @@ public sealed class SettingsAndStatsTests
             Assert.IsTrue(notes.GroupVisible);
             Assert.IsTrue(window.IsVisible);
 
+            ((Button)window.FindName("MinimizeButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.AreEqual(WindowState.Minimized, window.WindowState);
+            CollectionAssert.AreEqual(new[] { id }, notes.OpenNoteIds.ToArray());
+            typeof(App).GetMethod("OpenNoteFromList", flags)!.Invoke(app, [id]);
+            Assert.AreEqual(WindowState.Normal, window.WindowState, "Opening from the Notes list must restore a minimized note.");
+            ((Button)window.FindName("MinimizeButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
             doubleClick.Invoke(icon, [EventArgs.Empty]);
             Assert.IsFalse(notes.GroupVisible);
             Assert.IsFalse(window.IsVisible);
@@ -80,6 +87,7 @@ public sealed class SettingsAndStatsTests
             doubleClick.Invoke(icon, [EventArgs.Empty]);
             Assert.IsTrue(notes.GroupVisible);
             Assert.IsTrue(window.IsVisible);
+            Assert.AreEqual(WindowState.Normal, window.WindowState);
             Assert.AreEqual(id, notes.Notes.Single().Id, "Showing again must reuse the existing note.");
             Assert.AreSame(window, windows[id]);
             Assert.IsNull(typeof(App).GetField("_settingsWindow", flags)!.GetValue(app));

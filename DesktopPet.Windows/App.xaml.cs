@@ -642,6 +642,7 @@ public partial class App : System.Windows.Application
         var wasVisible = _notes?.GroupVisible == true;
         _notes?.OpenNote(noteId);
         RestoreOpenNotes(animateGroupTransition: !wasVisible);
+        if (_noteWindows.TryGetValue(noteId, out var window)) window.WindowState = WindowState.Normal;
         _notesListWindow?.Refresh();
     }
 
