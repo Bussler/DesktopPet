@@ -318,7 +318,7 @@ public sealed class NotesWritingInteractionTests
         Type(otherEditor, "second");
         Assert.AreEqual(PetAction.Write, fixture.Pet.CurrentPresentation.Action);
         fixture.Pet.ReportNoteWriting(fixture.Editor, false);
-        fixture.Note.SetGroupVisibilityImmediately(false);
+        fixture.Note.ApplyMinimizedState(true);
         fixture.Note.Close();
         Assert.AreEqual(PetAction.Write, fixture.Pet.CurrentPresentation.Action);
         Assert.AreEqual("second", fixture.Notes.Notes.Single(note => note.Id != fixture.NoteId).Text);
@@ -326,10 +326,10 @@ public sealed class NotesWritingInteractionTests
 
     [TestMethod]
     [DataRow("close")]
-    [DataRow("hide")]
-    [DataRow("native-hide")]
+    [DataRow("minimize")]
+    [DataRow("apply-minimize")]
     [DataRow("delete")]
-    public void ClosingHidingAndDeletingClearOnlyThatNotesActivity(string action)
+    public void ClosingMinimizingAndDeletingClearOnlyThatNotesActivity(string action)
     {
         using var fixture = new Fixture();
         fixture.AddNote();
@@ -338,19 +338,17 @@ public sealed class NotesWritingInteractionTests
         switch (action)
         {
             case "close": fixture.Note.Close(); break;
-            case "hide":
-                fixture.Note.BeginGroupVisibilityTransition(false, new System.Windows.Point(100, 100), TimeSpan.FromSeconds(1), () => { });
-                break;
-            case "native-hide": fixture.Note.Hide(); break;
+            case "minimize": fixture.Note.WindowState = System.Windows.WindowState.Minimized; break;
+            case "apply-minimize": fixture.Note.ApplyMinimizedState(true); break;
             case "delete": fixture.Trash(fixture.NoteId); break;
         }
         Assert.AreNotEqual(PetAction.Write, fixture.Pet.CurrentPresentation.Action);
         Assert.IsFalse(fixture.Session.IsWriting);
-        if (action == "hide")
+        if (action is "minimize" or "apply-minimize")
         {
             Type(fixture.Editor, "hidden");
             Assert.AreNotEqual(PetAction.Write, fixture.Pet.CurrentPresentation.Action);
-            fixture.Note.SetGroupVisibilityImmediately(true);
+            fixture.Note.WindowState = System.Windows.WindowState.Normal;
             fixture.Focus(fixture.Note);
             Assert.AreNotEqual(PetAction.Write, fixture.Pet.CurrentPresentation.Action);
             Type(fixture.Editor, "fresh");
@@ -772,7 +770,7 @@ public sealed class NotesWritingInteractionTests
             Notes = NotesApplication.Start(new JsonNotesStore(NotesPath));
             NoteId = Notes.CreateNote();
             if (document is not null) Notes.UpdateDocument(NoteId, document);
-            Notes.SetGroupVisible(false);
+            Notes.SetMinimized(NoteId, true);
             _app = System.Windows.Application.Current as App ?? new TestApp { ShutdownMode = ShutdownMode.OnExplicitShutdown };
             _fields = new[] { "_notes", "_session", "_petWindow", "_effectiveNotesSettings", "_effectiveUiStyle", "_configurationStore" }
                 .Select(name => typeof(App).GetField(name, Private)!).ToArray();
@@ -792,7 +790,7 @@ public sealed class NotesWritingInteractionTests
             });
             Note.Opacity = 0;
             Note.Left = Note.Top = -10000;
-            Notes.SetGroupVisible(true);
+            Notes.SetMinimized(NoteId, false);
             Restore();
             Focus(Note);
         }
@@ -807,17 +805,17 @@ public sealed class NotesWritingInteractionTests
             Pet.RefreshWritingPresentation();
         }
 
-        private void Restore() => typeof(App).GetMethod("RestoreOpenNotes", Private)!.Invoke(_app, [false]);
+        private void Restore() => typeof(App).GetMethod("RestoreOpenNotes", Private)!.Invoke(_app, null);
 
         public NoteWindow AddNote()
         {
             var id = Notes.CreateNote();
-            Notes.SetGroupVisible(false);
+            Notes.SetMinimized(id, true);
             Restore();
             var window = _windows[id];
             window.Opacity = 0;
             window.Left = window.Top = -10000;
-            Notes.SetGroupVisible(true);
+            Notes.SetMinimized(id, false);
             Restore();
             return window;
         }

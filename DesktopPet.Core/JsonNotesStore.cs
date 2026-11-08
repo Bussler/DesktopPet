@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
 namespace DesktopPet.Core;
@@ -71,7 +72,7 @@ public sealed class JsonNotesStore : INotesStore
                 throw new InvalidDataException("Saved notes must be a JSON object with an integer schemaVersion.");
             }
 
-            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or NotesSnapshot.CurrentSchemaVersion))
+            if (version is not (1 or 2 or 3 or 4 or 5 or 6 or 7 or 8 or NotesSnapshot.CurrentSchemaVersion))
             {
                 throw new InvalidDataException($"Saved notes schema version {version} is unsupported; version {NotesSnapshot.CurrentSchemaVersion} is required.");
             }
@@ -79,7 +80,7 @@ public sealed class JsonNotesStore : INotesStore
             var snapshot = version switch
             {
                 1 => MigrateVersionOne(json),
-                2 or 3 or 4 or 5 or 6 or 7 => MigrateSnapshot(json, version),
+                2 or 3 or 4 or 5 or 6 or 7 or 8 => MigrateSnapshot(json, version),
                 NotesSnapshot.CurrentSchemaVersion => JsonSerializer.Deserialize<NotesSnapshot>(json, JsonOptions)
                     ?? throw new InvalidDataException("The saved notes file is empty."),
                 _ => throw new InvalidDataException($"Saved notes schema version {version} is unsupported; version {NotesSnapshot.CurrentSchemaVersion} is required.")
@@ -158,7 +159,7 @@ public sealed class JsonNotesStore : INotesStore
             throw new InvalidDataException("The version 1 saved notes contain invalid note text or membership.");
         }
 
-        return new NotesSnapshot
+        return MigrateVisibility(new NotesSnapshot
         {
             SchemaVersion = NotesSnapshot.CurrentSchemaVersion,
             Notes = legacy.Notes.Select(note => new HoodNote
@@ -168,16 +169,34 @@ public sealed class JsonNotesStore : INotesStore
                 Bounds = note.Bounds
             }).ToList(),
             OpenNoteIds = [.. legacy.OpenNoteIds],
-            GroupVisible = legacy.GroupVisible,
             FirstActivationCompleted = legacy.FirstActivationCompleted
-        };
+        }, legacy.GroupVisible);
     }
 
     private static NotesSnapshot MigrateSnapshot(string json, int version)
     {
-        var snapshot = JsonSerializer.Deserialize<NotesSnapshot>(json, JsonOptions)
+        var root = JsonNode.Parse(json)!.AsObject();
+        var visible = false;
+        foreach (var property in root.ToArray().Where(property => string.Equals(property.Key, "groupVisible", StringComparison.OrdinalIgnoreCase)))
+        {
+            visible = JsonSerializer.Deserialize<bool>(property.Value?.ToJsonString() ?? "null", JsonOptions);
+            root.Remove(property.Key);
+        }
+        var snapshot = root.Deserialize<NotesSnapshot>(JsonOptions)
             ?? throw new InvalidDataException($"The version {version} saved notes file is empty.");
         snapshot.SchemaVersion = NotesSnapshot.CurrentSchemaVersion;
+        return MigrateVisibility(snapshot, visible);
+    }
+
+    private static NotesSnapshot MigrateVisibility(NotesSnapshot snapshot, bool visible)
+    {
+        NotesSnapshotValidator.Validate(snapshot);
+        if (visible && snapshot.OpenNoteIds.Count == 0)
+            throw new InvalidDataException("The notes group cannot be visible when no note windows are open.");
+        snapshot.Notes = snapshot.Notes.Select(note => note with
+        {
+            IsMinimized = !visible && snapshot.OpenNoteIds.Contains(note.Id)
+        }).ToList();
         return snapshot;
     }
 

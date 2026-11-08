@@ -157,11 +157,11 @@ public sealed class NotesApplicationTests
         Assert.Throws<InvalidDataException>(() => app.UpdateDocument(noteId, overLimit));
         Assert.AreEqual(JsonSerializer.Serialize(document), JsonSerializer.Serialize(app.GetNote(noteId).Document));
 
-        app.SetGroupVisible(false);
+        app.Activate();
         var restarted = NotesApplication.Start(new JsonNotesStore(store.StorePath));
         Assert.AreEqual(2, restarted.Notes.Count);
         CollectionAssert.AreEqual(new[] { noteId }, restarted.OpenNoteIds.ToArray());
-        Assert.IsFalse(restarted.GroupVisible);
+        Assert.IsFalse(restarted.Notes.Any(note => restarted.OpenNoteIds.Contains(note.Id) && !note.IsMinimized));
         var search = restarted.Search("QueryLabel").Single();
         Assert.AreEqual(noteId, search.Id);
         Assert.IsTrue(search.Preview.Contains("Mixed plan", StringComparison.Ordinal));
@@ -187,7 +187,7 @@ public sealed class NotesApplicationTests
         Assert.AreEqual(NoteColor.Lavender, restored.GetNote(noteId).Color);
         Assert.AreEqual(bounds, restored.GetNote(noteId).Bounds);
         CollectionAssert.AreEqual(Array.Empty<Guid>(), restored.OpenNoteIds.ToArray());
-        Assert.IsFalse(restored.GroupVisible);
+        Assert.IsFalse(restored.Notes.Any(note => restored.OpenNoteIds.Contains(note.Id) && !note.IsMinimized));
     }
 
     [TestMethod]
@@ -363,7 +363,7 @@ public sealed class NotesApplicationTests
         Assert.AreEqual("Existing note renamed", restored.GetNote(id).Name);
         Assert.AreEqual("## existing $x$ https://example.com", restored.GetNote(id).Text);
         Assert.AreEqual(NoteBlockKind.Paragraph, restored.GetNote(id).Document.Paragraphs.Single().Kind);
-        Assert.IsTrue(restored.GroupVisible);
+        Assert.IsTrue(restored.Notes.Any(note => restored.OpenNoteIds.Contains(note.Id) && !note.IsMinimized));
         Assert.AreEqual(id, restored.OpenNoteIds.Single());
     }
 
@@ -385,7 +385,7 @@ public sealed class NotesApplicationTests
         Assert.AreEqual(1, app.Notes.Count);
         Assert.AreEqual(noteId, app.Notes[0].Id);
         Assert.AreEqual(string.Empty, app.Notes[0].Text);
-        Assert.IsTrue(app.GroupVisible);
+        Assert.IsTrue(app.Notes.Any(note => app.OpenNoteIds.Contains(note.Id) && !note.IsMinimized));
 
         var bounds = new NoteBounds(450, 220, 360, 320);
         app.UpdateBounds(noteId, bounds);
@@ -394,7 +394,7 @@ public sealed class NotesApplicationTests
 
         for (var toggle = 0; toggle < 10; toggle++)
         {
-            var expected = toggle % 2 == 0 ? NotesActivationKind.Hidden : NotesActivationKind.Shown;
+            var expected = toggle % 2 == 0 ? NotesActivationKind.Minimized : NotesActivationKind.Restored;
             Assert.AreEqual(expected, app.Activate().Kind);
             Assert.AreEqual(bounds, app.GetNote(noteId).Bounds);
             CollectionAssert.AreEqual(new[] { noteId }, app.OpenNoteIds.ToArray());
@@ -402,7 +402,7 @@ public sealed class NotesApplicationTests
         }
 
         var restored = NotesApplication.Start(new JsonNotesStore(path));
-        Assert.IsTrue(restored.GroupVisible);
+        Assert.IsTrue(restored.Notes.Any(note => restored.OpenNoteIds.Contains(note.Id) && !note.IsMinimized));
         Assert.AreEqual(bounds, restored.GetNote(noteId).Bounds);
         CollectionAssert.AreEqual(new[] { noteId }, restored.OpenNoteIds.ToArray());
         Assert.IsFalse(restored.OpenNoteIds.Contains(closedId));
@@ -423,7 +423,7 @@ public sealed class NotesApplicationTests
     }
 
     [TestMethod]
-    public void JsonNotesStore_RestoresMultilineTextBoundsAndHiddenGroup()
+    public void JsonNotesStore_RestoresMultilineTextBoundsAndMinimizedState()
     {
         using var directory = new TemporaryDirectory();
         var path = Path.Combine(directory.Path, "notes.json");
@@ -434,12 +434,12 @@ public sealed class NotesApplicationTests
 
         app.UpdateDocument(noteId, NotesDocument.FromText("First line\r\nSecond line\r\n"));
         app.UpdateBounds(noteId, bounds);
-        app.SetGroupVisible(false);
+        app.Activate();
 
         var restored = NotesApplication.Start(new JsonNotesStore(path));
 
         Assert.IsTrue(restored.FirstActivationCompleted);
-        Assert.IsFalse(restored.GroupVisible);
+        Assert.IsFalse(restored.Notes.Any(note => restored.OpenNoteIds.Contains(note.Id) && !note.IsMinimized));
         Assert.AreEqual(noteId, restored.OpenNoteIds.Single());
         Assert.AreEqual("First line\r\nSecond line\r\n", restored.Notes.Single().Text);
         Assert.AreEqual(bounds, restored.Notes.Single().Bounds);
@@ -635,7 +635,6 @@ public sealed class NotesApplicationTests
         {
             Notes = [note],
             OpenNoteIds = [note.Id],
-            GroupVisible = true,
             FirstActivationCompleted = true
         });
         var valid = File.ReadAllText(path);
@@ -667,8 +666,8 @@ public sealed class NotesApplicationTests
 
         Assert.IsTrue(app.FirstActivationCompleted);
         Assert.AreEqual(2, app.Notes.Count);
-        Assert.AreEqual(NotesActivationKind.Hidden, app.Activate().Kind);
-        Assert.AreEqual(NotesActivationKind.Shown, app.Activate().Kind);
+        Assert.AreEqual(NotesActivationKind.Minimized, app.Activate().Kind);
+        Assert.AreEqual(NotesActivationKind.Restored, app.Activate().Kind);
         Assert.AreEqual(2, app.Notes.Count);
 
         var results = app.Search("DESIGN");
@@ -749,7 +748,7 @@ public sealed class NotesApplicationTests
     }
 
     [TestMethod]
-    public void GroupVisibilityRestoresSavedBoundsContentAndOpenMembershipWithoutDuplicates()
+    public void MinimizationRestoresSavedBoundsContentAndOpenMembershipWithoutDuplicates()
     {
         using var directory = new TemporaryDirectory();
         var path = Path.Combine(directory.Path, "notes.json");
@@ -760,32 +759,17 @@ public sealed class NotesApplicationTests
         app.UpdateDocument(visibleId, NotesDocument.FromText("keep this note"));
         var closedId = app.CreateNote();
         Assert.IsTrue(app.TryCloseNote(closedId, out _));
-        app.SetGroupVisible(false);
+        app.Activate();
 
         var restored = NotesApplication.Start(new JsonNotesStore(path));
-        Assert.IsFalse(restored.GroupVisible);
+        Assert.IsFalse(restored.Notes.Any(note => restored.OpenNoteIds.Contains(note.Id) && !note.IsMinimized));
         Assert.AreEqual(visibleId, restored.OpenNoteIds.Single());
         Assert.AreEqual(bounds, restored.GetNote(visibleId).Bounds);
         Assert.AreEqual("keep this note", restored.GetNote(visibleId).Text);
-        Assert.AreEqual(NotesActivationKind.Shown, restored.Activate().Kind);
+        Assert.AreEqual(NotesActivationKind.Restored, restored.Activate().Kind);
         Assert.AreEqual(2, restored.Notes.Count);
         Assert.AreEqual(visibleId, restored.OpenNoteIds.Single());
         Assert.IsFalse(restored.OpenNoteIds.Contains(closedId));
-    }
-
-    [TestMethod]
-    public void VisibilityTransitionCoordinator_IgnoresStaleCompletionsAndTracksLatestIntent()
-    {
-        var coordinator = new NotesVisibilityTransitionCoordinator();
-        var hide = coordinator.Request(visible: false);
-        var show = coordinator.Request(visible: true);
-
-        Assert.IsFalse(coordinator.IsCurrent(hide));
-        Assert.IsTrue(coordinator.IsCurrent(show));
-        var latestHide = coordinator.Request(visible: false);
-        Assert.IsFalse(coordinator.IsCurrent(show));
-        Assert.IsTrue(coordinator.IsCurrent(latestHide));
-        Assert.IsFalse(latestHide.Visible);
     }
 
     [TestMethod]
@@ -831,7 +815,7 @@ public sealed class NotesApplicationTests
         Assert.AreEqual(NoteColor.Yellow, migrated.Notes.Single().Color);
         Assert.AreEqual("first line\r\nsecond line", migrated.Notes.Single().Text);
         Assert.AreEqual(noteId, migrated.OpenNoteIds.Single());
-        Assert.IsTrue(migrated.GroupVisible);
+        Assert.IsTrue(migrated.Notes.Any(note => migrated.OpenNoteIds.Contains(note.Id) && !note.IsMinimized));
 
         store.Save(migrated);
         var restored = store.Load()!;
@@ -966,7 +950,7 @@ public sealed class NotesApplicationTests
         Assert.IsTrue(app.TryMoveToTrash(trashedId, out var moveError), moveError);
         Assert.AreEqual(1, app.Notes.Count);
         Assert.AreEqual(remainingId, app.OpenNoteIds.Single());
-        Assert.IsTrue(app.GroupVisible);
+        Assert.IsTrue(app.Notes.Any(note => app.OpenNoteIds.Contains(note.Id) && !note.IsMinimized));
         Assert.AreEqual(0, app.Search("first task").Count);
         Assert.AreEqual(trashedId, app.SearchTrash("SECOND").Single().Id);
 
@@ -1025,7 +1009,7 @@ public sealed class NotesApplicationTests
         app.UpdateBounds(trashedId, new NoteBounds(880, 180, 360, 300));
         Assert.IsNull(app.UpdateColor(trashedId, NoteColor.Lavender));
         Assert.IsTrue(app.TryMoveToTrash(trashedId, out var trashError), trashError);
-        app.SetGroupVisible(false);
+        app.Activate();
 
         var restored = NotesApplication.Start(store);
         var restoredOpenNote = restored.GetNote(openId);
@@ -1042,7 +1026,7 @@ public sealed class NotesApplicationTests
         Assert.AreEqual("Retained in Trash", restored.Trash.Single(note => note.Id == trashedId).Text);
         Assert.AreEqual(NoteColor.Lavender, restored.Trash.Single(note => note.Id == trashedId).Color);
         CollectionAssert.AreEqual(new[] { openId }, restored.OpenNoteIds.ToArray());
-        Assert.IsFalse(restored.GroupVisible);
+        Assert.IsFalse(restored.Notes.Any(note => restored.OpenNoteIds.Contains(note.Id) && !note.IsMinimized));
         Assert.IsTrue(restored.FirstActivationCompleted);
     }
 
@@ -1096,7 +1080,6 @@ public sealed class NotesApplicationTests
         {
             Trash = [note],
             OpenNoteIds = [note.Id],
-            GroupVisible = true,
             FirstActivationCompleted = true
         };
 
@@ -1529,7 +1512,7 @@ public sealed class NotesApplicationTests
         app.UpdateDocument(trashedId, trashedDocument);
         app.UpdateBounds(trashedId, new NoteBounds(2200, 200, 500, 400));
         Assert.IsTrue(app.TryMoveToTrash(trashedId, out var trashError), trashError);
-        app.SetGroupVisible(false);
+        app.Activate();
 
         var displays = new[] { new DisplayInfo("Remaining", new PetBounds(0, 0, 1200, 760), true, ScaleFactor: 1.5) };
         Assert.IsTrue(app.RecoverNotePlacements(displays));
@@ -1544,7 +1527,7 @@ public sealed class NotesApplicationTests
         Assert.AreEqual(new NoteBounds(700, 200, 500, 400), restored.Trash.Single(note => note.Id == trashedId).Bounds);
         Assert.AreEqual(NoteBlockKind.Checklist, restored.Trash.Single(note => note.Id == trashedId).Document.Paragraphs[0].Kind);
         CollectionAssert.AreEqual(new[] { openId }, restored.OpenNoteIds.ToArray());
-        Assert.IsFalse(restored.GroupVisible);
+        Assert.IsFalse(restored.Notes.Any(note => restored.OpenNoteIds.Contains(note.Id) && !note.IsMinimized));
         Assert.IsTrue(restored.FirstActivationCompleted);
         Assert.AreEqual(petState, File.ReadAllText(petStatePath));
         Assert.AreEqual(configuration, File.ReadAllText(configurationPath));
@@ -1645,6 +1628,107 @@ public sealed class NotesApplicationTests
         history.RemoveAt(index);
         characterCount -= text.Length;
         return text;
+    }
+
+    [TestMethod]
+    public void ActivationMinimizesMixedNotesAndRestoresThemWithoutReopeningClosedNotes()
+    {
+        using var directory = new TemporaryDirectory();
+        var store = new JsonNotesStore(Path.Combine(directory.Path, "notes.json"));
+        var app = NotesApplication.Start(store);
+        var first = app.CreateNote();
+        var second = app.CreateNote();
+        var closed = app.CreateNote();
+        Assert.IsTrue(app.TryCloseNote(closed, out _));
+        app.SetMinimized(first, true);
+        app = NotesApplication.Start(store);
+        Assert.IsTrue(app.GetNote(first).IsMinimized);
+        Assert.IsFalse(app.GetNote(second).IsMinimized);
+
+        Assert.AreEqual(NotesActivationKind.Minimized, app.Activate().Kind);
+        Assert.IsTrue(app.GetNote(first).IsMinimized);
+        Assert.IsTrue(app.GetNote(second).IsMinimized);
+        Assert.IsFalse(app.GetNote(closed).IsMinimized);
+        app = NotesApplication.Start(store);
+        Assert.AreEqual(NotesActivationKind.Restored, app.Activate().Kind);
+        Assert.IsFalse(app.GetNote(first).IsMinimized);
+        Assert.IsFalse(app.GetNote(second).IsMinimized);
+        CollectionAssert.AreEquivalent(new[] { first, second }, app.OpenNoteIds.ToArray());
+        app.SetMinimized(first, true);
+        app.SetMinimized(second, true);
+        app.OpenNote(first);
+        Assert.IsFalse(app.GetNote(first).IsMinimized);
+        Assert.IsTrue(app.GetNote(second).IsMinimized, "Opening one note must preserve the other note's minimized state.");
+        Assert.IsTrue(app.TryCloseNote(second, out _));
+        Assert.IsFalse(NotesApplication.Start(store).GetNote(second).IsMinimized);
+    }
+
+    [TestMethod]
+    [DataRow(true)]
+    [DataRow(false)]
+    public void MinimizedStateRemainsEditableAndRetryableAfterSaveFailure(bool minimized)
+    {
+        var store = new SwitchableNotesStore();
+        var app = NotesApplication.Start(store);
+        var id = app.CreateNote();
+        app.SetMinimized(id, !minimized);
+        store.ShouldFail = true;
+        app.SetMinimized(id, minimized);
+        Assert.AreEqual(minimized, app.GetNote(id).IsMinimized);
+        Assert.AreEqual(!minimized, store.Snapshot!.Notes.Single().IsMinimized);
+        Assert.IsTrue(app.HasUnsavedChanges);
+        Assert.IsNotNull(app.LastSaveError);
+        store.ShouldFail = false;
+        Assert.IsTrue(app.Flush());
+        Assert.AreEqual(minimized, NotesApplication.Start(store).GetNote(id).IsMinimized);
+        Assert.IsFalse(app.HasUnsavedChanges);
+    }
+
+    [TestMethod]
+    [DataRow(1, false)]
+    [DataRow(1, true)]
+    [DataRow(2, false)]
+    [DataRow(2, true)]
+    [DataRow(3, false)]
+    [DataRow(3, true)]
+    [DataRow(4, false)]
+    [DataRow(4, true)]
+    [DataRow(5, false)]
+    [DataRow(5, true)]
+    [DataRow(6, false)]
+    [DataRow(6, true)]
+    [DataRow(7, false)]
+    [DataRow(7, true)]
+    [DataRow(8, false)]
+    [DataRow(8, true)]
+    public void LegacyGroupVisibilityMigratesToIndividualMinimizedNotes(int version, bool visible)
+    {
+        using var directory = new TemporaryDirectory();
+        var path = Path.Combine(directory.Path, "notes.json");
+        var open = Guid.NewGuid();
+        var closed = Guid.NewGuid();
+        var content = version == 1 ? "\"text\": \"keep this note\""
+            : "\"document\": {\"paragraphs\": [{\"runs\": [{\"text\": \"keep this note\"}]}]}";
+        var json = $$"""
+            {
+              "schemaVersion": {{version}},
+              "notes": [{"id": "{{open}}", {{content}}}, {"id": "{{closed}}", {{content}}}],
+              "openNoteIds": ["{{open}}"],
+              "groupVisible": {{visible.ToString().ToLowerInvariant()}},
+              "firstActivationCompleted": true
+            }
+            """;
+        File.WriteAllText(path, json);
+        var store = new JsonNotesStore(path);
+        var app = NotesApplication.Start(store);
+        Assert.AreEqual(!visible, app.GetNote(open).IsMinimized);
+        Assert.IsFalse(app.GetNote(closed).IsMinimized);
+        Assert.AreEqual("keep this note", app.GetNote(open).Text);
+        CollectionAssert.AreEqual(new[] { open }, app.OpenNoteIds.ToArray());
+        Assert.AreEqual(json, File.ReadAllText(path), "Reading a legacy file must not rewrite it.");
+        Assert.IsTrue(app.Flush());
+        Assert.AreEqual(!visible, NotesApplication.Start(store).GetNote(open).IsMinimized);
+        Assert.IsFalse(File.ReadAllText(path).Contains("groupVisible", StringComparison.Ordinal));
     }
 
     private sealed class InMemoryNotesStore : INotesStore

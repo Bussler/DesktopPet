@@ -15,6 +15,7 @@ public sealed record HoodNote
     public NotesDocument Document { get; init; } = NotesDocument.FromText(string.Empty);
     public NoteBounds Bounds { get; init; } = new(96, 96, 320, 300);
     public NoteColor Color { get; init; } = NoteColor.Yellow;
+    public bool IsMinimized { get; init; }
 
     [JsonIgnore]
     public string Text
@@ -26,13 +27,12 @@ public sealed record HoodNote
 
 public sealed class NotesSnapshot
 {
-    public const int CurrentSchemaVersion = 8;
+    public const int CurrentSchemaVersion = 9;
 
     public int SchemaVersion { get; set; } = CurrentSchemaVersion;
     public List<HoodNote> Notes { get; set; } = [];
     public List<HoodNote> Trash { get; set; } = [];
     public List<Guid> OpenNoteIds { get; set; } = [];
-    public bool GroupVisible { get; set; }
     public bool FirstActivationCompleted { get; set; }
 
     internal NotesSnapshot Copy() => new()
@@ -49,7 +49,6 @@ public sealed class NotesSnapshot
             Bounds = note.Bounds with { }
         }).ToList(),
         OpenNoteIds = [.. OpenNoteIds],
-        GroupVisible = GroupVisible,
         FirstActivationCompleted = FirstActivationCompleted
     };
 }
@@ -109,11 +108,6 @@ public static class NotesSnapshotValidator
             {
                 throw new InvalidDataException("Open-note membership must refer to unique active note identities.");
             }
-        }
-
-        if (snapshot.GroupVisible && openIds.Count == 0)
-        {
-            throw new InvalidDataException("The notes group cannot be visible when no note windows are open.");
         }
 
         if (noteIds.Count > 0 && !snapshot.FirstActivationCompleted)
@@ -218,12 +212,12 @@ public static class NotesSnapshotValidator
 public enum NotesActivationKind
 {
     CreatedFirstNote,
-    Shown,
-    Hidden,
+    Restored,
+    Minimized,
     ShowNotesList
 }
 
-public sealed record NotesActivationResult(NotesActivationKind Kind, Guid? NoteId, bool GroupVisible);
+public sealed record NotesActivationResult(NotesActivationKind Kind, Guid? NoteId);
 public sealed record NoteListItem(Guid Id, string Preview, bool IsOpen, string Name = "Note")
 {
     public string StateLabel => IsOpen ? "Open" : "Closed";
@@ -262,7 +256,6 @@ public sealed class NotesApplication
     public IReadOnlyList<HoodNote> Notes => _state.Notes.ToArray();
     public IReadOnlyList<HoodNote> Trash => _state.Trash.ToArray();
     public IReadOnlyList<Guid> OpenNoteIds => _state.OpenNoteIds.ToArray();
-    public bool GroupVisible => _state.GroupVisible;
     public bool FirstActivationCompleted => _state.FirstActivationCompleted;
     public bool HasUnsavedChanges => _isDirty;
     public string? LastSaveError { get; private set; }
@@ -291,22 +284,20 @@ public sealed class NotesApplication
         if (!_state.FirstActivationCompleted)
         {
             var id = CreateNote(displays);
-            return new NotesActivationResult(NotesActivationKind.CreatedFirstNote, id, GroupVisible);
-        }
-
-        if (_state.GroupVisible)
-        {
-            SetGroupVisible(false);
-            return new NotesActivationResult(NotesActivationKind.Hidden, null, GroupVisible);
+            return new NotesActivationResult(NotesActivationKind.CreatedFirstNote, id);
         }
 
         if (_state.OpenNoteIds.Count > 0)
         {
-            SetGroupVisible(true);
-            return new NotesActivationResult(NotesActivationKind.Shown, null, GroupVisible);
+            var minimize = _state.Notes.Any(note => _state.OpenNoteIds.Contains(note.Id) && !note.IsMinimized);
+            var next = _state.Copy();
+            next.Notes = next.Notes.Select(note => next.OpenNoteIds.Contains(note.Id)
+                ? note with { IsMinimized = minimize } : note).ToList();
+            SaveAfterUpdate(next);
+            return new NotesActivationResult(minimize ? NotesActivationKind.Minimized : NotesActivationKind.Restored, null);
         }
 
-        return new NotesActivationResult(NotesActivationKind.ShowNotesList, null, GroupVisible);
+        return new NotesActivationResult(NotesActivationKind.ShowNotesList, null);
     }
 
     public Guid CreateNote(IReadOnlyCollection<DisplayInfo>? displays = null)
@@ -324,7 +315,6 @@ public sealed class NotesApplication
         var next = _state.Copy();
         next.Notes.Add(note);
         next.OpenNoteIds.Add(note.Id);
-        next.GroupVisible = true;
         next.FirstActivationCompleted = true;
         SaveAfterUpdate(next);
         return note.Id;
@@ -378,7 +368,8 @@ public sealed class NotesApplication
         }
 
         next.FirstActivationCompleted = true;
-        next.GroupVisible = true;
+        var index = next.Notes.FindIndex(note => note.Id == noteId);
+        next.Notes[index] = next.Notes[index] with { IsMinimized = false };
         SaveAfterUpdate(next);
     }
 
@@ -500,10 +491,7 @@ public sealed class NotesApplication
         next.Trash.Add(next.Notes[index]);
         next.Notes.RemoveAt(index);
         next.OpenNoteIds.Remove(noteId);
-        if (next.OpenNoteIds.Count == 0)
-        {
-            next.GroupVisible = false;
-        }
+        next.Trash[^1] = next.Trash[^1] with { IsMinimized = false };
 
         if (!TrySave(next))
         {
@@ -588,15 +576,13 @@ public sealed class NotesApplication
         return true;
     }
 
-    public void SetGroupVisible(bool visible)
+    public void SetMinimized(Guid noteId, bool minimized)
     {
-        if (visible && _state.OpenNoteIds.Count == 0)
-        {
-            return;
-        }
-
+        if (!_state.OpenNoteIds.Contains(noteId)) return;
         var next = _state.Copy();
-        next.GroupVisible = visible;
+        var index = next.Notes.FindIndex(note => note.Id == noteId);
+        if (next.Notes[index].IsMinimized == minimized) return;
+        next.Notes[index] = next.Notes[index] with { IsMinimized = minimized };
         SaveAfterUpdate(next);
     }
 
@@ -616,10 +602,8 @@ public sealed class NotesApplication
 
         var next = _state.Copy();
         next.OpenNoteIds.Remove(noteId);
-        if (next.OpenNoteIds.Count == 0)
-        {
-            next.GroupVisible = false;
-        }
+        var index = next.Notes.FindIndex(note => note.Id == noteId);
+        next.Notes[index] = next.Notes[index] with { IsMinimized = false };
 
         if (!TrySave(next))
         {

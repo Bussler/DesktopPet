@@ -59,7 +59,6 @@ notes:
   line_spacing: 2
   theme: system
   always_on_top: false
-  animate_show_hide: false
 ```
 
 | Setting | Units | Valid bounds |
@@ -85,7 +84,6 @@ notes:
 | `notes.line_spacing` | Spacing level | Finite number from `1` through `3`. Defaults to `2`, preserving normal font spacing. Lower values bring lines and paragraphs closer together; higher values spread them out. Applies to all notes and scales with text size. |
 | `notes.theme` | Brightness | `system`, `light`, or `dark`. Selected in Hood Settings under Appearance. Defaults to `system` and applies to all Hood UI surfaces regardless of selected style. System follows the Windows app theme and falls back to light if Windows does not expose it. |
 | `notes.always_on_top` | Boolean | `true` or `false`; defaults to `false` and is independent of Hood's always-on-top option. |
-| `notes.animate_show_hide` | Boolean | `true` or `false`; defaults to `false`. `false` applies group visibility changes immediately. |
 
 Notes use five pastel colors chosen for dark text in light mode and deeper tones chosen for light text in dark mode. The palette pairs are:
 
@@ -97,7 +95,7 @@ Notes use five pastel colors chosen for dark text in light mode and deeper tones
 | Pink | `#FFFBE1E7` | `#FF49303A` |
 | Lavender | `#FFEDE3FA` | `#FF3F344F` |
 
-The light palette uses `#FF1B1F24` text, and the dark palette uses `#FFF2F4F7` text. The Notes settings window is reachable from Hood's Notes submenu and each note's menu. Per-note color is saved in `notes.json`; the default color, text size, line spacing, theme, notes always-on-top, and show/hide animation values stay in this YAML file. Notes settings preview valid changes immediately; Save writes them to YAML after validation, while Cancel or closing restores the previous settings. Group transitions use a 240 ms ease between Hood's location and each note's saved resting position; the transition does not change the saved bounds.
+The light palette uses `#FF1B1F24` text, and the dark palette uses `#FFF2F4F7` text. The Notes settings window is reachable from Hood's Notes submenu and each note's menu. Per-note color is saved in `notes.json`; the default color, text size, line spacing, theme, and notes always-on-top values stay in this YAML file. Notes settings preview valid changes immediately; Save writes them to YAML after validation, while Cancel or closing restores the previous settings. Pet clicks and tray double-clicks use Windows minimize/restore. The former `notes.animate_show_hide` key is accepted in older files, ignored, and omitted on the next save.
 
 Need values start at zero in a new session. The settings window exposes roaming, idle animations, random reactions, their minimum and maximum wait in minutes, always-on-top, and the opt-in per-user Windows startup setting; each change saves back to this same file before taking effect. Reaction timing accepts positive fractional minutes, with minimum no greater than maximum; equal values give a fixed wait. Saving a changed range starts a fresh countdown within that range. If a save fails, Hood keeps the prior effective settings and reports the affected setting. If Windows startup registration cannot be rolled back, Hood names the possible mismatch. Windows startup uses the current user's `Run` registry key and is reconciled on launch. Random reactions choose a wave, look around (left/right), look up, or hop every 1–5 active awake minutes by default, at the same rate while idle or roaming. This also applies with idle animations disabled; the independent random-events toggle controls these reactions. The countdown pauses during sleep, drag/edit interactions, and other reactions. Closed time does not consume the saved interval; on relaunch, any saved wait exceeding the configured maximum is shortened to that maximum. Existing configuration files retain their explicit values; set the minimum and maximum in Settings or YAML to adopt the new defaults. Need rates and nap timing remain editable here in YAML. See [recovery guidance](recovery.md) for invalid configuration and saved-session recovery.
 

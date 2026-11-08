@@ -4,15 +4,14 @@ Notes save locally as you edit. Use them with the pet or hide the sprites and wo
 
 ## Create, open, and organize
 
-Left-click an awake pet to show or hide your open notes. The first use creates a blank note; later clicks reuse the group. If every note is closed, the click opens the Notes list. Clicking a sleeping pet wakes it first.
+Left-click an awake pet or double-click the tray icon to toggle your open notes. If any note is restored, all open notes minimize to the Windows taskbar; if all are minimized, they all restore. This works even when another app has focus. The first use creates a blank note. If every note is closed, the action opens the Notes list. Clicking a sleeping pet wakes it first.
 
 - **New note:** choose **Notes > New note** in the pet or tray menu, or **+ New note** in a note header.
 - **Rename:** click the name in the header and type. Changes save immediately; Enter moves into the editor. Unnamed notes display **Note**.
 - **Notes list:** use the header button to the left of **+ New note**.
 - **Move or resize:** drag unused header space, or drag the window's edges/corners.
-- **Minimize:** use **Minimize note** beside Close. Open notes appear in the Windows taskbar; click their taskbar entry to restore them. You can also restore them from the Notes list or by hiding and showing the open-note group.
-- **Close:** use **Close note** in its header. The note stays in the Notes list and does not return with the next group show.
-- **Hide:** left-click the pet. This preserves which notes are open so they return together.
+- **Minimize:** use **Minimize note** beside Close. Open notes appear in the Windows taskbar; click their taskbar entry or open them from the Notes list to restore them individually.
+- **Close:** use **Close note** in its header. The note stays in the Notes list and does not return with the next group restore.
 - **Delete:** choose **Delete note** in the **⋯ Note menu**. It moves the note to recoverable Trash and closes its window.
 
 The note name remains visible. Header buttons and formatting controls appear when the note has focus; moving focus away hides them without shifting the text. The scrollbar appears while scrolling or interacting with the right edge. Save errors and **Retry save** stay visible even without focus.
@@ -23,7 +22,7 @@ For notes alone, turn off **Show Hood sprites** in Settings and Save, or toggle 
 
 The selected pet writes while you type in note content, the title, or equation source: Hood and Pip use notebooks, Crumb uses a keyboard, and Puddle writes on the ground. This is enabled by default under **Hood Settings > Behavior > Play writing animations**, independently of idle animations.
 
-Characters, Enter, Tab, Backspace/Delete, and keyboard paste start or extend the response. Simply focusing a note, navigating, selecting or pasting with the mouse, using formatting shortcuts, or typing in search/settings does not. The pet returns to its normal behavior after 0.8 seconds without qualifying input. Leaving the editing field, hiding/closing the note, hiding the pet, or suspending/quitting ends the response immediately; fresh typing is needed afterward.
+Characters, Enter, Tab, Backspace/Delete, and keyboard paste start or extend the response. Simply focusing a note, navigating, selecting or pasting with the mouse, using formatting shortcuts, or typing in search/settings does not. The pet returns to its normal behavior after 0.8 seconds without qualifying input. Leaving the editing field, minimizing/closing the note, hiding the pet, or suspending/quitting ends the response immediately; fresh typing is needed afterward.
 
 Writing temporarily pauses roaming. Sleeping pets stay asleep, and feeding, dragging, click reactions, Focus reminders/break sleep, and checklist celebrations keep their existing priority. Writing does not change your text, history, or care gains.
 
@@ -118,13 +117,12 @@ Choose **Note color** from a note menu for that note. **Notes settings**, availa
 | Text size | Whole numbers, 12–32 pt; default 16. |
 | Line spacing | 1–3; default 2. Lower values tighten lines/paragraphs; higher values spread them out. |
 | Always on top | Default off, independent of the pet's setting. |
-| Show/hide animation | Default on; changes apply to the next group transition. |
 
 Text-size and spacing fields stay synchronized with their sliders. Use your system's decimal separator for spacing. Valid settings preview immediately; Save persists them, while Cancel or closing the window restores previous choices. Choose the app-wide style and System/Light/Dark theme in **Hood Settings > Appearance**. Style/theme preserve content, formatting, note-color categories, and text-size preferences. See [UI styles](ui-styles.md) and [configuration](configuration.md).
 
 ## Saving and recovery
 
-Accepted edits and actions save immediately to `%LOCALAPPDATA%\HoodDesktopPet\notes.json`, separately from pet state and configuration. Restart restores names, content, formatting, colors, positions/sizes, open/closed state, Trash, and group visibility. Undo history lasts only for the current session.
+Accepted edits and actions save immediately to `%LOCALAPPDATA%\HoodDesktopPet\notes.json`, separately from pet state and configuration. Restart restores names, content, formatting, colors, positions/sizes, open/closed state, Trash, and each note's minimized state. Older saved hidden groups reopen as minimized notes. Undo history lasts only for the current session.
 
 If saving fails, the previous file remains and latest changes stay editable in memory. Fix the reported issue and choose **Retry save**. Quit attempts to save Notes and pet state and then exits; changes from a failed final save may be lost. Resolve **Not saved** before quitting.
 

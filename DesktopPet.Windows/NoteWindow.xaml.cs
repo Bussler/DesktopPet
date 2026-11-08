@@ -7,7 +7,6 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Controls.Primitives;
 using System.Windows.Automation;
-using System.Windows.Interop;
 using System.Windows.Media.Animation;
 using DesktopPet.Core;
 using static DesktopPet.Core.NoteTextOffsets;
@@ -17,6 +16,23 @@ namespace DesktopPet.Windows;
 public partial class NoteWindow : Window
 {
     internal event Action? ChecklistItemCompleted;
+    internal event Action<bool>? MinimizedChanged;
+    private bool _applyingMinimizedState;
+
+    internal void ApplyMinimizedState(bool minimized)
+    {
+        _applyingMinimizedState = true;
+        try { WindowState = minimized ? WindowState.Minimized : WindowState.Normal; }
+        finally { _applyingMinimizedState = false; }
+    }
+
+    protected override void OnStateChanged(EventArgs e)
+    {
+        base.OnStateChanged(e);
+        if (WindowState == WindowState.Minimized) StopWritingActivity();
+        if (!_initializing && !_applyingMinimizedState && !_closingForApplicationExit)
+            MinimizedChanged?.Invoke(WindowState == WindowState.Minimized);
+    }
 
     private static readonly System.Windows.Media.FontFamily CodeFont = new("Consolas");
 
@@ -53,18 +69,8 @@ public partial class NoteWindow : Window
     private NotesConfiguration _appearanceSettings;
     private string _uiStyle = UiStyleCatalog.StickyNotes;
     private NoteColor _noteColor;
-    private HwndSource? _windowSource;
-    private NoteBounds _restingBounds;
     private bool _appearanceInitialized;
-    private NoteBounds? _moveResizeRestingBounds;
-    private Action? _moveResizeTransitionCompletion;
-    private Action? _transitionCompletion;
-    private long _transitionRevision;
-    private double _moveResizeStartLeft;
-    private double _moveResizeStartTop;
-    private bool _isTransitioning;
     private bool _applyingRecoveredBounds;
-    private bool _isUserMoveResizeActive;
     private NotesDocument _lastAcceptedDocument;
     private bool _initializing = true;
     private bool _updatingEditor;
@@ -110,7 +116,6 @@ public partial class NoteWindow : Window
         _appearanceSettings = appearanceSettings;
         _uiStyle = UiStyleCatalog.Canonicalize(uiStyle);
         _noteColor = note.Color;
-        _restingBounds = note.Bounds;
         _lastAcceptedDocument = note.Document.Copy();
         InitializeComponent();
         InitializeWritingActivity();
@@ -257,32 +262,12 @@ public partial class NoteWindow : Window
         }
     }
 
-    public void SetGroupVisibilityImmediately(bool visible)
-    {
-        SetWritingVisibility(visible);
-        CancelPositionTransition(restoreRestingPosition: true);
-        if (visible)
-        {
-            if (!IsVisible)
-            {
-                WindowState = WindowState.Normal;
-                Show();
-            }
-        }
-        else if (IsVisible)
-        {
-            Hide();
-        }
-    }
-
     public void ApplyRecoveredBounds(NoteBounds bounds)
     {
         NotesSnapshotValidator.ValidateBounds(bounds);
         _applyingRecoveredBounds = true;
         try
         {
-            _restingBounds = bounds;
-            CancelPositionTransition(restoreRestingPosition: true);
             Left = bounds.Left;
             Top = bounds.Top;
             Width = bounds.Width;
@@ -291,49 +276,6 @@ public partial class NoteWindow : Window
         finally
         {
             _applyingRecoveredBounds = false;
-        }
-    }
-
-    public void BeginGroupVisibilityTransition(bool visible, System.Windows.Point hoodCenter, TimeSpan duration, Action completed)
-    {
-        SetWritingVisibility(visible);
-        var currentLeft = Left;
-        var currentTop = Top;
-        CancelPositionTransition(restoreRestingPosition: true);
-        if (!visible && !IsVisible)
-        {
-            completed();
-            return;
-        }
-
-        var fromLeft = visible && !IsVisible ? hoodCenter.X - _restingBounds.Width / 2 : currentLeft;
-        var fromTop = visible && !IsVisible ? hoodCenter.Y - _restingBounds.Height / 2 : currentTop;
-        var toLeft = visible ? _restingBounds.Left : hoodCenter.X - _restingBounds.Width / 2;
-        var toTop = visible ? _restingBounds.Top : hoodCenter.Y - _restingBounds.Height / 2;
-        var revision = ++_transitionRevision;
-        _isTransitioning = true;
-        _transitionCompletion = completed;
-
-        var xAnimation = CreatePositionAnimation(fromLeft, toLeft, duration, visible);
-        var yAnimation = CreatePositionAnimation(fromTop, toTop, duration, visible);
-        yAnimation.Completed += (_, _) =>
-        {
-            if (revision != _transitionRevision || !_isTransitioning)
-            {
-                return;
-            }
-
-            var finish = _transitionCompletion;
-            CancelPositionTransition(restoreRestingPosition: true);
-            finish?.Invoke();
-        };
-
-        BeginAnimation(LeftProperty, xAnimation, HandoffBehavior.SnapshotAndReplace);
-        BeginAnimation(TopProperty, yAnimation, HandoffBehavior.SnapshotAndReplace);
-        if (visible && !IsVisible)
-        {
-            WindowState = WindowState.Normal;
-            Show();
         }
     }
 
@@ -1288,7 +1230,7 @@ public partial class NoteWindow : Window
 
     private void OnGeometryChanged(object? sender, EventArgs e)
     {
-        if (_initializing || _applyingRecoveredBounds || _isTransitioning || _isUserMoveResizeActive || !IsVisible || WindowState != WindowState.Normal)
+        if (_initializing || _applyingRecoveredBounds || !IsVisible || WindowState != WindowState.Normal)
         {
             return;
         }
@@ -1301,26 +1243,17 @@ public partial class NoteWindow : Window
         ApplyPendingMarkupFormatting();
         if (_closingForApplicationExit)
         {
-            CancelPositionTransition(restoreRestingPosition: false);
             return;
         }
 
         var result = _requestClose(_noteId);
         if (result.Allowed)
         {
-            CancelPositionTransition(restoreRestingPosition: false);
             return;
         }
 
         e.Cancel = true;
         SetSaveStatus(result.Error ?? "The note could not be saved, so it remains open.");
-    }
-
-    protected override void OnSourceInitialized(EventArgs e)
-    {
-        base.OnSourceInitialized(e);
-        _windowSource = PresentationSource.FromVisual(this) as HwndSource;
-        _windowSource?.AddHook(WindowMessageHook);
     }
 
     protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
@@ -1336,43 +1269,7 @@ public partial class NoteWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         StopWritingActivity();
-        CancelPositionTransition(restoreRestingPosition: false);
-        _windowSource?.RemoveHook(WindowMessageHook);
-        _windowSource = null;
         base.OnClosed(e);
-    }
-
-    private IntPtr WindowMessageHook(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
-    {
-        const int wmEnterSizeMove = 0x0231;
-        const int wmExitSizeMove = 0x0232;
-        if (message == wmEnterSizeMove && _isTransitioning)
-        {
-            _moveResizeStartLeft = Left;
-            _moveResizeStartTop = Top;
-            _moveResizeRestingBounds = _restingBounds;
-            _moveResizeTransitionCompletion = _transitionCompletion;
-            _isUserMoveResizeActive = true;
-            CancelPositionTransition(restoreRestingPosition: false, preserveCurrentPosition: true);
-        }
-        else if (message == wmExitSizeMove && _isUserMoveResizeActive)
-        {
-            var moved = Math.Abs(Left - _moveResizeStartLeft) > 1 || Math.Abs(Top - _moveResizeStartTop) > 1;
-            if (!moved && _moveResizeRestingBounds is { } resting)
-            {
-                Left = resting.Left;
-                Top = resting.Top;
-            }
-
-            _isUserMoveResizeActive = false;
-            _moveResizeRestingBounds = null;
-            SaveCurrentBounds();
-            var finish = _moveResizeTransitionCompletion;
-            _moveResizeTransitionCompletion = null;
-            finish?.Invoke();
-        }
-
-        return IntPtr.Zero;
     }
 
     private void SaveCurrentBounds()
@@ -1381,39 +1278,11 @@ public partial class NoteWindow : Window
         try
         {
             SetSaveStatus(_updateBounds(_noteId, bounds));
-            _restingBounds = bounds;
         }
         catch (InvalidDataException exception)
         {
             SetSaveStatus(exception.Message);
         }
-    }
-
-    private static DoubleAnimation CreatePositionAnimation(double from, double to, TimeSpan duration, bool showing) => new(from, to, duration)
-    {
-        EasingFunction = new QuadraticEase { EasingMode = showing ? EasingMode.EaseOut : EasingMode.EaseIn }
-    };
-
-    private void CancelPositionTransition(bool restoreRestingPosition, bool preserveCurrentPosition = false)
-    {
-        var currentLeft = Left;
-        var currentTop = Top;
-        _transitionRevision++;
-        _transitionCompletion = null;
-        BeginAnimation(LeftProperty, null);
-        BeginAnimation(TopProperty, null);
-        if (restoreRestingPosition)
-        {
-            Left = _restingBounds.Left;
-            Top = _restingBounds.Top;
-        }
-        else if (preserveCurrentPosition)
-        {
-            Left = currentLeft;
-            Top = currentTop;
-        }
-
-        _isTransitioning = false;
     }
 
     private void SetEditorDocument(NotesDocument document, int? selectionStart, int? selectionLength)

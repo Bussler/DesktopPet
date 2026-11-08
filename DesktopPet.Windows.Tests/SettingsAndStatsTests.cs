@@ -49,51 +49,87 @@ public sealed class SettingsAndStatsTests
     }
 
     [TestMethod]
-    public void TrayDoubleClickCreatesThenHidesAndRestoresNotes()
+    [DataRow(false)]
+    [DataRow(true)]
+    public void PetAndTrayActivationMinimizeMixedNotesRestoreAllAndRememberIndividualState(bool tray)
     {
         const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
-        var notesPath = Path.Combine(Path.GetTempPath(), $"HoodTrayNotesTest-{Guid.NewGuid():N}.json");
+        var notesPath = Path.Combine(Path.GetTempPath(), $"HoodNotesActivation-{Guid.NewGuid():N}.json");
         var notes = NotesApplication.Start(new JsonNotesStore(notesPath));
         var app = System.Windows.Application.Current as App ?? new TestApp { ShutdownMode = ShutdownMode.OnExplicitShutdown };
-        var fields = new[] { "_notes", "_session", "_trayIconImage", "_effectiveNotesSettings" }
+        var fields = new[] { "_notes", "_session", "_trayIconImage", "_notesListWindow" }
             .Select(name => typeof(App).GetField(name, flags)!).ToArray();
         var originalValues = fields.Select(field => field.GetValue(app)).ToArray();
-        object?[] values = [notes, null, null, HoodConfiguration.Defaults.Notes with { AnimateShowHide = false }];
+        object?[] values = [notes, null, null, null];
         for (var index = 0; index < fields.Length; index++) fields[index].SetValue(app, values[index]);
         var windows = (Dictionary<Guid, NoteWindow>)typeof(App).GetField("_noteWindows", flags)!.GetValue(app)!;
         Forms.NotifyIcon? icon = null;
         try
         {
             icon = (Forms.NotifyIcon)typeof(App).GetMethod("CreateTrayIcon", flags)!.Invoke(app, null)!;
-            var doubleClick = typeof(Forms.NotifyIcon).GetMethod("OnDoubleClick", flags)!;
-            doubleClick.Invoke(icon, [EventArgs.Empty]);
-            var id = notes.Notes.Single().Id;
-            var window = windows[id];
-            Assert.IsTrue(notes.GroupVisible);
-            Assert.IsTrue(window.IsVisible);
+            void Activate()
+            {
+                if (tray) typeof(Forms.NotifyIcon).GetMethod("OnDoubleClick", flags)!.Invoke(icon, [EventArgs.Empty]);
+                else typeof(App).GetMethod("ActivateNotes", flags)!.Invoke(app, null);
+            }
+            void Restore() => typeof(App).GetMethod("RestoreOpenNotes", flags)!.Invoke(app, null);
+            void AssertState(WindowState state)
+            {
+                foreach (var id in notes.OpenNoteIds)
+                {
+                    Assert.IsTrue(windows[id].IsVisible, "Minimized notes must remain visible to the Windows shell.");
+                    Assert.IsTrue(windows[id].ShowInTaskbar);
+                    Assert.AreEqual(state, windows[id].WindowState);
+                    Assert.AreEqual(state == WindowState.Minimized, notes.GetNote(id).IsMinimized);
+                }
+            }
 
-            ((Button)window.FindName("MinimizeButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            Assert.AreEqual(WindowState.Minimized, window.WindowState);
-            CollectionAssert.AreEqual(new[] { id }, notes.OpenNoteIds.ToArray());
-            typeof(App).GetMethod("OpenNoteFromList", flags)!.Invoke(app, [id]);
-            Assert.AreEqual(WindowState.Normal, window.WindowState, "Opening from the Notes list must restore a minimized note.");
-            ((Button)window.FindName("MinimizeButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Activate();
+            var firstId = notes.Notes.Single().Id;
+            AssertState(WindowState.Normal);
+            typeof(App).GetMethod("CreateNote", flags)!.Invoke(app, null);
+            var secondId = notes.OpenNoteIds.Single(id => id != firstId);
+            var closedId = notes.CreateNote();
+            Assert.IsTrue(notes.TryCloseNote(closedId, out _));
+            Restore();
+            var first = windows[firstId];
+            first.Opacity = windows[secondId].Opacity = 0;
+            ((Button)first.FindName("MinimizeButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Assert.IsTrue(notes.GetNote(firstId).IsMinimized, "Header and taskbar window-state changes must save immediately.");
+            Assert.IsFalse(notes.GetNote(secondId).IsMinimized);
 
-            doubleClick.Invoke(icon, [EventArgs.Empty]);
-            Assert.IsFalse(notes.GroupVisible);
-            Assert.IsFalse(window.IsVisible);
-            CollectionAssert.AreEqual(new[] { id }, notes.OpenNoteIds.ToArray(), "Hiding must preserve open-note membership.");
+            foreach (var window in windows.Values.ToArray()) window.CloseWithoutMembershipChange();
+            windows.Clear();
+            notes = NotesApplication.Start(new JsonNotesStore(notesPath));
+            fields[0].SetValue(app, notes);
+            Restore();
+            Assert.AreEqual(WindowState.Minimized, windows[firstId].WindowState);
+            Assert.AreEqual(WindowState.Normal, windows[secondId].WindowState);
+            Assert.IsFalse(windows.ContainsKey(closedId));
 
-            doubleClick.Invoke(icon, [EventArgs.Empty]);
-            Assert.IsTrue(notes.GroupVisible);
-            Assert.IsTrue(window.IsVisible);
-            Assert.AreEqual(WindowState.Normal, window.WindowState);
-            Assert.AreEqual(id, notes.Notes.Single().Id, "Showing again must reuse the existing note.");
-            Assert.AreSame(window, windows[id]);
-            Assert.IsNull(typeof(App).GetField("_settingsWindow", flags)!.GetValue(app));
+            Activate();
+            AssertState(WindowState.Minimized);
+            CollectionAssert.AreEquivalent(new[] { firstId, secondId }, notes.OpenNoteIds.ToArray());
+            Activate();
+            AssertState(WindowState.Normal);
+            windows[firstId].WindowState = WindowState.Minimized;
+            windows[secondId].WindowState = WindowState.Minimized;
+            Activate();
+            AssertState(WindowState.Normal);
+            Assert.AreEqual(3, notes.Notes.Count, "Toggling must reuse the existing notes.");
+
+            windows[firstId].WindowState = WindowState.Minimized;
+            typeof(App).GetMethod("OpenNoteFromList", flags)!.Invoke(app, [firstId]);
+            AssertState(WindowState.Normal);
+            foreach (var id in notes.OpenNoteIds) Assert.IsTrue(notes.TryCloseNote(id, out _));
+            Restore();
+            Activate();
+            Assert.IsTrue(((NotesListWindow)fields[3].GetValue(app)!).IsVisible);
+            Assert.AreEqual(3, notes.Notes.Count, "When every note is closed, activation must open the list.");
         }
         finally
         {
+            (fields[3].GetValue(app) as Window)?.Close();
             icon?.Dispose();
             (fields[2].GetValue(app) as System.Drawing.Icon)?.Dispose();
             foreach (var window in windows.Values.ToArray()) window.CloseWithoutMembershipChange();
@@ -556,7 +592,7 @@ public sealed class SettingsAndStatsTests
     }
 
     [TestMethod]
-    public void PetAndTrayTogglesStopTimerRevealOpenNotesAndCancelPendingHide()
+    public void PetAndTraySpriteTogglesStopTimerAndPreserveMinimizedNotes()
     {
         using var fixture = new Fixture("light");
         fixture.Store.Save(fixture.Controller.Current);
@@ -565,7 +601,7 @@ public sealed class SettingsAndStatsTests
         var openId = notes.CreateNote();
         var closedId = notes.CreateNote();
         Assert.IsTrue(notes.TryCloseNote(closedId, out _));
-        notes.SetGroupVisible(false);
+        notes.SetMinimized(openId, true);
         var pet = fixture.Pet();
         var app = System.Windows.Application.Current as App ?? new TestApp { ShutdownMode = ShutdownMode.OnExplicitShutdown };
         var fields = new[] { "_session", "_notes", "_petWindow", "_configurationStore", "_trayIconImage", "_effectiveNotesSettings" }
@@ -579,21 +615,17 @@ public sealed class SettingsAndStatsTests
         typeof(HoodOverlayWindow).GetEvent("ToggleSpritesRequested", BindingFlags.Instance | BindingFlags.NonPublic)!
             .GetAddMethod(true)!.Invoke(pet, [(Action)(() => toggle.Invoke(app, null))]);
         typeof(HoodOverlayWindow).GetEvent("SpritesVisibilityChanged", BindingFlags.Instance | BindingFlags.NonPublic)!
-            .GetAddMethod(true)!.Invoke(pet, [(Action)(() => restore.Invoke(app, [false]))]);
+            .GetAddMethod(true)!.Invoke(pet, [(Action)(() => restore.Invoke(app, null))]);
         var timer = (System.Windows.Threading.DispatcherTimer)typeof(HoodOverlayWindow)
             .GetField("_frameTimer", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(pet)!;
         Forms.NotifyIcon? icon = null;
         try
         {
-            restore.Invoke(app, [false]);
+            restore.Invoke(app, null);
             var note = windows[openId];
             note.Opacity = 0;
             ShowHidden(pet);
             Assert.IsTrue(timer.IsEnabled);
-            var coordinator = (NotesVisibilityTransitionCoordinator)typeof(App)
-                .GetField("_visibilityTransitions", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(app)!;
-            var staleHide = coordinator.Request(false);
-            note.BeginGroupVisibilityTransition(false, new Point(96, 96), TimeSpan.FromSeconds(10), () => { });
             var item = pet.ContextMenu!.Items.OfType<MenuItem>().Single(item => (string)item.Header == "Show Hood sprites");
             Assert.IsTrue(item.IsChecked);
             item.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
@@ -605,12 +637,9 @@ public sealed class SettingsAndStatsTests
             Assert.IsFalse(item.IsChecked);
             Assert.IsFalse(fixture.Store.LoadOrCreate().Behavior.ShowSprites);
             Assert.IsTrue(note.IsVisible);
-            Assert.IsTrue(notes.GroupVisible);
+            Assert.IsTrue(notes.GetNote(openId).IsMinimized);
+            Assert.AreEqual(WindowState.Minimized, note.WindowState);
             Assert.IsFalse(windows.ContainsKey(closedId), "Closed notes must stay closed.");
-            typeof(App).GetMethod("CompleteVisibilityTransition", BindingFlags.Instance | BindingFlags.NonPublic)!
-                .Invoke(app, [openId, staleHide]);
-            Assert.IsTrue(note.IsVisible, "A stale hide completion cannot hide notes after sprites are hidden.");
-
             icon = (Forms.NotifyIcon)typeof(App).GetMethod("CreateTrayIcon", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(app, null)!;
             var trayToggle = icon.ContextMenuStrip!.Items.OfType<Forms.ToolStripMenuItem>().Single(item => item.Text == "Show Hood sprites");
             trayToggle.PerformClick();
@@ -656,15 +685,14 @@ public sealed class SettingsAndStatsTests
                     .GetField("_frameTimer", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(hiddenPet)!).IsEnabled);
             }
             finally { hiddenPet.Close(); }
-            notes.SetGroupVisible(false);
+            notes.SetMinimized(openId, true);
             notes = NotesApplication.Start(new JsonNotesStore(notesPath));
             fields[1].SetValue(app, notes);
-            restore.Invoke(app, [true]);
-            Assert.IsTrue(note.IsVisible, "Restoration while hidden must reveal notes immediately even with animations enabled.");
-            Assert.IsFalse((bool)typeof(NoteWindow).GetField("_isTransitioning", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(note)!,
-                "No transition toward the hidden pet may remain active.");
+            restore.Invoke(app, null);
+            Assert.IsTrue(note.IsVisible);
+            Assert.AreEqual(WindowState.Minimized, note.WindowState, "Restoration must preserve minimized notes while sprites are hidden.");
             Assert.IsTrue(notes.TryCloseNote(openId, out _));
-            restore.Invoke(app, [false]);
+            restore.Invoke(app, null);
             Assert.IsFalse(note.IsVisible, "Individual notes may still be closed.");
         }
         finally
@@ -1224,7 +1252,7 @@ public sealed class SettingsAndStatsTests
         try
         {
             ShowHidden(window);
-            foreach (var name in new[] { "AlwaysOnTopCheckBox", "AnimateShowHideCheckBox" })
+            foreach (var name in new[] { "AlwaysOnTopCheckBox" })
             {
                 var checkbox = (CheckBox)window.FindName(name);
                 foreach (var value in new[] { false, true })
@@ -1829,8 +1857,6 @@ public sealed class SettingsAndStatsTests
             Assert.AreEqual(LineStackingStrategy.BlockLineHeight, document.LineStackingStrategy);
             ((CheckBox)settings.FindName("AlwaysOnTopCheckBox")).IsChecked = true;
             Assert.IsTrue(note.Topmost);
-            ((CheckBox)settings.FindName("AnimateShowHideCheckBox")).IsChecked = true;
-            Assert.IsTrue(Effective().AnimateShowHide);
             Assert.AreEqual(original, fixture.Controller.Current.Notes);
             Assert.AreEqual(configBaseline, File.ReadAllText(fixture.ConfigPath));
             Assert.AreEqual(notesBaseline, File.ReadAllText(notesPath));

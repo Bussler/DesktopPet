@@ -96,9 +96,7 @@ public sealed class NoteInteractionTests
     }
 
     [TestMethod]
-    [DataRow(false)]
-    [DataRow(true)]
-    public void MinimizePreservesContentAndBoundsAndGroupShowRestoresTheNote(bool animate)
+    public void MinimizePreservesContentAndBoundsAndRestoreReturnsTheNote()
     {
         var closed = 0;
         var savedBounds = new List<NoteBounds>();
@@ -130,9 +128,7 @@ public sealed class NoteInteractionTests
             Assert.AreEqual(normallyInTaskbar, window.ShowInTaskbar, "Restoring from the taskbar must preserve normal note visibility.");
             button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Assert.IsTrue(window.ShowInTaskbar);
-            window.SetGroupVisibilityImmediately(false);
-            if (animate) window.BeginGroupVisibilityTransition(true, new Point(96, 96), TimeSpan.Zero, () => { });
-            else window.SetGroupVisibilityImmediately(true);
+            window.ApplyMinimizedState(false);
             Pump(window);
             Assert.AreEqual(WindowState.Normal, window.WindowState);
             Assert.AreEqual(normallyInTaskbar, window.ShowInTaskbar);

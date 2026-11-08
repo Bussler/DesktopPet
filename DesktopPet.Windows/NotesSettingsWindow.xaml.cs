@@ -75,7 +75,6 @@ public partial class NotesSettingsWindow : Window
         LineSpacingSlider.Value = settings.LineSpacing;
         LineSpacingInput.Text = settings.LineSpacing.ToString(CultureInfo.CurrentCulture);
         AlwaysOnTopCheckBox.IsChecked = settings.AlwaysOnTop;
-        AnimateShowHideCheckBox.IsChecked = settings.AnimateShowHide;
         _loadingSettings = false;
     }
 
@@ -131,8 +130,7 @@ public partial class NotesSettingsWindow : Window
             DefaultColor = color.ToString().ToLowerInvariant(),
             TextSize = textSize,
             LineSpacing = lineSpacing,
-            AlwaysOnTop = AlwaysOnTopCheckBox.IsChecked == true,
-            AnimateShowHide = AnimateShowHideCheckBox.IsChecked == true
+            AlwaysOnTop = AlwaysOnTopCheckBox.IsChecked == true
         };
         return true;
     }

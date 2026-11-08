@@ -27,11 +27,11 @@ The published app targets **64-bit Windows (`win-x64`)** and includes its .NET r
 
 | Control | Action |
 | --- | --- |
-| Left-click an awake pet | Show or hide open notes. The first use creates a blank note; if all notes are closed, it opens the Notes list. |
-| Left-click a sleeping pet | Wake it from a care nap. During a Focus break, show/hide Notes and reopen Focus while it stays asleep. |
+| Left-click an awake pet | Minimize all open notes if any are restored; otherwise restore them all. The first use creates a blank note; if all notes are closed, it opens the Notes list. |
+| Left-click a sleeping pet | Wake it from a care nap. During a Focus break, toggle Notes and reopen Focus while it stays asleep. |
 | Drag the pet | Move it and its roaming area, including between monitors. |
 | Right-click the pet | View needs; Feed, Pet, Sleep, Edit roaming area, open Focus, Notes or Settings, or Quit. |
-| Double-click the tray icon | Show or hide open notes, like clicking the pet. |
+| Double-click the tray icon | Minimize or restore all open notes, like clicking the pet. |
 | Right-click the tray icon | Access Focus, Notes, Settings, Show Hood sprites, or Quit. |
 
 **Edit roaming area** shows an outline: drag its top bar to move it, or its edges and corners to resize it. Needs and timers pause while the app is closed or Windows is suspended.
@@ -58,7 +58,7 @@ See the [Notes guide](docs/notes.md) for all shortcuts and editing features.
 
 - Open **Focus** from either menu for a compact 25/5-minute timer. One button handles Start focus, Pause/Resume and Take break; Skip break appears only during breaks.  
 - Expand **Options** for durations, always-on-top and **Do not disturb during focus**. This option automatically silences Windows notifications with your priority exceptions, restoring the previous setting on pause, completion, Stop or close.  
-- A short chime plays when either timer finishes. Hood waves when focus finishes; click him to reopen the timer, then choose **Take break**. During breaks he looks asleep; clicking him reopens Focus and shows/hides Notes without waking him. **Break finished** restores the window and waits for **Start focus**. Closing stops the cycle; minimizing keeps it running.  
+- A short chime plays when either timer finishes. Hood waves when focus finishes; click him to reopen the timer, then choose **Take break**. During breaks he looks asleep; clicking him reopens Focus and toggles Notes without waking him. **Break finished** restores the window and waits for **Start focus**. Closing stops the cycle; minimizing keeps it running.
 
 See the [Focus guide](docs/focus.md) for more information.
 

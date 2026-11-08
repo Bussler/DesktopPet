@@ -7,7 +7,6 @@ public partial class NoteWindow
     internal event Action<object, bool>? WritingActivityChanged;
     private object? _writingField;
     private object? _writingKeyboardFocus;
-    private bool _writingHidden;
 
     private void InitializeWritingActivity()
     {
@@ -47,18 +46,12 @@ public partial class NoteWindow
 
     private object? GetWritingField()
     {
-        if (_initializing || !IsActive || !IsVisible || _writingHidden) return null;
+        if (_initializing || !IsActive || !IsVisible || WindowState == System.Windows.WindowState.Minimized) return null;
         if (ReferenceEquals(Keyboard.FocusedElement, NoteTitle)) return NoteTitle;
         if (!ReferenceEquals(Keyboard.FocusedElement, Editor) || _editorRecoveryPending) return null;
         if (_activeMathSource is { } source && IsInsideMathSource(Editor.Selection.Start, source) &&
             IsInsideMathSource(Editor.Selection.End, source)) return source;
         return Editor;
-    }
-
-    private void SetWritingVisibility(bool visible)
-    {
-        _writingHidden = !visible;
-        if (!visible) StopWritingActivity();
     }
 
     private void StopWritingActivity(object? expectedOwner = null)

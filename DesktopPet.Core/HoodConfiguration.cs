@@ -110,7 +110,6 @@ public sealed record NotesConfiguration
     public double LineSpacing { get; init; } = 2;
     public string Theme { get; init; } = "system";
     public bool AlwaysOnTop { get; init; }
-    public bool AnimateShowHide { get; init; }
 }
 
 public enum NoteColor
@@ -401,6 +400,15 @@ public sealed class YamlConfigurationStore : IYamlConfigurationStore
             if (yamlStream.Documents.Count != 1 || yamlStream.Documents[0].RootNode is not YamlMappingNode)
             {
                 throw new HoodConfigurationException("config.yaml", "The configuration must contain exactly one YAML mapping document.");
+            }
+
+            var root = (YamlMappingNode)yamlStream.Documents[0].RootNode;
+            if (root.Children.TryGetValue(new YamlScalarNode("notes"), out var notesNode) &&
+                notesNode is YamlMappingNode notes && notes.Children.Remove(new YamlScalarNode("animate_show_hide")))
+            {
+                using var writer = new StringWriter();
+                yamlStream.Save(writer, assignAnchors: false);
+                yaml = writer.ToString();
             }
 
             using var reader = new StringReader(yaml);

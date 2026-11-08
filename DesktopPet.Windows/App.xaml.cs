@@ -12,7 +12,6 @@ namespace DesktopPet.Windows;
 /// </summary>
 public partial class App : System.Windows.Application
 {
-    private static readonly TimeSpan NotesTransitionDuration = TimeSpan.FromMilliseconds(240);
     private HoodSession? _session;
     private NotesApplication? _notes;
     private HoodOverlayWindow? _petWindow;
@@ -22,7 +21,6 @@ public partial class App : System.Windows.Application
     private NotesListWindow? _notesListWindow;
     private YamlConfigurationStore? _configurationStore;
     private readonly Dictionary<Guid, NoteWindow> _noteWindows = [];
-    private readonly NotesVisibilityTransitionCoordinator _visibilityTransitions = new();
     private Forms.NotifyIcon? _trayIcon;
     private System.Drawing.Icon? _trayIconImage;
     private readonly WindowsStartupRegistration _startupRegistration = new();
@@ -513,7 +511,6 @@ public partial class App : System.Windows.Application
     private void RequestQuit()
     {
         if (!TrySaveSessionForQuit()) return;
-        _visibilityTransitions.Request(visible: false);
         if (_notes is not null && !_notes.Flush())
         {
             System.Windows.MessageBox.Show(
@@ -572,7 +569,7 @@ public partial class App : System.Windows.Application
         }
 
         var result = _notes.Activate(WindowsDisplayProvider.GetDisplays());
-        RestoreOpenNotes(animateGroupTransition: result.Kind != NotesActivationKind.ShowNotesList);
+        RestoreOpenNotes();
         if (result.Kind == NotesActivationKind.ShowNotesList)
         {
             ShowNotesList();
@@ -581,7 +578,7 @@ public partial class App : System.Windows.Application
         if (_notes.LastSaveError is { } error)
         {
             System.Windows.MessageBox.Show(
-                $"The notes action remains available in memory, but the latest notes could not be saved. Reopen the notes group to retry, or use Retry save in a note or the Notes list.\n\n{error}",
+                $"The notes action remains available in memory, but the latest notes could not be saved. Use Retry save in a note or the Notes list to retry.\n\n{error}",
                 "Notes save failed",
                 System.Windows.MessageBoxButton.OK,
                 System.Windows.MessageBoxImage.Error);
@@ -590,7 +587,6 @@ public partial class App : System.Windows.Application
 
     private void CreateNote()
     {
-        var wasVisible = _notes?.GroupVisible == true;
         try
         {
             _notes?.CreateNote(WindowsDisplayProvider.GetDisplays());
@@ -600,7 +596,7 @@ public partial class App : System.Windows.Application
             System.Windows.MessageBox.Show(exception.Message, "Cannot create note", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-        RestoreOpenNotes(animateGroupTransition: !wasVisible);
+        RestoreOpenNotes();
         _notesListWindow?.Refresh();
     }
 
@@ -639,27 +635,23 @@ public partial class App : System.Windows.Application
 
     private void OpenNoteFromList(Guid noteId)
     {
-        var wasVisible = _notes?.GroupVisible == true;
         _notes?.OpenNote(noteId);
-        RestoreOpenNotes(animateGroupTransition: !wasVisible);
-        if (_noteWindows.TryGetValue(noteId, out var window)) window.WindowState = WindowState.Normal;
+        RestoreOpenNotes();
         _notesListWindow?.Refresh();
     }
 
-    private void RestoreOpenNotes(bool animateGroupTransition = false)
+    private void RestoreOpenNotes()
     {
         if (_notes is null)
         {
             return;
         }
 
-        var spritesVisible = _session?.Configuration.Behavior.ShowSprites != false;
-        if (!spritesVisible && !_notes.GroupVisible) _notes.SetGroupVisible(true);
-
         var openIds = _notes.OpenNoteIds.ToHashSet();
         foreach (var noteId in _noteWindows.Keys.Where(noteId => !openIds.Contains(noteId)).ToArray())
         {
-            _noteWindows[noteId].SetGroupVisibilityImmediately(false);
+            _noteWindows[noteId].CloseWithoutMembershipChange();
+            _noteWindows.Remove(noteId);
         }
 
         foreach (var note in _notes.Notes.Where(note => openIds.Contains(note.Id)))
@@ -681,48 +673,19 @@ public partial class App : System.Windows.Application
                     RetryNotesSave,
                     _effectiveNotesSettings,
                     _effectiveUiStyle);
+                window.MinimizedChanged += minimized =>
+                {
+                    _notes?.SetMinimized(note.Id, minimized);
+                    window.SetSaveStatus(_notes?.LastSaveError);
+                };
                 window.ChecklistItemCompleted += () => _petWindow?.CelebrateChecklistCompletion();
                 window.WritingActivityChanged += (owner, active) => _petWindow?.ReportNoteWriting(owner, active);
                 _noteWindows.Add(note.Id, window);
             }
 
+            window.ApplyMinimizedState(note.IsMinimized);
+            if (!window.IsVisible) window.Show();
             window.SetSaveStatus(_notes.LastSaveError);
-        }
-
-        var animate = spritesVisible && animateGroupTransition && _effectiveNotesSettings.AnimateShowHide;
-        var transition = _visibilityTransitions.Request(_notes.GroupVisible);
-        if (!animate)
-        {
-            foreach (var noteId in openIds)
-            {
-                _noteWindows[noteId].SetGroupVisibilityImmediately(_notes.GroupVisible);
-            }
-
-            return;
-        }
-
-        var hoodCenter = _petWindow?.PresentationCenter ?? new System.Windows.Point(96, 96);
-        foreach (var noteId in openIds)
-        {
-            var window = _noteWindows[noteId];
-            window.BeginGroupVisibilityTransition(
-                _notes.GroupVisible,
-                hoodCenter,
-                NotesTransitionDuration,
-                () => CompleteVisibilityTransition(noteId, transition));
-        }
-    }
-
-    private void CompleteVisibilityTransition(Guid noteId, NotesVisibilityTransition transition)
-    {
-        if (_notes is null || !_visibilityTransitions.IsCurrent(transition) || !_notes.OpenNoteIds.Contains(noteId))
-        {
-            return;
-        }
-
-        if (!transition.Visible && _noteWindows.TryGetValue(noteId, out var window))
-        {
-            window.Hide();
         }
     }
 

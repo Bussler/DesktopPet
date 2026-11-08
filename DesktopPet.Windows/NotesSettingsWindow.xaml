@@ -70,7 +70,6 @@
                         IsSnapToTickEnabled="True" SmallChange="0.25" LargeChange="0.5"
                         AutomationProperties.Name="Note line spacing" ValueChanged="OnLineSpacingChanged" />
                 <CheckBox x:Name="AlwaysOnTopCheckBox" Content="Keep notes above other windows" Checked="OnSettingsChanged" Unchecked="OnSettingsChanged" />
-                <CheckBox x:Name="AnimateShowHideCheckBox" Content="Animate notes show and hide" Checked="OnSettingsChanged" Unchecked="OnSettingsChanged" />
             </StackPanel>
         </Border>
 
